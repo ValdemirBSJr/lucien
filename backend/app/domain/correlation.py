@@ -1,14 +1,3 @@
-"""O identificador que liga uma reclamação ao que aconteceu no Hub.
-
-Quando alguém diz "meu job falhou", a única pista costumava ser o horário
-aproximado. Cada requisição passa a carregar um identificador que aparece na
-resposta de erro, no cabeçalho e em toda linha da trilha de auditoria daquela
-requisição -- é o que transforma "falhou por volta das dez" em uma busca exata.
-
-Fica no domínio porque é parte do que a trilha registra. Quem o extrai do
-cabeçalho HTTP e o devolve na resposta é a borda.
-"""
-
 import re
 from contextvars import ContextVar, Token
 from uuid import uuid4
