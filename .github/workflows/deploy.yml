@@ -1,0 +1,77 @@
+# Publica a wiki no GitHub Pages sem conceder permissão de escrita no repositório.
+name: Publicar Wiki de Runbooks
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "wiki-builder/app/mkdocs_hook.py"
+      - ".github/workflows/deploy.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "wiki-builder/app/mkdocs_hook.py"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python e cache do Pip
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13.14"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Compilar site estático
+        run: mkdocs build --strict
+
+      - name: Enviar artefato do Pages
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: site
+
+  deploy:
+    # Pull Requests apenas validam o site. Publicação manual ou por push fica
+    # limitada à branch principal, mesmo antes de configurar o environment.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

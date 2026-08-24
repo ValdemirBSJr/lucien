@@ -1,0 +1,496 @@
+name: lucien-runbook
+
+x-resources-tiny: &resources-tiny
+  resources:
+    limits:
+      cpus: "${LUCIEN_TINY_CPU_LIMIT:-0.50}"
+      memory: 256M
+    reservations:
+      cpus: "0.05"
+      memory: 32M
+
+x-resources-small: &resources-small
+  resources:
+    limits:
+      cpus: "${LUCIEN_SMALL_CPU_LIMIT:-1.00}"
+      memory: 768M
+    reservations:
+      cpus: "0.10"
+      memory: 128M
+
+# O scanner cria um subprocesso por varredura. O teto de processos e a
+# ultima barreira contra exaustao: o semaforo da aplicacao e a primeira,
+# mas um defeito nele nao pode derrubar o host.
+x-resources-scanner: &resources-scanner
+  resources:
+    limits:
+      cpus: "${LUCIEN_SMALL_CPU_LIMIT:-1.00}"
+      memory: 768M
+      pids: 64
+    reservations:
+      cpus: "0.10"
+      memory: 128M
+
+x-resources-medium: &resources-medium
+  resources:
+    limits:
+      cpus: "${LUCIEN_MEDIUM_CPU_LIMIT:-1.00}"
+      memory: 2G
+    reservations:
+      cpus: "0.25"
+      memory: 256M
+
+x-resources-slm: &resources-slm
+  resources:
+    limits:
+      cpus: "${LUCIEN_SLM_CPU_LIMIT:-1.00}"
+      memory: 8G
+    reservations:
+      cpus: "1.00"
+      memory: 2G
+
+services:
+  postgres:
+    image: postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4
+    profiles: ["server", "consolidated"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lucien}
+      POSTGRES_USER: ${POSTGRES_USER:-lucien}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-medium
+    restart: unless-stopped
+    networks: [backend]
+
+  hub:
+    image: lucien-runbook-hub:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["server", "consolidated"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      BOOTSTRAP_API_KEY_FILE: /run/secrets/bootstrap_api_key
+      AUTH_PEPPER_FILE: /run/secrets/auth_pepper
+      USER_CREATION_ENABLED: ${USER_CREATION_ENABLED:-false}
+      RBAC_ENTRY_ROLES_ENABLED: ${RBAC_ENTRY_ROLES_ENABLED:-false}
+      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-acessos,servidores,redes,suporte}
+      SLM_LANGUAGE_RUNBOOK: ${SLM_LANGUAGE_RUNBOOK:-pt-br}
+      MAX_LOG_BYTES: ${MAX_LOG_BYTES:-2097152}
+      SECRET_SCANNER_URL: ${SECRET_SCANNER_URL:-http://secret-scanner:8090}
+      SECRET_SCANNER_TIMEOUT_SECONDS: ${SECRET_SCANNER_TIMEOUT_SECONDS:-5}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      LOCAL_STORAGE_ROOT: ${LOCAL_STORAGE_ROOT:-/data/playbooks}
+      GIT_API_BASE: ${GIT_API_BASE:-https://api.github.com}
+      GIT_OWNER: ${GIT_OWNER:-}
+      GIT_REPO: ${GIT_REPO:-}
+      GIT_BRANCH: ${GIT_BRANCH:-main}
+      GIT_DOCS_PREFIX: ${GIT_DOCS_PREFIX:-docs/runbooks}
+      GIT_TOKEN_FILE: /run/secrets/git_token
+      GIT_CA_FILE: /trust/git-ca.crt
+    secrets:
+      - database_url
+      - bootstrap_api_key
+      - auth_pepper
+      - git_token
+    volumes:
+      # A chave privada da CA deliberadamente não entra no contêiner do Hub.
+      - ${CERTS_DIR:-./certs}/server.key:/certs/server.key:ro
+      - ${CERTS_DIR:-./certs}/server.crt:/certs/server.crt:ro
+      - ${CERTS_DIR:-./certs}/ca.crt:/certs/ca.crt:ro
+      - ${GIT_CA_SOURCE:-./certs/ca.crt}:/trust/git-ca.crt:ro
+      - playbooks-data:/data/playbooks
+    ports:
+      - "${HUB_BIND_ADDRESS:-127.0.0.1}:8443:8443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      secret-scanner:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import ssl,urllib.request; urllib.request.urlopen('https://localhost:8443/health', context=ssl.create_default_context(cafile='/certs/ca.crt'), timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-small
+    restart: unless-stopped
+    networks: [backend, scanner, viewer_auth, git_egress]
+
+  upload-worker:
+    image: lucien-runbook-hub:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["server", "consolidated"]
+    command: ["python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      AUTH_PEPPER_FILE: /run/secrets/auth_pepper
+      SLM_BASE_URL: ${SLM_BASE_URL:-http://slm:11434}
+      SLM_MODEL: ${SLM_MODEL:-qwen2.5-coder:3b}
+      SLM_LANGUAGE_RUNBOOK: ${SLM_LANGUAGE_RUNBOOK:-pt-br}
+      SLM_TIMEOUT_SECONDS: ${SLM_TIMEOUT_SECONDS:-300}
+      SLM_NUM_THREAD: ${SLM_NUM_THREAD:-0}
+      # Janela de contexto e teto do prompt: ver docs/operacao.md para o
+      # calculo. Zero em SLM_NUM_CTX devolve o padrao do runtime (2048),
+      # que corta o prompt em silencio.
+      SLM_NUM_CTX: ${SLM_NUM_CTX:-8192}
+      SLM_PROMPT_MAX_CHARS: ${SLM_PROMPT_MAX_CHARS:-8000}
+      SLM_ENRICHMENT_ENABLED: ${SLM_ENRICHMENT_ENABLED:-true}
+      RUNBOOK_ENRICHER: ${RUNBOOK_ENRICHER:-slm}
+      SECRET_SCANNER_URL: ${SECRET_SCANNER_URL:-http://secret-scanner:8090}
+      SECRET_SCANNER_TIMEOUT_SECONDS: ${SECRET_SCANNER_TIMEOUT_SECONDS:-5}
+      UPLOAD_WORKER_POLL_SECONDS: ${UPLOAD_WORKER_POLL_SECONDS:-2}
+      UPLOAD_WORKER_LEASE_SECONDS: ${UPLOAD_WORKER_LEASE_SECONDS:-900}
+      UPLOAD_WORKER_RETRY_BASE_SECONDS: ${UPLOAD_WORKER_RETRY_BASE_SECONDS:-10}
+      UPLOAD_WORKER_MAX_ATTEMPTS: ${UPLOAD_WORKER_MAX_ATTEMPTS:-5}
+    secrets:
+      - database_url
+      - auth_pepper
+    depends_on:
+      postgres:
+        condition: service_healthy
+      secret-scanner:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-small
+    restart: unless-stopped
+    networks: [backend, scanner, slm_net]
+
+  runbook-viewer:
+    image: lucien-runbook-viewer:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["local-viewer"]
+    user: "10001:10001"
+    environment:
+      VIEWER_HUB_URL: ${VIEWER_HUB_URL:-https://hub:8443}
+      VIEWER_HUB_CA_FILE: /certs/ca.crt
+      VIEWER_SESSION_SECRET_FILE: /run/secrets/viewer_session_secret
+      VIEWER_RUNBOOKS_ROOT: /runbooks
+      VIEWER_SESSION_TTL_SECONDS: ${VIEWER_SESSION_TTL_SECONDS:-900}
+      VIEWER_MAX_DOCUMENTS: ${VIEWER_MAX_DOCUMENTS:-10000}
+      # Mesmo valor do Hub, usado só para exibir o botão de edição no portal.
+      RBAC_ENTRY_ROLES_ENABLED: ${RBAC_ENTRY_ROLES_ENABLED:-false}
+      VIEWER_MAX_FILE_BYTES: ${VIEWER_MAX_FILE_BYTES:-1048576}
+    secrets:
+      - viewer_session_secret
+    volumes:
+      # O visualizador recebe apenas seu material TLS e os runbooks em leitura.
+      - ${CERTS_DIR:-./certs}/server.key:/certs/server.key:ro
+      - ${CERTS_DIR:-./certs}/server.crt:/certs/server.crt:ro
+      - ${CERTS_DIR:-./certs}/ca.crt:/certs/ca.crt:ro
+      - playbooks-data:/runbooks:ro
+    ports:
+      - "${VIEWER_BIND_ADDRESS:-127.0.0.1}:9091:9091"
+    depends_on:
+      hub:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import ssl,urllib.request; urllib.request.urlopen('https://localhost:9091/health', context=ssl.create_default_context(cafile='/certs/ca.crt'), timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-small
+    restart: unless-stopped
+    networks: [viewer_auth]
+
+  wiki-volume-init:
+    image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+    profiles: ["gitea-compact"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        chown -R 10004:10004 /workspace /publish
+        chmod 0700 /workspace
+        chmod 0755 /publish
+    volumes:
+      - wiki-source:/workspace
+      - wiki-site:/publish
+    read_only: true
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "FOWNER"]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: "none"
+    deploy: *resources-tiny
+    restart: "no"
+
+  wiki-builder:
+    image: lucien-runbook-wiki-builder:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["gitea-compact"]
+    user: "10004:10004"
+    environment:
+      WIKI_REPOSITORY_URL: ${WIKI_REPOSITORY_URL:-}
+      WIKI_REPOSITORY_BRANCH: ${WIKI_REPOSITORY_BRANCH:-main}
+      WIKI_REPOSITORY_USER: ${WIKI_REPOSITORY_USER:-}
+      WIKI_REPOSITORY_TOKEN_FILE: /run/secrets/wiki_repository_token
+      WIKI_GITEA_CA_FILE: /trust/gitea-ca.crt
+      WIKI_POLL_SECONDS: ${WIKI_POLL_SECONDS:-60}
+      WIKI_BUILD_TIMEOUT_SECONDS: ${WIKI_BUILD_TIMEOUT_SECONDS:-120}
+      WIKI_MAX_REPOSITORY_BYTES: ${WIKI_MAX_REPOSITORY_BYTES:-536870912}
+      WIKI_MAX_SOURCE_FILES: ${WIKI_MAX_SOURCE_FILES:-10000}
+      WIKI_MAX_SOURCE_BYTES: ${WIKI_MAX_SOURCE_BYTES:-268435456}
+      WIKI_MAX_FILE_BYTES: ${WIKI_MAX_FILE_BYTES:-1048576}
+      WIKI_RELEASE_RETENTION: ${WIKI_RELEASE_RETENTION:-5}
+      # Mesma variavel do Hub: um unico valor no .env serve os dois. O
+      # builder so a usa para listar no indice as areas ainda vazias.
+      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-acessos,servidores,redes,suporte}
+      WIKI_WORKSPACE: /workspace
+      WIKI_PUBLISH_ROOT: /publish
+    secrets:
+      - wiki_repository_token
+    volumes:
+      # O builder recebe somente a CA pública, o clone e o destino de publicação.
+      - ${GIT_CA_SOURCE:-./certs/ca.crt}:/trust/gitea-ca.crt:ro
+      - wiki-source:/workspace
+      - wiki-site:/publish
+    depends_on:
+      wiki-volume-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.main", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-medium
+    restart: unless-stopped
+    networks: [wiki_egress]
+
+  wiki-static:
+    image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+    profiles: ["gitea-compact"]
+    user: "101:101"
+    volumes:
+      - ./deploy/nginx/wiki-compact.conf:/etc/nginx/conf.d/default.conf:ro
+      - wiki-site:/usr/share/nginx/html:ro
+    depends_on:
+      wiki-volume-init:
+        condition: service_completed_successfully
+    ports:
+      - "${WIKI_BIND_ADDRESS:-127.0.0.1}:9092:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755
+      - /var/run:size=1m,mode=0755
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-tiny
+    restart: unless-stopped
+    networks: [wiki_frontend]
+
+  secret-scanner:
+    image: lucien-runbook-secret-scanner:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["server", "consolidated"]
+    environment:
+      # Teto de processos gitleaks simultaneos e espera maxima por vaga.
+      # Ver docs/operacao.md para dimensionar.
+      SCANNER_MAX_CONCURRENCY: ${SCANNER_MAX_CONCURRENCY:-4}
+      SCANNER_QUEUE_TIMEOUT_SECONDS: ${SCANNER_QUEUE_TIMEOUT_SECONDS:-10}
+      SCANNER_TIMEOUT_SECONDS: ${SCANNER_TIMEOUT_SECONDS:-5}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/ready', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-scanner
+    restart: unless-stopped
+    networks: [scanner]
+
+  slm-volume-init:
+    image: ollama/ollama:0.31.2@sha256:509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a
+    profiles: ["consolidated"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 10003:10003 /var/lib/ollama"]
+    volumes:
+      - ollama-data:/var/lib/ollama
+    read_only: true
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN"]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: "none"
+    deploy: *resources-tiny
+    restart: "no"
+
+  slm:
+    image: ollama/ollama:0.31.2@sha256:509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a
+    profiles: ["consolidated"]
+    user: "10003:10003"
+    environment:
+      HOME: /var/lib/ollama
+      OLLAMA_MODELS: /var/lib/ollama/models
+    volumes:
+      - ollama-data:/var/lib/ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      slm-volume-init:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-slm
+    restart: unless-stopped
+    networks: [slm_net, slm_egress]
+
+  slm-init:
+    image: ollama/ollama:0.31.2@sha256:509fdf54e23bd50d87af646cb51c0a7a203d6a83cc4d6695b3b08c5be1c62c0a
+    profiles: ["consolidated"]
+    environment:
+      HOME: /tmp
+      OLLAMA_HOST: http://slm:11434
+      SLM_MODEL: ${SLM_MODEL:-qwen2.5-coder:3b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull \"$${SLM_MODEL}\""]
+    depends_on:
+      slm:
+        condition: service_healthy
+    user: "10003:10003"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=0700
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-small
+    networks: [slm_net]
+    restart: "no"
+
+  certgen:
+    image: lucien-runbook-certgen:${LUCIEN_IMAGE_TAG:-development}
+    profiles: ["tools"]
+    environment:
+      CERT_DNS: ${CERT_DNS:-hub,localhost}
+      CERT_IP: ${CERT_IP:-127.0.0.1}
+    volumes:
+      - ${CERTS_DIR:-./certs}:/certs
+    # Gera certificado em disco; nao fala com ninguem. Sem esta linha o
+    # Compose o ligaria a rede `default`, com saida para a internet.
+    network_mode: "none"
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-small
+    restart: "no"
+
+volumes:
+  postgres-data:
+  ollama-data:
+  playbooks-data:
+  wiki-source:
+  wiki-site:
+
+networks:
+  # Segmento de dados: banco, Hub e worker. Sem rota para fora -- o banco e o
+  # worker não têm por que alcançar a internet, e um deles comprometido não
+  # deve conseguir levar dado nenhum para longe.
+  backend:
+    driver: bridge
+    internal: true
+  # O SLM processa log de terminal de origem não confiável. Mantê-lo fora do
+  # segmento do banco limita o que um comprometimento ali alcança.
+  slm_net:
+    driver: bridge
+    internal: true
+  # As duas únicas saídas para a internet, cada uma com um serviço só e em
+  # segmentos separados, para que um não enxergue o outro.
+  #
+  # git_egress serve o provedor Git. Com STORAGE_PROVIDER=local o Hub não
+  # precisa dela: removê-la da lista do serviço deixa a instalação sem
+  # nenhuma saída.
+  git_egress:
+    driver: bridge
+  # slm_egress existe para `ollama pull` -- o download é feito pelo servidor,
+  # não pelo slm-init. Quem carrega o modelo no volume por outro meio pode
+  # removê-la.
+  slm_egress:
+    driver: bridge
+  scanner:
+    driver: bridge
+    internal: true
+  viewer_auth:
+    driver: bridge
+    internal: true
+  wiki_egress:
+    driver: bridge
+  wiki_frontend:
+    driver: bridge
+    internal: true
+
+secrets:
+  postgres_password:
+    file: ${SECRETS_DIR:-./secrets}/postgres_password
+  database_url:
+    file: ${SECRETS_DIR:-./secrets}/database_url
+  bootstrap_api_key:
+    file: ${SECRETS_DIR:-./secrets}/bootstrap_api_key
+  auth_pepper:
+    file: ${SECRETS_DIR:-./secrets}/auth_pepper
+  git_token:
+    file: ${SECRETS_DIR:-./secrets}/git_token
+  viewer_session_secret:
+    file: ${SECRETS_DIR:-./secrets}/viewer_session_secret
+  wiki_repository_token:
+    file: ${SECRETS_DIR:-./secrets}/wiki_repository_token

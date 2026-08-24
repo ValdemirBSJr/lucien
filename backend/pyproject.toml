@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runbook-api-hub"
+version = "0.1.0"
+description = "Hub seguro para revisão e publicação de runbooks"
+requires-python = ">=3.13"
+dependencies = [
+  "asyncpg==0.30.0",
+  "cryptography==49.0.0",
+  "fastapi==0.116.1",
+  "httpx==0.28.1",
+  "pydantic-settings==2.10.1",
+  "sqlalchemy[asyncio]==2.0.41",
+  "uvicorn[standard]==0.35.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "aiosqlite==0.21.0",
+  "pytest==8.4.1",
+  "pytest-asyncio==1.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app"]
+# A divergencia que motivou o portao era de assinatura entre porta e adapter,
+# entao a checagem comeca por ai. Modo estrito completo exigiria anotar o
+# projeto inteiro de uma vez, o que nao cabe numa mudanca rastreavel.
+check_untyped_defs = true
+disallow_incomplete_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

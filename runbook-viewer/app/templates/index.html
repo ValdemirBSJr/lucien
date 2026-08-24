@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Catálogo · Lucien Runbooks{% endblock %}
+{% block shell %}
+  <div class="docs-shell">
+    <aside class="sidebar" aria-label="Categorias">
+      <h2>Categorias</h2>
+      <nav>
+        <a class="sidebar-link{% if not selected_category %} active{% endif %}" href="/">
+          Todos <span>{{ total_documents }}</span>
+        </a>
+        {% for category, items in categories.items() %}
+          <a class="sidebar-link{% if selected_category == category %} active{% endif %}" href="/?categoria={{ category }}">
+            {{ category|replace('_', ' ')|title }} <span>{{ items|length }}</span>
+          </a>
+        {% endfor %}
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Documentação operacional</p>
+          <h1>{% if selected_category %}{{ selected_category|replace('_', ' ')|title }}{% else %}Todos os runbooks{% endif %}</h1>
+        </div>
+        <span class="document-count">{{ runbooks|length }} nesta página</span>
+      </div>
+      {% if runbooks %}
+        <div class="runbook-list">
+          {% for runbook in runbooks %}
+            <article class="runbook-card">
+              <div class="runbook-card-heading">
+                <a href="/runbooks/{{ runbook.root_id }}">{{ runbook.title }}</a>
+                <span class="category-badge">{{ runbook.root_domain_function|replace('_', ' ') }}</span>
+              </div>
+              <p class="metadata">Por {{ runbook.author }} · {{ runbook.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+              <p class="revision-label">Revisão {{ runbook.revision }}</p>
+              <div class="tag-list" aria-label="Tags">
+                {% for tag in runbook.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+        {% if total_pages > 1 %}
+          <nav class="pagination" aria-label="Paginação">
+            {% if page > 1 %}<a class="button" href="/?{% if selected_category %}categoria={{ selected_category }}&amp;{% endif %}pagina={{ page - 1 }}">Anterior</a>{% endif %}
+            <span>Página {{ page }} de {{ total_pages }}</span>
+            {% if page < total_pages %}<a class="button" href="/?{% if selected_category %}categoria={{ selected_category }}&amp;{% endif %}pagina={{ page + 1 }}">Próxima</a>{% endif %}
+          </nav>
+        {% endif %}
+      {% else %}
+        <div class="empty-state">
+          <h2>Nenhum runbook publicado</h2>
+          <p>Novos documentos aparecerão aqui após a publicação pelo Hub.</p>
+        </div>
+      {% endif %}
+    </main>
+  </div>
+{% endblock %}

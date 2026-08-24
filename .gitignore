@@ -1,0 +1,24 @@
+.env
+docker-compose.local.yml
+dist/
+certs/*
+!certs/.gitkeep
+secrets/
+data/
+.pytest_cache/
+**/.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+cli/lucien
+cli/coverage.out
+graphify-out/
+site/
+.venv-docs/
+
+# Copias do banco: material sensivel, nunca versionado.
+backups/
+
+# Exportação independente preparada para publicação open source.
+publisher/

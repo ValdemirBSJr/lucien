@@ -1,0 +1,54 @@
+site_name: Lucien Runbooks
+site_description: Wiki operacional gerada e revisada pelo ecossistema Lucien
+docs_dir: !ENV LUCIEN_DOCS_DIR
+site_dir: !ENV LUCIEN_SITE_DIR
+strict: true
+
+# Esta configuração pertence à imagem. O conteúdo do repositório não escolhe plugins.
+theme:
+  name: material
+  language: pt-BR
+  font: false
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Usar tema escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Usar tema claro
+
+plugins:
+  - search:
+      lang: pt
+
+hooks:
+  - /app/app/mkdocs_hook.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - meta
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+

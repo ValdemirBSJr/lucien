@@ -1,0 +1,130 @@
+# Portões de qualidade. Nada é publicado se algum reprovar.
+#
+# Espelho de .gitea/workflows/ci.yml. Os mesmos portões estão em
+# scripts/verificar.sh, que é o que roda antes da
+# cópia manual para o servidor. O workflow existe para o caso de haver runner;
+# a fonte de verdade dos comandos é o script, para não divergirem.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  imagens:
+    # Digest fixo em vez de `latest`: o portão precisa ser reproduzível, senão
+    # uma mudança na imagem do runner vira falha inexplicada no meio da noite.
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: backend
+            build: docker build --target test -t alvo backend
+            run: docker run --rm alvo
+          - nome: runbook-viewer
+            build: docker build --target test -t alvo -f runbook-viewer/Dockerfile .
+            run: docker run --rm --entrypoint python alvo -m pytest -q
+          - nome: wiki-builder
+            build: docker build --target test -t alvo wiki-builder
+            run: docker run --rm alvo
+          - nome: secret-scanner
+            build: docker build --target test -t alvo secret-scanner
+            run: docker run --rm alvo
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Construir imagem de teste (${{ matrix.nome }})
+        run: ${{ matrix.build }}
+      - name: Executar testes (${{ matrix.nome }})
+        run: ${{ matrix.run }}
+
+  cli:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verificar formatação, vet e testes
+        # A mesma imagem Go do scripts/build-cli.sh, pelo mesmo digest: o
+        # portão precisa reprovar o que o empacotamento reprovaria.
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD/cli,dst=/src,readonly" \
+            --workdir /src \
+            --env HOME=/tmp \
+            golang:1.25.12-alpine3.23@sha256:cc985ef6f9c3bf9ece7488129c9abe0a150388ccdfa428d886fc709dca0b230a \
+            sh -euc 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }; go vet ./...; go test ./...'
+
+  scripts:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Sintaxe dos scripts
+        run: find deploy scripts -name '*.sh' -type f -exec bash -n {} +
+      - name: ShellCheck
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD,dst=/repo,readonly" \
+            --workdir /repo \
+            koalaman/shellcheck-alpine:v0.10.0 \
+            sh -euc 'find deploy scripts -name "*.sh" -type f -exec shellcheck --severity=warning --exclude=SC1091 {} +'
+
+  composicao:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Compose resolve com o exemplo de ambiente
+        run: docker compose --env-file .env.example config --quiet
+
+  documentacao:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: MkDocs em modo estrito
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD,dst=/docs,readonly" \
+            --workdir /docs \
+            python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 \
+            sh -euc 'pip install --quiet --requirement requirements-docs.txt && mkdocs build --strict --site-dir /tmp/site'
+
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Ruff
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD,dst=/src,readonly" \
+            --workdir /src \
+            python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 \
+            sh -euc 'pip install --quiet ruff==0.14.5 && ruff check --no-cache .'
+
+  tipagem:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Mypy sobre o backend
+        # Só o backend: é onde porta e implementação divergem em silêncio, que
+        # foi o defeito real. Estender aos demais é trabalho próprio.
+        run: |
+          docker build --target test -t alvo backend
+          docker run --rm alvo sh -euc 'pip install --quiet mypy==1.18.2 && python -m mypy --config-file pyproject.toml app'
+
+  segredos:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks sobre o histórico
+        # As mesmas regras próprias que o pre-receive do Gitea aplica.
+        run: |
+          docker run --rm \
+            --mount "type=bind,src=$PWD,dst=/repo,readonly" \
+            --workdir /repo \
+            zricethezav/gitleaks:v8.30.0 \
+            detect --source=/repo --config=/repo/secret-scanner/gitleaks-lucien.toml \
+              --no-banner --redact=100 --exit-code=1

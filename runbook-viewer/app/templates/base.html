@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Lucien Runbooks{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+    <script src="{{ url_for('static', path='/theme.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Página inicial do Lucien Runbooks">
+        <img class="brand-logo" src="{{ url_for('static', path='/logo.png') }}" alt="Logo do Lucien">
+        <span>Lucien Runbooks</span>
+      </a>
+      <div class="topbar-actions">
+        {% if user %}
+          <span class="signed-user">{{ user.username }}</span>
+          <form action="/logout" method="post">
+            <button class="button button-quiet" type="submit">Sair</button>
+          </form>
+        {% endif %}
+        <button id="theme-toggle" class="button button-quiet" type="button" aria-label="Alternar tema">Tema</button>
+      </div>
+    </header>
+    {% block shell %}
+      <main class="single-column">
+        {% block content %}{% endblock %}
+      </main>
+    {% endblock %}
+  </body>
+</html>

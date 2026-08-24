@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ document.summary.title }} · Lucien Runbooks{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Navegação estrutural">
+    <a href="/">Runbooks</a><span>/</span>
+    <a href="/runbooks/{{ document.summary.root_id }}">{{ document.summary.title }}</a><span>/</span>
+    <span>Editar</span>
+  </nav>
+  <section class="editor-panel" aria-labelledby="editor-title">
+    <div class="editor-heading">
+      <div>
+        <p class="eyebrow">Nova revisão imutável</p>
+        <h1 id="editor-title">Editar {{ document.summary.title }}</h1>
+      </div>
+      <span class="category-badge">Revisão atual {{ document.summary.revision }}</span>
+    </div>
+    <p class="editor-note">O original não será sobrescrito. O Hub validará RBAC, DLP, segredos e concorrência antes de publicar uma nova revisão.</p>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <form action="/runbooks/{{ document.summary.root_id }}/edit" method="post" class="editor-form">
+      <input type="hidden" name="edit_state" value="{{ edit_state }}">
+      <label for="markdown">Markdown do runbook</label>
+      <textarea id="markdown" name="markdown" spellcheck="false" required>{{ markdown }}</textarea>
+      <div class="editor-actions">
+        <a class="button" href="/runbooks/{{ document.summary.root_id }}">Cancelar</a>
+        <button class="button button-primary" type="submit">Enviar nova revisão</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ValdemirBSJr/lucien/security/advisories/new
+    about: Use divulgação privada; não abra vulnerabilidade em issue pública.

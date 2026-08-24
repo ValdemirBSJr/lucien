@@ -1,0 +1,3 @@
+# Dependências exclusivas do estágio de testes da imagem.
+pytest==8.4.2
+

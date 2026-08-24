@@ -1,0 +1,128 @@
+# Regras adicionais do Lucien, aplicadas sobre o conjunto padrão do Gitleaks.
+#
+# O conjunto padrão conhece credenciais de nuvem e tokens de SaaS; não conhece o
+# vocabulário de rede de acesso e transporte. Estas regras cobrem o que aparece
+# de fato em sessões capturadas de CMTS, OLT e roteadores de borda.
+#
+# Toda regra aqui é detecção, não redação: o serviço devolve apenas
+# `detected: true|false` e o Hub falha fechado. A DLP determinística continua
+# responsável por substituir formatos conhecidos por placeholders didáticos.
+#
+# Ao ajustar, prefira errar para o lado do falso positivo: um bloqueio indevido
+# custa uma revisão manual; um vazamento publicado é irreversível.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "lucien-tacacs-radius-key"
+description = "Chave compartilhada TACACS+ ou RADIUS"
+regex = '''(?i)\b(?:hw)?(?:tacacs|radius|aaa)[a-z0-9 _-]{0,24}\b(?:key|secret|shared-secret)\s+(?:[0-9]\s+)?(?:cipher\s+|simple\s+|encrypted\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["tacacs", "radius", "aaa"]
+
+[[rules]]
+id = "lucien-snmp-community"
+description = "Community SNMP de leitura ou escrita"
+regex = '''(?i)\bsnmp(?:-server)?[a-z0-9 _-]{0,20}\bcommunity\s+(?:read|write|complexity\s+\S+\s+)?["']?([^\s"']{3,})'''
+secretGroup = 1
+keywords = ["snmp"]
+
+[[rules]]
+id = "lucien-snmpv3-auth-priv"
+description = "Senha de autenticacao ou privacidade SNMPv3"
+regex = '''(?i)\b(?:authentication|privacy|auth|priv)[a-z-]{0,12}\s+(?:mode\s+)?(?:md5|sha|sha2|des|aes|aes128|3des)\s+["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["authentication", "privacy", "snmp"]
+
+[[rules]]
+id = "lucien-vendor-cipher-password"
+description = "Credencial em texto ou cifrada em configuracao de equipamento"
+regex = '''(?i)\b(?:password|senha|pwd)\s+(?:cipher|simple|irreversible-cipher|encrypted|7|0)?\s*["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["password", "senha", "cipher", "irreversible-cipher"]
+
+[[rules]]
+id = "lucien-huawei-ppp-pap-chap"
+description = "Credencial PPP PAP/CHAP em OLT ou roteador"
+regex = '''(?i)\bppp\s+(?:pap|chap)\s+(?:local-user|user|password)\s+\S+\s+(?:password\s+)?(?:cipher\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["ppp", "pap", "chap"]
+
+[[rules]]
+id = "lucien-gpon-ont-auth"
+description = "Senha ou loid de autenticacao de ONT/ONU"
+regex = '''(?i)\bont\s+(?:add|confirm|password)[^\n]{0,60}?\b(?:password|loid|checkcode)\s+["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["ont", "loid", "checkcode"]
+
+[[rules]]
+id = "lucien-docsis-shared-secret"
+description = "Shared secret DOCSIS de CMTS"
+regex = '''(?i)\bcable\s+shared-secret\s+(?:[0-9]\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["shared-secret"]
+
+[[rules]]
+id = "lucien-bgp-neighbor-password"
+description = "Senha de sessao BGP entre vizinhos"
+regex = '''(?i)\b(?:neighbor|peer)\s+\S+\s+password\s+(?:cipher\s+|[0-9]\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["neighbor", "peer"]
+
+[[rules]]
+id = "lucien-isis-ospf-auth"
+description = "Autenticacao de protocolo de roteamento interno"
+regex = '''(?i)\b(?:isis|ospf|area)[a-z0-9 _-]{0,20}\bauthentication(?:-mode|-key)?\s+(?:md5|hmac-sha256|simple|cipher)?\s*(?:[0-9]+\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["authentication-mode", "authentication-key"]
+
+[[rules]]
+id = "lucien-vendor-hash"
+description = "Hash de credencial exportado em configuracao"
+regex = '''\$(?:1|2[aby]|5|6)\$(?:rounds=[0-9]+\$)?[./A-Za-z0-9]{1,32}\$[./A-Za-z0-9]{16,}'''
+keywords = ["$1$", "$5$", "$6$", "$2a$", "$2b$", "$2y$"]
+
+[[rules]]
+id = "lucien-huawei-irreversible-hash"
+description = "Hash irreversivel Huawei em configuracao exportada"
+regex = '''(?i)\birreversible-cipher\s+([A-Za-z0-9+/=$@^*]{20,})'''
+secretGroup = 1
+keywords = ["irreversible-cipher"]
+
+[[rules]]
+id = "lucien-cisco-type7"
+description = "Credencial Cisco tipo 7, trivialmente reversivel"
+regex = '''(?i)\bpassword\s+7\s+([0-9A-Fa-f]{4,})'''
+secretGroup = 1
+keywords = ["password 7"]
+
+[[rules]]
+id = "lucien-enable-secret"
+description = "Enable secret de equipamento Cisco ou compativel"
+regex = '''(?i)\benable\s+(?:secret|password)\s+(?:[0-9]\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["enable secret", "enable password"]
+
+[[rules]]
+id = "lucien-ipsec-psk"
+description = "Pre-shared key de IPsec ou IKE"
+regex = '''(?i)\b(?:pre-shared-key|preshared-key|psk)\s+(?:cipher\s+|simple\s+)?["']?([^\s"']{6,})'''
+secretGroup = 1
+keywords = ["pre-shared-key", "preshared-key", "psk"]
+
+[[rules]]
+id = "lucien-local-user-password"
+description = "Criacao de usuario local com senha em equipamento"
+regex = '''(?i)\b(?:local-user|username|user)\s+\S+\s+(?:privilege\s+\S+\s+)?password\s+(?:cipher\s+|simple\s+|irreversible-cipher\s+|[0-9]\s+)?["']?([^\s"']{4,})'''
+secretGroup = 1
+keywords = ["local-user", "username"]
+
+[allowlist]
+description = "Placeholders didaticos da DLP e exemplos da documentacao"
+regexes = [
+  '''SUA_[A-Z0-9_]*_AQUI''',
+  '''SEU_[A-Z0-9_]*_AQUI''',
+  '''(?i)<\s*(?:senha|password|token|chave|key)\s*>''',
+  '''(?i)\b(?:example|exemplo|changeme|placeholder|xxxxx+)\b''',
+]

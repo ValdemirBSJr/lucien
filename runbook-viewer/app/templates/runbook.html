@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ document.summary.title }} · Lucien Runbooks{% endblock %}
+{% block shell %}
+  <div class="docs-shell">
+    <aside class="sidebar" aria-label="Categorias">
+      <h2>Categorias</h2>
+      <nav>
+        <a class="sidebar-link" href="/">Todos</a>
+        {% for category, items in categories.items() %}
+          <a class="sidebar-link{% if document.summary.root_domain_function == category %} active{% endif %}" href="/?categoria={{ category }}">
+            {{ category|replace('_', ' ')|title }} <span>{{ items|length }}</span>
+          </a>
+        {% endfor %}
+      </nav>
+    </aside>
+    <main class="docs-main">
+      <nav class="breadcrumbs" aria-label="Navegação estrutural">
+        <a href="/">Runbooks</a><span>/</span>
+        <a href="/?categoria={{ document.summary.root_domain_function }}">{{ document.summary.root_domain_function|replace('_', ' ') }}</a><span>/</span>
+        <span>{{ document.summary.id[:8] }}</span>
+      </nav>
+      <header class="document-header">
+        <div class="document-title-row">
+          <h1>{{ document.summary.title }}</h1>
+          {% if can_edit %}<a class="button" href="/runbooks/{{ document.summary.root_id }}/edit">Editar</a>{% endif %}
+        </div>
+        <dl class="document-metadata">
+          <div><dt>Autor</dt><dd>{{ document.summary.author }}</dd></div>
+          <div><dt>Nível</dt><dd>{{ document.summary.author_level }}</dd></div>
+          <div><dt>Função</dt><dd>{{ document.summary.domain_function|replace('_', ' ') }}</dd></div>
+          <div><dt>Criado em</dt><dd>{{ document.summary.created_at.strftime('%d/%m/%Y %H:%M') }}</dd></div>
+          <div><dt>Revisão</dt><dd>{{ document.summary.revision }}</dd></div>
+        </dl>
+        <div class="tag-list" aria-label="Tags">
+          {% for tag in document.summary.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+        </div>
+      </header>
+      <article class="markdown-body">{{ document.html|safe }}</article>
+    </main>
+  </div>
+{% endblock %}

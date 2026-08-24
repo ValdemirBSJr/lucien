@@ -1,0 +1,60 @@
+site_name: Lucien Runbooks
+site_description: Wiki operacional gerada e revisada pelo ecossistema Lucien
+site_author: Equipe de Plataforma
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Usar tema escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Usar tema claro
+
+plugins:
+  - search:
+      lang: pt
+
+# O mesmo hook confiável usado pelo builder compacto remove HTML ativo antes de
+# o conteúdo entrar no tema. O código do hook deve permanecer protegido na main.
+hooks:
+  - wiki-builder/app/mkdocs_hook.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+exclude_docs: |
+  .gitkeep

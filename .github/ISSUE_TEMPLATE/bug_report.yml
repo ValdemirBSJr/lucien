@@ -1,0 +1,36 @@
+name: Bug report
+description: Relate um defeito reproduzível sem incluir dados reais.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Não inclua tokens, logs reais, usernames, nomes, IPs, hostnames, certificados ou runbooks internos. Vulnerabilidades devem seguir SECURITY.md.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamento observado / Observed behavior
+      description: Use somente dados fictícios e informe a mensagem de erro redigida.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reprodução mínima / Minimal reproduction
+      description: Inclua versão, modo de storage e passos mínimos.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidade / Privacy
+      options:
+        - label: Confirmei que não há credenciais, dados pessoais ou infraestrutura real.
+          required: true

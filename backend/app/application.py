@@ -1,0 +1,1011 @@
+import base64
+import hashlib
+import hmac
+import logging
+import re
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from app.domain.models import (
+    DEFAULT_DOMAIN_FUNCTIONS,
+    Job,
+    PublicationIdentity,
+    RevisionSource,
+    RoleLevel,
+    RunbookEnrichment,
+    RunbookSuggestions,
+    SecurityContext,
+    User,
+)
+from app.domain.ports import (
+    CommandExtractor,
+    ConflictError,
+    ForbiddenError,
+    IdentityRepository,
+    JobRepository,
+    NotFoundError,
+    RunbookEnricher,
+    SecretDetectedError,
+    SecretScanner,
+    StorageProvider,
+    UploadCipher,
+    UpstreamError,
+    ValidationError,
+)
+from app.domain.publication import (
+    authorize_publication,
+    build_frontmatter,
+    build_revision_frontmatter,
+    validate_playbook,
+)
+from app.domain.transcript import extract_command_outputs
+from app.domain.audit import audit_event
+from app.domain.credentials import digest_api_token
+from app.domain.dlp import sanitize_secrets
+
+
+logger = logging.getLogger("lucien.worker")
+
+# Runbook sem conteúdo da SLM: o CLI preenche a estrutura básica e o operador
+# redige objetivo, validação e rollback na revisão obrigatória.
+_EMPTY_ENRICHMENT = RunbookEnrichment(
+    inferred_tags=(),
+    suggestions=RunbookSuggestions(
+        objective="",
+        architecture_prerequisites=(),
+        command_impacts=(),
+        rollback_commands=(),
+    ),
+)
+
+
+def _normalize_display_name(value: str | None) -> str | None:
+    """Nome completo do LDAP, saneado antes de virar autor do runbook.
+
+    O valor vem do script do jump server e nao participa de autorizacao --
+    `username` continua sendo a identidade. Mesmo assim ele e publicado, e
+    conteudo publicado passa por checagem aqui: controle de tamanho, nada de
+    caractere de controle e colapso de espacos.
+
+    Quem chama nao pode confiar so nisso: o GECOS do POSIX e
+    `Nome,sala,telefone,telefone`, entao mandar o campo inteiro colocaria
+    telefone no runbook publicado. O recorte fica no script, que conhece o
+    formato; aqui e a segunda barreira.
+    """
+
+    if value is None:
+        return None
+    limpo = " ".join(value.replace(chr(0), " ").split())
+    limpo = "".join(c for c in limpo if c.isprintable())
+    if not limpo:
+        return None
+    if len(limpo) > 120:
+        raise ValidationError("display_name excede 120 caracteres")
+    return limpo
+
+
+class IdentityService:
+    """Emite tokens e altera identidades sem expor detalhes de persistência."""
+
+    _PROVISIONAL_TTL = timedelta(hours=4)
+
+    def __init__(
+        self,
+        repository: IdentityRepository,
+        auth_pepper: str,
+        domain_functions: tuple[str, ...] = DEFAULT_DOMAIN_FUNCTIONS,
+    ) -> None:
+        self._repository = repository
+        self._auth_pepper = auth_pepper
+        # Mesma lista que autoriza `lucien start -r`. Se um usuario pudesse ser
+        # criado em dominio fora dela, a publicacao implicita dele cairia num
+        # diretorio que o administrador nunca declarou.
+        self._domain_functions = domain_functions
+
+    def _require_known_domain(self, domain_function: str) -> None:
+        if domain_function not in self._domain_functions:
+            disponiveis = ", ".join(self._domain_functions) or "(nenhuma configurada)"
+            raise ValidationError(
+                f"área '{domain_function}' não existe; valide a role. "
+                f"Disponíveis: {disponiveis}"
+            )
+
+    async def bootstrap_admin(
+        self, username: str, domain_function: str
+    ) -> tuple[User, str]:
+        api_token, token_hash = self._prepare_permanent_credentials(
+            username, domain_function
+        )
+        user = await self._repository.create_bootstrap_admin(
+            username, token_hash, domain_function
+        )
+        audit_event(
+            "user.bootstrap",
+            actor_id="bootstrap",
+            target_id=user.id,
+            target_username=user.username,
+        )
+        return user, api_token
+
+    async def create_user(
+        self,
+        actor: SecurityContext,
+        username: str,
+        role_level: RoleLevel,
+        domain_function: str,
+        extra_domains: tuple[str, ...] = (),
+    ) -> tuple[User, str, datetime]:
+        self._require_admin(actor)
+        self._validate_identity(username, domain_function)
+        self._require_known_domain(domain_function)
+        for dominio in extra_domains:
+            if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", dominio) is None:
+                raise ValidationError(f"área '{dominio}' inválida")
+            self._require_known_domain(dominio)
+        provisional_token, provisional_hash = self._new_provisional_token()
+        expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
+        user = await self._repository.create_provisioned_user(
+            username,
+            provisional_hash,
+            expires_at,
+            role_level,
+            domain_function,
+            extra_domains,
+        )
+        audit_event(
+            "user.create",
+            actor_id=actor.user_id,
+            target_id=user.id,
+            target_username=user.username,
+            role_level=role_level.value,
+            domain_function=domain_function,
+        )
+        return user, provisional_token, expires_at
+
+    async def get_user(self, actor: SecurityContext) -> User:
+        return await self._repository.get_user(actor.user_id)
+
+    async def issue_provisional_token(
+        self, actor: SecurityContext, id_or_username: str
+    ) -> tuple[User, str, datetime]:
+        """Revoga o token perdido e emite ativação de uso único por quatro horas."""
+
+        self._require_admin(actor)
+        target = await self._repository.get_user_by_identifier(id_or_username)
+        provisional_token, provisional_hash = self._new_provisional_token()
+        expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
+        user = await self._repository.issue_provisional_token(
+            target.id, provisional_hash, expires_at
+        )
+        audit_event(
+            "user.issue_provisional_token",
+            actor_id=actor.user_id,
+            target_id=user.id,
+            target_username=user.username,
+        )
+        return user, provisional_token, expires_at
+
+    async def exchange_provisional_token(
+        self, provisional_token: str, idempotency_key: str
+    ) -> tuple[User, str]:
+        """Troca atomicamente uma ativação temporária por token permanente."""
+
+        if not provisional_token.startswith("luc_tmp_"):
+            raise ValidationError("formato de token provisório inválido")
+        if not 8 <= len(idempotency_key) <= 128:
+            raise ValidationError("Idempotency-Key inválida")
+        provisional_hash = digest_api_token(provisional_token, self._auth_pepper)
+        api_token = self._derive_permanent_token(
+            provisional_token, idempotency_key
+        )
+        api_token_hash = digest_api_token(api_token, self._auth_pepper)
+        idempotency_key_hash = digest_api_token(
+            f"exchange:{idempotency_key}", self._auth_pepper
+        )
+        user = await self._repository.exchange_provisional_token(
+            provisional_hash,
+            api_token_hash,
+            idempotency_key_hash,
+            datetime.now(timezone.utc),
+        )
+        audit_event(
+            "user.exchange_provisional_token",
+            actor_id=user.id,
+            target_id=user.id,
+            target_username=user.username,
+        )
+        return user, api_token
+
+    async def enroll_jump_user(
+        self,
+        username: str,
+        domain_function: str | None,
+        idempotency_key: str,
+        display_name: str | None = None,
+    ) -> tuple[User, str, datetime]:
+        """Provisiona identidade POSIX sem conceder autoridade administrativa."""
+
+        if re.fullmatch(r"[A-Za-z][0-9]+", username) is None:
+            raise ValidationError("username do jump server inválido")
+        display_name = _normalize_display_name(display_name)
+        if domain_function is not None:
+            self._require_known_domain(domain_function)
+        if not 8 <= len(idempotency_key) <= 128:
+            raise ValidationError("Idempotency-Key inválida")
+
+        expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
+
+        try:
+            user = await self._repository.get_user_by_identifier(username)
+        except NotFoundError:
+            if domain_function is None:
+                raise ValidationError(
+                    "usuário não cadastrado; informe domain_function"
+                )
+            provisional_token = self._derive_jump_provisional_token(
+                username, domain_function, idempotency_key
+            )
+            provisional_hash = digest_api_token(
+                provisional_token, self._auth_pepper
+            )
+            try:
+                user = await self._repository.create_provisioned_user(
+                    username,
+                    provisional_hash,
+                    expires_at,
+                    RoleLevel.PLENO,
+                    domain_function,
+                    display_name=display_name,
+                )
+                audit_event(
+                    "user.jump_enroll",
+                    actor_id="jump-enrollment",
+                    target_id=user.id,
+                    target_username=user.username,
+                    role_level=RoleLevel.PLENO.value,
+                    domain_function=domain_function,
+                )
+                return user, provisional_token, expires_at
+            except ConflictError:
+                # Outra requisição idempotente pode ter criado a identidade.
+                user = await self._repository.get_user_by_identifier(username)
+
+        if not user.is_active:
+            raise ConflictError("usuário revogado não pode ser reativado pelo jump server")
+        if user.role_level is RoleLevel.ADMIN:
+            raise ConflictError(
+                "administrador deve usar o fluxo de login administrativo"
+            )
+        if domain_function is not None and user.domain_function != domain_function:
+            raise ConflictError(
+                "usuário existente possui domínio diferente; solicite ao admin"
+            )
+        effective_domain = user.domain_function
+        provisional_token = self._derive_jump_provisional_token(
+            username, effective_domain, idempotency_key
+        )
+        provisional_hash = digest_api_token(provisional_token, self._auth_pepper)
+        user = await self._repository.issue_provisional_token(
+            user.id, provisional_hash, expires_at, display_name
+        )
+        audit_event(
+            "user.jump_reissue",
+            actor_id="jump-enrollment",
+            target_id=user.id,
+            target_username=user.username,
+            role_level=user.role_level.value,
+            domain_function=user.domain_function,
+        )
+        return user, provisional_token, expires_at
+
+    async def recover_admin_token(
+        self, id_or_username: str
+    ) -> tuple[User, str, datetime]:
+        """Recupera offline um admin; nunca deve ser exposto por rota HTTP."""
+
+        target = await self._repository.get_user_by_identifier(id_or_username)
+        if target.role_level is not RoleLevel.ADMIN or not target.is_active:
+            raise ForbiddenError("recuperação exige um administrador ativo")
+        provisional_token, provisional_hash = self._new_provisional_token()
+        expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
+        user = await self._repository.issue_provisional_token(
+            target.id, provisional_hash, expires_at
+        )
+        audit_event(
+            "user.recover_provisional_token",
+            actor_id="local-console",
+            target_id=user.id,
+            target_username=user.username,
+        )
+        return user, provisional_token, expires_at
+
+    async def update_scopes(
+        self,
+        actor: SecurityContext,
+        id_or_username: str,
+        role_level: RoleLevel | None,
+        domain_function: str | None,
+        extra_domains: tuple[str, ...] | None = None,
+    ) -> User:
+        self._require_admin(actor)
+        target = await self._repository.get_user_by_identifier(id_or_username)
+        if actor.user_id == target.id:
+            raise ForbiddenError("admin não pode alterar o próprio escopo")
+        if domain_function is not None:
+            if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", domain_function) is None:
+                raise ValidationError("domain_function inválida")
+            self._require_known_domain(domain_function)
+        if extra_domains is not None:
+            # Cada area concedida passa pela mesma checagem da primaria: uma
+            # area fora de RUNBOOK_DOMAIN_FUNCTIONS viraria um diretorio que o
+            # administrador nunca declarou.
+            for dominio in extra_domains:
+                if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", dominio) is None:
+                    raise ValidationError(f"área '{dominio}' inválida")
+                self._require_known_domain(dominio)
+        user = await self._repository.update_user_scopes(
+            target.id, role_level, domain_function, extra_domains
+        )
+        audit_event(
+            "user.update_scopes",
+            actor_id=actor.user_id,
+            target_id=user.id,
+            role_level=user.role_level.value,
+            domain_function=user.domain_function,
+        )
+        return user
+
+    async def revoke_user(
+        self, actor: SecurityContext, id_or_username: str
+    ) -> None:
+        self._require_admin(actor)
+        target = await self._repository.get_user_by_identifier(id_or_username)
+        if actor.user_id == target.id:
+            raise ForbiddenError("admin não pode revogar o próprio token")
+        # A recusa do último admin mora no repositório, junto da gravação:
+        # contar aqui e gravar depois deixa a janela em que dois admins se
+        # revogam ao mesmo tempo e ambos veem dois na contagem.
+        await self._repository.revoke_user(target.id)
+        audit_event(
+            "user.revoke", actor_id=actor.user_id, target_id=target.id
+        )
+
+    def _prepare_permanent_credentials(
+        self, username: str, domain_function: str
+    ) -> tuple[str, str]:
+        self._validate_identity(username, domain_function)
+        return self._new_permanent_token()
+
+    def _validate_identity(self, username: str, domain_function: str) -> None:
+        if re.fullmatch(r"[a-zA-Z0-9_.-]{3,64}", username) is None:
+            raise ValidationError("username inválido")
+        if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", domain_function) is None:
+            raise ValidationError("domain_function inválida")
+
+    def _new_permanent_token(self) -> tuple[str, str]:
+        # Token aleatório de alta entropia; somente o HMAC com pepper chega ao banco.
+        api_token = f"luc_{secrets.token_urlsafe(32)}"
+        token_hash = digest_api_token(api_token, self._auth_pepper)
+        return api_token, token_hash
+
+    def _new_provisional_token(self) -> tuple[str, str]:
+        token = f"luc_tmp_{secrets.token_urlsafe(32)}"
+        return token, digest_api_token(token, self._auth_pepper)
+
+    def _derive_permanent_token(
+        self, provisional_token: str, idempotency_key: str
+    ) -> str:
+        """Permite retry da mesma troca sem persistir o token recuperável."""
+
+        digest = hmac.new(
+            self._auth_pepper.encode(),
+            f"exchange\0{provisional_token}\0{idempotency_key}".encode(),
+            hashlib.sha256,
+        ).digest()
+        encoded = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+        return f"luc_{encoded}"
+
+    def _derive_jump_provisional_token(
+        self, username: str, domain_function: str, idempotency_key: str
+    ) -> str:
+        """Reconcilia retries sem armazenar o token provisório recuperável."""
+
+        digest = hmac.new(
+            self._auth_pepper.encode(),
+            (
+                f"jump-enroll\0{username}\0{domain_function}\0"
+                f"{idempotency_key}"
+            ).encode(),
+            hashlib.sha256,
+        ).digest()
+        encoded = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+        return f"luc_tmp_{encoded}"
+
+    @staticmethod
+    def _require_admin(actor: SecurityContext) -> None:
+        if actor.role_level is not RoleLevel.ADMIN:
+            raise ForbiddenError("operação exclusiva de admin")
+
+
+class UploadService:
+    """Aceita uploads rapidamente e transfere a custódia para a fila cifrada."""
+
+    def __init__(
+        self,
+        repository: JobRepository,
+        secret_scanner: SecretScanner,
+        cipher: UploadCipher,
+        max_log_bytes: int,
+        domain_functions: tuple[str, ...] = DEFAULT_DOMAIN_FUNCTIONS,
+    ) -> None:
+        self._repository = repository
+        self._secret_scanner = secret_scanner
+        self._cipher = cipher
+        self._max_log_bytes = max_log_bytes
+        self._domain_functions = domain_functions
+
+    def _resolve_domain_function(
+        self, context: SecurityContext, requested: str | None
+    ) -> str | None:
+        """Valida `lucien start -r` contra a lista do .env e o escopo do autor.
+
+        Devolve `None` quando nada foi pedido: a publicacao segue usando o
+        dominio do autor, como sempre fez.
+        """
+
+        if requested is None:
+            return None
+        if requested not in self._domain_functions:
+            disponiveis = ", ".join(self._domain_functions) or "(nenhuma configurada)"
+            raise ValidationError(
+                f"área '{requested}' não existe; valide a role informada em -r. "
+                f"Disponíveis: {disponiveis}"
+            )
+        # A area continua sendo escopo de autoridade, nao preferencia: publica
+        # quem foi autorizado. A autorizacao e que passou a poder cobrir mais
+        # de uma area, concedida pelo admin.
+        if not context.authorizes(requested):
+            autorizadas = ", ".join(
+                sorted({context.domain_function, *context.extra_domains})
+            )
+            raise ForbiddenError(
+                f"área '{requested}' está fora do seu escopo. "
+                f"Autorizadas: {autorizadas}"
+            )
+        return requested
+
+    async def enqueue(
+        self,
+        context: SecurityContext,
+        name: str,
+        raw_log: str,
+        description: str | None = None,
+        skip_enrichment: bool = False,
+        domain_function: str | None = None,
+    ) -> Job:
+        owner_id = context.user_id
+        # Antes de qualquer trabalho caro: recusar aqui evita cifrar e enfileirar
+        # um log que nunca seria publicado.
+        resolved_domain = self._resolve_domain_function(context, domain_function)
+        if len(raw_log.encode("utf-8")) > self._max_log_bytes:
+            raise ConflictError("log excede o limite configurado")
+
+        normalized_description = " ".join((description or "").split())
+        if len(normalized_description) > 280:
+            raise ValidationError("description deve ter no máximo 280 caracteres")
+
+        await self._reject_detected_secret(raw_log)
+        if normalized_description:
+            await self._reject_detected_secret(normalized_description)
+        sanitized_log = sanitize_secrets(raw_log).text
+        sanitized_description = (
+            sanitize_secrets(normalized_description).text
+            if normalized_description
+            else None
+        )
+        sealed = self._cipher.seal(
+            owner_id, name, sanitized_log, sanitized_description
+        )
+        job = await self._repository.enqueue_job(
+            owner_id,
+            name,
+            sealed.fingerprint,
+            sealed.ciphertext,
+            skip_enrichment,
+            resolved_domain,
+        )
+        audit_event("job.enqueue", actor_id=owner_id, job_id=job.id)
+        return job
+
+    async def retry(
+        self,
+        owner_id: str,
+        id_or_name: str,
+        skip_enrichment: bool | None = None,
+    ) -> Job:
+        job = await self._repository.retry_failed_upload(
+            owner_id, id_or_name, datetime.now(timezone.utc), skip_enrichment
+        )
+        audit_event("job.retry", actor_id=owner_id, job_id=job.id)
+        return job
+
+    async def _reject_detected_secret(self, content: str) -> None:
+        if await self._secret_scanner.detect(content):
+            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+
+
+class UploadProcessor:
+    """Consome um item por vez; leases no repositório permitem múltiplas réplicas."""
+
+    def __init__(
+        self,
+        repository: JobRepository,
+        cipher: UploadCipher,
+        extractor: CommandExtractor,
+        tag_inferrer: RunbookEnricher,
+        secret_scanner: SecretScanner,
+        lease_seconds: int,
+        retry_base_seconds: int,
+        max_attempts: int,
+        enrichment_enabled: bool = True,
+    ) -> None:
+        self._repository = repository
+        self._cipher = cipher
+        self._extractor = extractor
+        self._tag_inferrer = tag_inferrer
+        self._secret_scanner = secret_scanner
+        self._lease = timedelta(seconds=lease_seconds)
+        self._retry_base_seconds = retry_base_seconds
+        self._max_attempts = max_attempts
+        self._enrichment_enabled = enrichment_enabled
+
+    async def process_once(self) -> bool:
+        now = datetime.now(timezone.utc)
+        queued = await self._repository.claim_next_upload(now, now + self._lease)
+        if queued is None:
+            return False
+
+        try:
+            sanitized_log, sanitized_description = self._cipher.open(
+                queued.owner_id, queued.name, queued.ciphertext
+            )
+            extracted = await self._extractor.extract(
+                sanitized_log, sanitized_description
+            )
+            if extracted:
+                await self._reject_detected_secret("\n".join(extracted))
+            commands = tuple(sanitize_secrets(command).text for command in extracted)
+            if not commands:
+                raise ConflictError("nenhum comando útil foi detectado")
+            command_outputs = tuple(
+                sanitize_secrets(output).text
+                for output in extract_command_outputs(sanitized_log, commands)
+            )
+            enrichment = await self._enrich_or_fallback(
+                commands,
+                sanitized_description,
+                queued.owner_id,
+                queued.job_id,
+                queued.skip_enrichment,
+            )
+            job = await self._repository.complete_upload(
+                queued.job_id,
+                commands,
+                command_outputs,
+                enrichment.suggestions,
+                enrichment.inferred_tags,
+                sanitize_secrets(sanitized_description or "").text,
+            )
+            audit_event("job.ready", actor_id=job.owner_id, job_id=job.id)
+        except NotFoundError:
+            # O proprietário pode cancelar um Job enquanto a SLM ainda trabalha.
+            # A remoção transacional do Job também elimina o payload da fila.
+            audit_event(
+                "job.cancelled",
+                actor_id=queued.owner_id,
+                job_id=queued.job_id,
+            )
+        except SecretDetectedError:
+            await self._mark_failed(
+                queued.owner_id, queued.job_id, "SECRET_DETECTED"
+            )
+        except ConflictError:
+            await self._mark_failed(queued.owner_id, queued.job_id, "NO_COMMANDS")
+        except ValidationError:
+            await self._mark_failed(
+                queued.owner_id, queued.job_id, "PAYLOAD_INVALID"
+            )
+        except UpstreamError:
+            await self._retry_or_fail(
+                queued.owner_id, queued.job_id, queued.attempts, "UPSTREAM"
+            )
+        except Exception as error:  # Falha inesperada sem registrar conteúdo ou payload.
+            logger.error(
+                "falha inesperada no worker job_id=%s tipo=%s",
+                queued.job_id,
+                type(error).__name__,
+            )
+            await self._retry_or_fail(
+                queued.owner_id, queued.job_id, queued.attempts, "INTERNAL"
+            )
+        return True
+
+    async def _enrich_or_fallback(
+        self,
+        commands: tuple[str, ...],
+        sanitized_description: str | None,
+        actor_id: str,
+        job_id: str,
+        skip_enrichment: bool = False,
+    ) -> RunbookEnrichment:
+        """Enriquecimento é auxiliar: sua ausência não invalida o Job.
+
+        O runbook continua utilizável sem objetivo, impactos ou rollback
+        sugeridos — o CLI já emite a estrutura básica e o operador redige na
+        revisão obrigatória. Falhar o Job por causa de conteúdo não autoritativo
+        descartaria a extração, que é a parte insubstituível do trabalho.
+        """
+
+        if skip_enrichment or not self._enrichment_enabled:
+            return _EMPTY_ENRICHMENT
+        try:
+            enrichment = await self._tag_inferrer.infer(
+                commands, sanitized_description
+            )
+        except UpstreamError:
+            audit_event(
+                "job.enrichment_skipped", actor_id=actor_id, job_id=job_id
+            )
+            return _EMPTY_ENRICHMENT
+        return await self._sanitize_enrichment(enrichment, len(commands))
+
+    async def _retry_or_fail(
+        self, actor_id: str, job_id: str, attempts: int, error_prefix: str
+    ) -> None:
+        if attempts >= self._max_attempts:
+            await self._mark_failed(actor_id, job_id, f"{error_prefix}_ERROR")
+            return
+        exponent = min(max(attempts - 1, 0), 6)
+        delay = min(self._retry_base_seconds * (2**exponent), 300)
+        rescheduled = await self._repository.reschedule_upload(
+            job_id, datetime.now(timezone.utc) + timedelta(seconds=delay)
+        )
+        if not rescheduled:
+            audit_event("job.cancelled", actor_id=actor_id, job_id=job_id)
+            return
+        audit_event(
+            "job.reschedule",
+            actor_id=actor_id,
+            job_id=job_id,
+            attempts=str(attempts),
+        )
+
+    async def _mark_failed(
+        self, actor_id: str, job_id: str, error_code: str
+    ) -> None:
+        failed = await self._repository.fail_upload(job_id, error_code)
+        if not failed:
+            audit_event("job.cancelled", actor_id=actor_id, job_id=job_id)
+            return
+        audit_event(
+            "job.failed", actor_id=actor_id, job_id=job_id, error_code=error_code
+        )
+
+    async def _reject_detected_secret(self, content: str) -> None:
+        if await self._secret_scanner.detect(content):
+            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+
+    async def _sanitize_enrichment(
+        self, enrichment: RunbookEnrichment, command_count: int
+    ) -> RunbookEnrichment:
+        suggestions = enrichment.suggestions
+        sensitive_surface = "\n".join(
+            (
+                suggestions.objective,
+                *suggestions.architecture_prerequisites,
+                *suggestions.command_impacts,
+                *suggestions.rollback_commands,
+            )
+        )
+        if sensitive_surface:
+            await self._reject_detected_secret(sensitive_surface)
+
+        impacts = list(suggestions.command_impacts[:command_count])
+        impacts.extend("" for _ in range(command_count - len(impacts)))
+        return RunbookEnrichment(
+            inferred_tags=enrichment.inferred_tags,
+            suggestions=RunbookSuggestions(
+                objective=sanitize_secrets(suggestions.objective).text,
+                architecture_prerequisites=tuple(
+                    sanitize_secrets(item).text
+                    for item in suggestions.architecture_prerequisites
+                ),
+                command_impacts=tuple(
+                    sanitize_secrets(item).text for item in impacts
+                ),
+                rollback_commands=tuple(
+                    sanitize_secrets(item).text
+                    for item in suggestions.rollback_commands
+                ),
+            ),
+        )
+
+
+class JobService:
+    """Orquestra casos de uso sem conhecer FastAPI, SQLAlchemy ou Ollama."""
+
+    _REVISION_RESERVATION_TTL = timedelta(minutes=15)
+    _PUBLISHED_CATALOG_LIMIT = 10_000
+
+    def __init__(
+        self,
+        repository: JobRepository,
+        secret_scanner: SecretScanner,
+        storage: StorageProvider,
+        revisions_enabled: bool = False,
+        entry_roles_enabled: bool = False,
+    ) -> None:
+        self._repository = repository
+        self._secret_scanner = secret_scanner
+        self._storage = storage
+        self._revisions_enabled = revisions_enabled
+        self._entry_roles_enabled = entry_roles_enabled
+
+    async def list_pending(self, owner_id: str) -> list[Job]:
+        return await self._repository.list_pending(owner_id)
+
+    async def list_active(self, owner_id: str) -> list[Job]:
+        return await self._repository.list_active(owner_id)
+
+    async def get_job(self, owner_id: str, id_or_name: str) -> Job:
+        return await self._repository.get_job(owner_id, id_or_name)
+
+    async def list_published_runbook_ids(self) -> tuple[str, ...]:
+        return await self._repository.list_published_runbook_ids(
+            self._PUBLISHED_CATALOG_LIMIT
+        )
+
+    async def publish(
+        self,
+        context: SecurityContext,
+        id_or_name: str,
+        markdown: str,
+        idempotency_key: str,
+    ) -> tuple[Job, int]:
+        # O editor é não confiável: scanner bloqueia e DLP redige defesas residuais.
+        await self._reject_detected_secret(markdown)
+        sanitized = sanitize_secrets(markdown)
+        validated = validate_playbook(sanitized.text)
+        authorize_publication(
+            context.role_level, validated.criticality, self._entry_roles_enabled
+        )
+        content_hash = hashlib.sha256(validated.body.encode("utf-8")).hexdigest()
+        job = await self._repository.reserve_publication(
+            context.user_id,
+            id_or_name,
+            content_hash,
+            idempotency_key,
+            PublicationIdentity.from_context(context),
+        )
+        if job.status.value == "PUBLISHED":
+            return job, sanitized.replacements
+
+        if job.publication_identity is None:
+            raise RuntimeError("reserva de publicação sem identidade confiável")
+        document = build_frontmatter(job, job.publication_identity, validated)
+        artifact = await self._storage.publish(
+            job.id,
+            job.created_at,
+            document,
+            artifact_name=job.name,
+            domain_function=job.publication_identity.domain_function,
+        )
+        published = await self._repository.mark_published(
+            context.user_id,
+            job.id,
+            artifact.url,
+            content_hash,
+            idempotency_key,
+        )
+        audit_event(
+            "job.publish",
+            actor_id=context.user_id,
+            job_id=published.id,
+            criticality=validated.criticality.value,
+            storage_url=artifact.url,
+        )
+        return published, sanitized.replacements
+
+    async def published_content(
+        self, context: SecurityContext, job_id: str
+    ) -> tuple[str, str]:
+        """Devolve o corpo revisavel e o hash que servira de If-Match.
+
+        O frontmatter e removido de proposito: ele e gerado pelo Hub e o
+        `revise` rejeita frontmatter vindo do cliente. Devolve-lo convidaria
+        o operador a cola-lo de volta e receber erro de validacao.
+        """
+
+        if not self._revisions_enabled:
+            raise ForbiddenError("revisão indisponível neste provedor")
+        self._require_revision_role(context)
+        revision_source = await self._repository.get_published_for_revision(job_id)
+        source = revision_source.job
+        self._require_revision_domain(context, revision_source)
+        if source.content_hash is None:
+            raise ConflictError("publicacao sem hash confiavel de conteudo")
+
+        publicado = await self._storage.read_published(
+            source.id,
+            source.created_at,
+            artifact_name=source.name,
+            domain_function=revision_source.root_identity.domain_function,
+        )
+        return _strip_frontmatter(publicado), source.content_hash
+
+    def _require_revision_role(self, context: SecurityContext) -> None:
+        allowed_roles = {RoleLevel.SENIOR, RoleLevel.ADMIN}
+        if self._entry_roles_enabled:
+            allowed_roles |= {RoleLevel.JUNIOR, RoleLevel.PLENO}
+        if context.role_level not in allowed_roles:
+            raise ForbiddenError("operação exclusiva de senior ou admin")
+
+    def _require_revision_domain(
+        self, context: SecurityContext, revision_source: RevisionSource
+    ) -> None:
+        # Fora do dominio autorizado responde 404, e nao 403: confirmar a
+        # existencia ja seria vazamento. Quem publica numa area tambem revisa
+        # nela -- as duas operacoes gravam no mesmo diretorio e passam pelas
+        # mesmas camadas do Hub.
+        if not context.authorizes(revision_source.root_identity.domain_function):
+            # Byte a byte igual à recusa do repositório para fonte inexistente.
+            # Divergir aqui -- ainda que só por um acento -- deixaria distinguir
+            # "não existe" de "existe e não é seu", que é o que esta recusa
+            # existe para esconder. A diferença fica na trilha.
+            raise NotFoundError("runbook publicado não encontrado")
+
+    def _registrar_revisao_negada(
+        self,
+        context: SecurityContext,
+        source_job_id: str,
+        motivo: str,
+        **extras: str,
+    ) -> None:
+        """Registra qual das recusas ocorreu, sem mudar o que o cliente vê.
+
+        "Não existe" e "existe em área que você não alcança" respondem a mesma
+        coisa de propósito: distinguir já confirmaria a existência. Mas quem
+        investiga precisa da diferença, e o lugar dela é a trilha -- alcançável
+        pelo `request_id` que acompanha a resposta.
+        """
+        audit_event(
+            "runbook.revise_negada",
+            actor_id=context.user_id,
+            source_job_id=source_job_id,
+            motivo=motivo,
+            **extras,
+        )
+
+    async def revise(
+        self,
+        context: SecurityContext,
+        source_job_id: str,
+        expected_content_hash: str,
+        markdown: str,
+        idempotency_key: str,
+    ) -> tuple[Job, int]:
+        """Publica um sucessor imutável sem alterar a versão fonte."""
+
+        if not self._revisions_enabled:
+            raise ConflictError(
+                "revisões estão desabilitadas nesta instalação"
+            )
+        self._require_revision_role(context)
+        if re.fullmatch(r"[0-9a-f]{64}", expected_content_hash) is None:
+            raise ValidationError("If-Match contém hash inválido")
+
+        try:
+            revision_source = await self._repository.get_published_for_revision(
+                source_job_id
+            )
+        except NotFoundError:
+            self._registrar_revisao_negada(
+                context, source_job_id, "fonte_inexistente_ou_nao_publicada"
+            )
+            raise
+        try:
+            self._require_revision_domain(context, revision_source)
+        except NotFoundError:
+            self._registrar_revisao_negada(
+                context,
+                source_job_id,
+                "fora_do_dominio",
+                dominio_do_runbook=revision_source.root_identity.domain_function,
+                dominio_do_ator=context.domain_function,
+            )
+            raise
+
+        # O formulário web é tão não confiável quanto o editor do CLI.
+        await self._reject_detected_secret(markdown)
+        sanitized = sanitize_secrets(markdown)
+        validated = validate_playbook(sanitized.text)
+        authorize_publication(
+            context.role_level, validated.criticality, self._entry_roles_enabled
+        )
+        content_hash = hashlib.sha256(validated.body.encode("utf-8")).hexdigest()
+        revision = await self._repository.reserve_revision(
+            context.user_id,
+            source_job_id,
+            expected_content_hash,
+            content_hash,
+            idempotency_key,
+            PublicationIdentity.from_context(context),
+            validated.command_blocks,
+            datetime.now(timezone.utc) - self._REVISION_RESERVATION_TTL,
+        )
+        if revision.status.value == "PUBLISHED":
+            return revision, sanitized.replacements
+        if (
+            revision.publication_identity is None
+            or revision.content_hash is None
+            or revision.idempotency_key is None
+        ):
+            raise RuntimeError("reserva de revisão sem identidade confiável")
+
+        document = build_revision_frontmatter(
+            revision, revision.publication_identity, validated
+        )
+        artifact = await self._storage.publish(
+            revision.id,
+            revision.created_at,
+            document,
+            artifact_name=revision.name,
+            domain_function=revision_source.root_identity.domain_function,
+        )
+        published = await self._repository.mark_revision_published(
+            revision.owner_id,
+            revision.id,
+            artifact.url,
+            revision.content_hash,
+            revision.idempotency_key,
+        )
+        audit_event(
+            "runbook.revise",
+            actor_id=context.user_id,
+            root_job_id=published.root_job_id or "",
+            source_job_id=published.supersedes_job_id or "",
+            revision_job_id=published.id,
+            revision_number=str(published.revision_number),
+            criticality=validated.criticality.value,
+            storage_url=artifact.url,
+        )
+        return published, sanitized.replacements
+
+    async def delete(
+        self, owner_id: str, id_or_name: str, force: bool = False
+    ) -> None:
+        deleted = await self._repository.delete_job(owner_id, id_or_name, force)
+        audit_event(
+            "job.delete",
+            actor_id=owner_id,
+            target=deleted.id,
+            previous_status=deleted.status.value,
+            forced=str(force).lower(),
+        )
+
+    async def _reject_detected_secret(self, content: str) -> None:
+        if await self._secret_scanner.detect(content):
+            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+
+
+def _strip_frontmatter(markdown: str) -> str:
+    """Remove o bloco YAML inicial gerado pelo Hub, preservando o corpo."""
+
+    normalizado = markdown.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalizado.startswith("---\n"):
+        return normalizado
+    fechamento = normalizado.find("\n---\n", 4)
+    if fechamento == -1:
+        return normalizado
+    corpo = normalizado[fechamento + len("\n---\n"):]
+    return corpo.lstrip("\n")

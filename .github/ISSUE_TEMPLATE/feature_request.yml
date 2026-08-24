@@ -1,0 +1,24 @@
+name: Feature request
+description: Proponha uma evolução pequena e verificável.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema / Problem
+      description: Qual necessidade concreta não é atendida hoje?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta / Proposal
+      description: Descreva o menor comportamento que resolveria o problema.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Riscos e compatibilidade / Risks and compatibility
+      description: Considere RBAC, sanitização, storage e artefatos já publicados.

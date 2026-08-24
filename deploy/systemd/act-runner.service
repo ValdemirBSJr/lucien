@@ -1,0 +1,31 @@
+[Unit]
+Description=Gitea Actions act_runner do Lucien
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=act-runner
+Group=act-runner
+SupplementaryGroups=docker
+WorkingDirectory=/var/lib/act-runner
+ExecStart=/usr/local/bin/act_runner daemon --config /var/lib/act-runner/config.yaml
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+
+# O runner precisa do socket Docker, mas não deve alterar o restante do host.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/act-runner
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

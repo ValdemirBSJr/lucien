@@ -1,0 +1,21 @@
+services:
+  hub:
+    build:
+      context: ./backend
+
+  runbook-viewer:
+    build:
+      context: .
+      dockerfile: runbook-viewer/Dockerfile
+
+  wiki-builder:
+    build:
+      context: ./wiki-builder
+
+  secret-scanner:
+    build:
+      context: ./secret-scanner
+
+  certgen:
+    build:
+      context: ./certgen

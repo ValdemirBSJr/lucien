@@ -1,0 +1,12 @@
+# O único build com contexto na raiz é o portal, pois ele incorpora o logo.
+# Não envie .env, chaves, certificados, rascunhos ou o restante do repositório
+# ao daemon/cache de build.
+*
+!runbook-viewer/
+!runbook-viewer/**
+!logo-lucien.png
+# Golden files do contrato Hub/portal. Somente este caminho do backend e
+# liberado: o resto continua fora do daemon de build.
+!backend/
+!backend/contracts/
+!backend/contracts/**

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lucien-runbook-viewer"
+version = "0.1.0"
+description = "Portal local de runbooks com revisão autorizada pelo Hub"
+requires-python = ">=3.13"
+dependencies = [
+  "bleach==6.2.0",
+  "cryptography==45.0.5",
+  "fastapi==0.116.1",
+  "httpx==0.28.1",
+  "jinja2==3.1.6",
+  "markdown-it-py==3.0.0",
+  "pydantic-settings==2.10.1",
+  "python-multipart==0.0.20",
+  "PyYAML==6.0.2",
+  "uvicorn[standard]==0.35.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest==8.4.1",
+  "pytest-asyncio==1.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
