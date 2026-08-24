@@ -211,6 +211,36 @@ The CLI runs natively in the operator terminal on Linux or macOS. On Linux, use
 the separate installer, which detects the correct package, installs only the
 Hub's public CA, and persists `API_HOST`, `TLS_CA_FILE`, and `EDITOR`:
 
+### Download CLI 1.1.7
+
+Official binaries are published on the
+[Lucien Releases page](https://github.com/ValdemirBSJr/lucien/releases), never
+in Git history. Release `v1.1.7` provides Linux and macOS packages for `amd64`
+and `arm64`, together with SHA-256 checksums, `LICENSE`, `NOTICE`, and
+third-party license notices.
+
+On Linux, download the correct package and its `.sha256` file into `dist/`: use
+`linux_amd64` on `x86_64` hosts and `linux_arm64` on `aarch64`/`arm64` hosts.
+Then run
+[`deploy/install-cli.sh`](https://github.com/ValdemirBSJr/lucien/blob/main/deploy/install-cli.sh)
+from the project copy. The installer supports Linux only; Darwin packages are
+provided for manual installation on macOS.
+
+```sh
+VERSION=1.1.7
+ARCH=amd64
+BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
+mkdir -p dist
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz"
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256"
+(cd dist && sha256sum -c "lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256")
+```
+
+The installer does not compile the source: it validates and installs the
+prebuilt package found under `dist/`:
+
 ```sh
 chmod +x deploy/install-cli.sh
 ./deploy/install-cli.sh

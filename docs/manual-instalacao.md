@@ -311,9 +311,15 @@ desabilitar a verificação esconderia o problema.
 ## 6. Preparar a máquina do CLI
 
 O CLI é um binário nativo. Docker não é necessário na máquina do operador.
-Transfira por canal confiável somente:
+Os binários oficiais estão em
+[GitHub Releases](https://github.com/ValdemirBSJr/lucien/releases). A release
+`v1.1.7` contém pacotes Linux e macOS para `amd64` e `arm64`, os checksums
+individuais e o arquivo consolidado `lucien_1.1.7_SHA256SUMS`.
 
-- `deploy/install-cli.sh`;
+Depois de baixar ou clonar a tag correspondente, transfira ou baixe por canal
+confiável somente:
+
+- [`deploy/install-cli.sh`](https://github.com/ValdemirBSJr/lucien/blob/main/deploy/install-cli.sh);
 - `deploy/install-jump-user.sh`, somente para o modo manual por conta;
 - `deploy/install-jump-server.sh` e `deploy/jump/`, somente para o modo
   automático do jump server;
@@ -322,6 +328,28 @@ Transfira por canal confiável somente:
 - `ca.crt` público copiado do Hub.
 
 Nunca transfira `.env`, `ca.key`, `server.key` ou o token Git.
+
+No Linux, baixe o pacote correto e o `.sha256` correspondente para `dist/`:
+use `linux_amd64` em hosts `x86_64` e `linux_arm64` em hosts
+`aarch64`/`arm64`. O instalador suporta somente Linux; os pacotes Darwin da
+release são destinados à instalação manual no macOS.
+
+Exemplo para Linux `amd64`:
+
+```bash
+VERSION=1.1.7
+ARCH=amd64
+BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
+mkdir -p dist
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz"
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256"
+(cd dist && sha256sum -c "lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256")
+```
+
+`deploy/install-cli.sh` não compila `cli/`: ele procura em `dist/` o pacote
+pronto compatível com a arquitetura, valida seu checksum e o instala.
 
 Execute:
 
