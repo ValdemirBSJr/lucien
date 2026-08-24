@@ -202,6 +202,36 @@ O CLI é nativo no terminal do operador (Linux/macOS). No Linux, use o instalado
 separado, que detecta o pacote correto, instala somente a CA pública do Hub e
 persiste `API_HOST`, `TLS_CA_FILE` e `EDITOR`:
 
+### Baixar o CLI 1.1.7
+
+Os binários oficiais ficam na página de
+[Releases do Lucien](https://github.com/ValdemirBSJr/lucien/releases), nunca no
+histórico Git. A release `v1.1.7` oferece pacotes para Linux e macOS nas
+arquiteturas `amd64` e `arm64`, acompanhados por checksums SHA-256, `LICENSE`,
+`NOTICE` e avisos de licenças de terceiros.
+
+No Linux, baixe o pacote correto e seu `.sha256` para `dist/`: use
+`linux_amd64` em hosts `x86_64` e `linux_arm64` em hosts `aarch64`/`arm64`.
+Depois execute o
+[`deploy/install-cli.sh`](https://github.com/ValdemirBSJr/lucien/blob/main/deploy/install-cli.sh)
+da cópia do projeto. O instalador suporta somente Linux; os pacotes Darwin são
+destinados à instalação manual no macOS.
+
+```sh
+VERSION=1.1.7
+ARCH=amd64
+BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
+mkdir -p dist
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz"
+curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256" \
+  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256"
+(cd dist && sha256sum -c "lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256")
+```
+
+O instalador não compila o código: ele valida e instala o pacote já construído
+que está em `dist/`:
+
 ```sh
 chmod +x deploy/install-cli.sh
 ./deploy/install-cli.sh
