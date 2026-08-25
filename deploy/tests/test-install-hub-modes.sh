@@ -134,13 +134,13 @@ testar_certificados_tls() {
     falhar 'instalação limpa não gerou o conjunto TLS'
   grep -Fq -- 'certgen' "$raiz/docker-calls.txt" || \
     falhar 'certgen não foi invocado quando os certificados estavam ausentes'
-  grep -Fq -- 'Certificados TLS ausentes; gerando' "$raiz/saida.txt" || \
+  grep -Fq -- 'TLS certificates missing; generating' "$raiz/saida.txt" || \
     falhar 'geração automática de TLS não foi informada'
 
   raiz="$(executar_instalador tls-existentes $'\n\n\ny\n\n\n1\n\n\n\n' completos)"
   [[ ! -e "$raiz/docker-calls.txt" ]] || \
     falhar 'certificados existentes acionaram o Docker indevidamente'
-  grep -Fq -- 'Certificados TLS existentes detectados' "$raiz/saida.txt" || \
+  grep -Fq -- 'Existing TLS certificates detected' "$raiz/saida.txt" || \
     falhar 'reutilização de TLS não foi informada'
 
   raiz_parcial="$(preparar_pacote tls-parciais parciais)"
@@ -153,7 +153,7 @@ testar_certificados_tls() {
   ); then
     falhar 'conjunto TLS parcial foi aceito'
   fi
-  grep -Fq -- 'conjunto TLS incompleto' "$raiz_parcial/saida.txt" || \
+  grep -Fq -- 'incomplete TLS set' "$raiz_parcial/saida.txt" || \
     falhar 'erro de conjunto TLS parcial não foi informado'
 }
 
@@ -200,7 +200,7 @@ testar_github() {
   assert_regex "$raiz/secrets/viewer_session_secret" '^[a-f0-9]{64}$'
   [[ ! -s "$raiz/secrets/wiki_repository_token" ]] || \
     falhar 'token do builder deveria estar vazio no modo GitHub'
-  grep -Fq -- 'nenhum runner próprio é necessário' "$raiz/saida.txt" || \
+  grep -Fq -- 'no self-hosted runner is needed' "$raiz/saida.txt" || \
     falhar 'orientação do GitHub-hosted runner ausente'
   ! grep -Fq -- "$token" "$raiz/saida.txt" || falhar 'token GitHub vazou na saída'
 }
@@ -214,7 +214,7 @@ testar_gitea_compact() {
   assert_linha "$raiz/.env" 'STORAGE_PROVIDER=gitea'
   assert_linha "$raiz/.env" 'GIT_CA_SOURCE=./certs/ca.crt'
   assert_linha "$raiz/.env" \
-    'WIKI_REPOSITORY_URL=https://gitea.exemplo.interno/infraestrutura/runbooks.git'
+    'WIKI_REPOSITORY_URL=https://gitea.example.internal/infrastructure/runbooks.git'
   assert_linha "$raiz/.env" 'WIKI_REPOSITORY_BRANCH=main'
   assert_linha "$raiz/.env" 'WIKI_REPOSITORY_USER=lucien-builder'
   assert_linha "$raiz/secrets/wiki_repository_token" "$read_token"
@@ -261,7 +261,7 @@ testar_atualizacao_compose() {
   [[ -n "$backup" ]] || falhar 'a atualização não preservou o Compose anterior'
   assert_linha "$backup" '  postgres:'
   assert_linha "$raiz/docker-compose.local.yml" '  upload-worker:'
-  grep -Fq -- 'limites de recursos para todos os serviços' "$raiz/saida.txt" || \
+  grep -Fq -- 'resource limits for every service' "$raiz/saida.txt" || \
     falhar 'o resultado da atualização não foi informado'
 
   (
@@ -273,7 +273,7 @@ testar_atualizacao_compose() {
     -name 'docker-compose.local.yml.bak.*' | wc -l)"
   [[ "$quantidade_backups" == '1' ]] || \
     falhar 'a atualização idempotente criou um backup desnecessário'
-  grep -Fq -- 'já está atualizado' "$raiz/segunda-saida.txt" || \
+  grep -Fq -- 'is already up to date' "$raiz/segunda-saida.txt" || \
     falhar 'a atualização idempotente não informou o estado atual'
 }
 
@@ -333,7 +333,7 @@ y
 
 
 ')"
-  grep -Fq -- 'ficou vazio' "$raiz/saida.txt" ||     falhar 'instalação não avisou sobre secret criado vazio'
+  grep -Fq -- 'came out empty' "$raiz/saida.txt" ||     falhar 'instalação não avisou sobre secret criado vazio'
 }
 
 testar_hardening_compose() {

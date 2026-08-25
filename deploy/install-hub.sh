@@ -16,7 +16,7 @@ ACT_RUNNER_UNIT="$PROJECT_ROOT/deploy/systemd/act-runner.service"
 declare -a PRIVILEGE_COMMAND=()
 
 erro() {
-  printf 'Erro: %s\n' "$1" >&2
+  printf 'Error: %s\n' "$1" >&2
   exit 1
 }
 
@@ -41,21 +41,21 @@ exigir_valor_dotenv() {
 
   # O instalador aceita somente valores seguros para uma atribuição dotenv sem aspas.
   [[ "$valor" =~ ^[-A-Za-z0-9._:/@,+=]+$ ]] || \
-    erro "$nome contém caracteres incompatíveis com o arquivo .env"
+    erro "$nome contains characters incompatible with the .env file"
 }
 
 exigir_nao_vazio() {
   local nome="$1"
   local valor="$2"
 
-  [[ -n "$valor" ]] || erro "$nome é obrigatório"
+  [[ -n "$valor" ]] || erro "$nome is required"
 }
 
 exigir_artefato() {
   local caminho="$1"
   local descricao="$2"
 
-  [[ -e "$caminho" ]] || erro "$descricao ausente: $caminho"
+  [[ -e "$caminho" ]] || erro "$descricao missing: $caminho"
 }
 
 resolver_caminho_host() {
@@ -72,7 +72,7 @@ validar_ca_existente() {
   local caminho_resolvido
   caminho_resolvido="$(resolver_caminho_host "$1")"
   [[ -f "$caminho_resolvido" && -r "$caminho_resolvido" ]] || \
-    erro "a CA deve ser um arquivo regular legível no host: $caminho_resolvido"
+    erro "the CA must be a regular, readable file on the host: $caminho_resolvido"
 }
 
 preparar_certificados_tls() {
@@ -85,7 +85,7 @@ preparar_certificados_tls() {
   done
 
   if (( arquivos_presentes == 0 )); then
-    printf '%s\n' 'Certificados TLS ausentes; gerando CA e certificado do Hub.'
+    printf '%s\n' 'TLS certificates missing; generating the CA and the Hub certificate.'
     mkdir -p "$certs_dir"
     (
       cd "$PROJECT_ROOT"
@@ -97,22 +97,22 @@ preparar_certificados_tls() {
   fi
 
   if (( arquivos_presentes != ${#arquivos_obrigatorios[@]} )); then
-    erro 'conjunto TLS incompleto em certs/: mantenha ca.crt, server.crt e server.key juntos ou remova os artefatos parciais para uma nova emissão'
+    erro 'incomplete TLS set in certs/: keep ca.crt, server.crt and server.key together, or remove the partial artifacts for a fresh issuance'
   fi
 
   validar_ca_existente "$certs_dir/ca.crt"
-  printf '%s\n' 'Certificados TLS existentes detectados; geração ignorada.'
+  printf '%s\n' 'Existing TLS certificates detected; generation skipped.'
 }
 
 validar_url_repositorio_https() {
   local url="$1"
   local autoridade
 
-  [[ "$url" == https://* ]] || erro 'WIKI_REPOSITORY_URL deve usar HTTPS'
+  [[ "$url" == https://* ]] || erro 'WIKI_REPOSITORY_URL must use HTTPS'
   autoridade="${url#https://}"
   autoridade="${autoridade%%/*}"
   [[ -n "$autoridade" && "$autoridade" != *@* ]] || \
-    erro 'WIKI_REPOSITORY_URL não pode conter credenciais embutidas'
+    erro 'WIKI_REPOSITORY_URL must not carry embedded credentials'
 }
 
 gerar_segredo() {
@@ -151,12 +151,12 @@ instalar_segredo() {
   local destino="$SECRETS_DIRECTORY/$nome"
   local temporario
 
-  [[ ! -e "$destino" ]] || erro "o segredo já existe e não será sobrescrito: $destino"
+  [[ ! -e "$destino" ]] || erro "the secret already exists and will not be overwritten: $destino"
   if [[ -z "$valor" ]]; then
     # Vazio só é legítimo quando o preset não usa a integração correspondente e
     # o serviço que consome o secret não está no perfil ativo. Avisar aqui evita
     # que a falha apareça muito depois, no boot, sem apontar para a instalação.
-    printf 'Aviso: %s ficou vazio; o serviço que depende dele não iniciará até ser preenchido.\n' \
+    printf 'Warning: %s came out empty; the service that depends on it will not start until it is filled in.\n' \
       "$nome" >&2
   fi
   temporario="$(mktemp "$SECRETS_DIRECTORY/.${nome}.tmp.XXXXXX")"
@@ -170,18 +170,18 @@ instalar_segredo() {
 
 uso() {
   cat <<'EOF'
-Uso:
+Usage:
   ./deploy/install-hub.sh
-      Configura somente o Runbook API Hub neste host.
+      Configures only the Runbook API Hub on this host.
 
   ./deploy/install-hub.sh --refresh-compose
-      Atualiza docker-compose.local.yml a partir da base e preserva um backup.
+      Updates docker-compose.local.yml from the base file, keeping a backup.
 
   ./deploy/install-hub.sh --configure-gitea-runner
-      Configura o act_runner do modo avançado em uma VM Linux dedicada.
+      Sets up the advanced-mode act_runner on a dedicated Linux VM.
 
   ./deploy/install-hub.sh --prepare-nginx-deploy
-      Gera a chave SSH de deploy e o known_hosts no host administrativo.
+      Generates the SSH deploy key and the known_hosts on the admin host.
 EOF
 }
 
@@ -212,42 +212,42 @@ validar_servicos_com_recursos() {
   ' "$compose")"
 
   [[ -z "$sem_limite" ]] || \
-    erro "serviços sem limites e reservas em $compose: ${sem_limite//$'\n'/, }"
+    erro "services without limits and reservations in $compose: ${sem_limite//$'\n'/, }"
 }
 
 atualizar_compose_local() {
   local compose_base="$PROJECT_ROOT/docker-compose.yml"
   local backup temporario
 
-  exigir_artefato "$compose_base" 'Compose operacional base'
+  exigir_artefato "$compose_base" 'base operational Compose'
   grep -Fqx -- '  upload-worker:' "$compose_base" || \
-    erro 'o Compose operacional base não contém o serviço upload-worker'
+    erro 'the base operational Compose has no upload-worker service'
   validar_servicos_com_recursos "$compose_base"
 
   if [[ -f "$COMPOSE_FILE" ]] && cmp -s -- "$compose_base" "$COMPOSE_FILE"; then
-    printf '%s\n' 'docker-compose.local.yml já está atualizado.'
+    printf '%s\n' 'docker-compose.local.yml is already up to date.'
     return
   fi
 
   if [[ -e "$COMPOSE_FILE" && ! -f "$COMPOSE_FILE" ]]; then
-    erro "$COMPOSE_FILE existe, mas não é um arquivo regular"
+    erro "$COMPOSE_FILE exists, but is not a regular file"
   fi
 
   if [[ -f "$COMPOSE_FILE" ]]; then
     backup="$(mktemp "$PROJECT_ROOT/docker-compose.local.yml.bak.XXXXXX")"
     cp -- "$COMPOSE_FILE" "$backup"
     chmod 0600 "$backup"
-    printf 'Backup da configuração anterior: %s\n' "$backup"
+    printf 'Backup of the previous configuration: %s\n' "$backup"
   fi
 
   temporario="$(mktemp "$PROJECT_ROOT/.docker-compose.local.yml.tmp.XXXXXX")"
   install -m 0644 "$compose_base" "$temporario"
   mv -T -- "$temporario" "$COMPOSE_FILE"
-  printf '%s\n' 'docker-compose.local.yml atualizado com upload-worker e limites de recursos para todos os serviços.'
+  printf '%s\n' 'docker-compose.local.yml updated with upload-worker and resource limits for every service.'
 }
 
 exigir_comando() {
-  command -v "$1" >/dev/null 2>&1 || erro "$1 não foi encontrado"
+  command -v "$1" >/dev/null 2>&1 || erro "$1 was not found"
 }
 
 preparar_privilegios() {
@@ -257,12 +257,12 @@ preparar_privilegios() {
   fi
 
   if command -v sudo >/dev/null 2>&1; then
-    sudo -v || erro 'não foi possível obter privilégios com sudo'
+    sudo -v || erro 'could not obtain privileges with sudo'
     PRIVILEGE_COMMAND=(sudo)
     return
   fi
 
-  erro 'sudo não está disponível; execute este modo diretamente como root'
+  erro 'sudo is not available; run this mode directly as root'
 }
 
 executar_privilegiado() {
@@ -286,13 +286,13 @@ configurar_gitea_runner() {
   local runner_status
 
   if [[ -e "$ENV_FILE" || -e "$COMPOSE_FILE" ]]; then
-    erro 'este diretório já configura um Hub; use um host dedicado para o runner'
+    erro 'this directory already configures a Hub; use a dedicated host for the runner'
   fi
 
-  printf '%s\n' 'Configuração do Gitea act_runner'
-  printf '%s\n' 'Atenção: acesso ao Docker equivale a root. Não use o host do Hub, SLM, banco ou Gitea.'
-  confirmar 'Confirma que este é um host dedicado exclusivamente ao runner' || \
-    erro 'configuração cancelada para preservar o isolamento do ambiente'
+  printf '%s\n' 'Gitea act_runner setup'
+  printf '%s\n' 'Warning: Docker access is equivalent to root. Do not use the Hub, SLM, database or Gitea host.'
+  confirmar 'Confirm that this host is dedicated exclusively to the runner' || \
+    erro 'setup canceled to preserve the isolation of the environment'
 
   exigir_comando docker
   exigir_comando useradd
@@ -301,12 +301,12 @@ configurar_gitea_runner() {
   exigir_comando install
   exigir_comando timeout
   [[ -x "$ACT_RUNNER_BIN" ]] || \
-    erro "instale e valide uma versão fixa do act_runner em $ACT_RUNNER_BIN"
-  getent group docker >/dev/null 2>&1 || erro 'o grupo docker não existe'
-  [[ -f "$ACT_RUNNER_UNIT" ]] || erro 'template systemd do act_runner não encontrado'
+    erro "install and validate a pinned act_runner version at $ACT_RUNNER_BIN"
+  getent group docker >/dev/null 2>&1 || erro 'the docker group does not exist'
+  [[ -f "$ACT_RUNNER_UNIT" ]] || erro 'act_runner systemd template not found'
   preparar_privilegios
   executar_privilegiado docker info >/dev/null 2>&1 || \
-    erro 'o daemon Docker não está acessível'
+    erro 'the Docker daemon is not reachable'
 
   if ! id -u act-runner >/dev/null 2>&1; then
     executar_privilegiado useradd --system \
@@ -321,29 +321,29 @@ configurar_gitea_runner() {
     executar_como_runner sh -c \
       'cd /var/lib/act-runner && umask 077 && /usr/local/bin/act_runner generate-config > config.yaml'
   else
-    printf '%s\n' 'config.yaml já existe; o instalador não irá sobrescrevê-lo.'
+    printf '%s\n' 'config.yaml already exists; the installer will not overwrite it.'
   fi
 
   if [[ ! -f "$ACT_RUNNER_HOME/.runner" ]]; then
-    printf '%s\n' 'O registro é interativo para não expor o token no histórico ou na lista de processos.'
+    printf '%s\n' 'Registration is interactive so the token is not exposed in shell history or the process list.'
     executar_como_runner sh -c \
       'cd /var/lib/act-runner && /usr/local/bin/act_runner --config config.yaml register'
   else
-    printf '%s\n' '.runner já existe; registro preservado.'
+    printf '%s\n' '.runner already exists; registration preserved.'
   fi
   executar_privilegiado chown act-runner:act-runner \
     "$ACT_RUNNER_HOME/config.yaml" "$ACT_RUNNER_HOME/.runner"
   executar_privilegiado chmod 0600 \
     "$ACT_RUNNER_HOME/config.yaml" "$ACT_RUNNER_HOME/.runner"
 
-  printf '%s\n' 'Validando o daemon em primeiro plano por até 10 segundos...'
+  printf '%s\n' 'Validating the daemon in the foreground for up to 10 seconds...'
   set +e
   executar_como_runner sh -c \
     'cd /var/lib/act-runner && timeout --signal=TERM 10s /usr/local/bin/act_runner daemon --config config.yaml'
   runner_status=$?
   set -e
   if [[ "$runner_status" != '0' && "$runner_status" != '124' ]]; then
-    erro "o act_runner encerrou com status $runner_status durante a validação"
+    erro "act_runner exited with status $runner_status during validation"
   fi
 
   if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
@@ -353,8 +353,8 @@ configurar_gitea_runner() {
     executar_privilegiado systemctl enable --now act-runner.service
     executar_privilegiado systemctl --no-pager --full status act-runner.service
   else
-    printf '%s\n' 'systemd não está ativo. Cadastre o daemon no gerenciador de serviços desta distribuição.'
-    printf '%s\n' "Comando: $ACT_RUNNER_BIN daemon --config $ACT_RUNNER_HOME/config.yaml"
+    printf '%s\n' 'systemd is not active. Register the daemon with the service manager of this distribution.'
+    printf '%s\n' "Command: $ACT_RUNNER_BIN daemon --config $ACT_RUNNER_HOME/config.yaml"
   fi
 }
 
@@ -362,25 +362,25 @@ preparar_nginx_deploy() {
   exigir_comando ssh-keygen
   exigir_comando ssh-keyscan
   exigir_comando realpath
-  [[ -n "${HOME:-}" ]] || erro 'HOME não está definido'
+  [[ -n "${HOME:-}" ]] || erro 'HOME is not set'
 
   local key_path key_dir key_name project_root_real nginx_host known_hosts
-  key_path="$(perguntar 'Caminho absoluto da chave de deploy' \
+  key_path="$(perguntar 'Absolute path for the deploy key' \
     "$HOME/.config/lucien/deploy/lucien-wiki-deploy")"
-  [[ "$key_path" == /* ]] || erro 'use um caminho absoluto para a chave'
+  [[ "$key_path" == /* ]] || erro 'use an absolute path for the key'
   key_path="$(realpath -m -- "$key_path")"
   project_root_real="$(CDPATH='' cd -- "$PROJECT_ROOT" && pwd -P)"
   [[ "$key_path" != "$project_root_real"/* ]] || \
-    erro 'a chave privada não pode ser criada dentro do repositório'
+    erro 'the private key must not be created inside the repository'
   key_dir="$(dirname -- "$key_path")"
   key_name="$(basename -- "$key_path")"
   install -d -m 0700 "$key_dir"
   key_dir="$(CDPATH='' cd -- "$key_dir" && pwd -P)"
   key_path="$key_dir/$key_name"
   if [[ -e "$key_path" && -e "$key_path.pub" ]]; then
-    printf '%s\n' 'A chave de deploy já existe e será preservada.'
+    printf '%s\n' 'The deploy key already exists and will be preserved.'
   elif [[ -e "$key_path" || -e "$key_path.pub" ]]; then
-    erro 'o par de chaves está incompleto; corrija-o sem sobrescrever credenciais'
+    erro 'the key pair is incomplete; fix it without overwriting credentials'
   else
     ssh-keygen -t ed25519 -a 100 -N '' \
       -C 'lucien-gitea-actions' -f "$key_path"
@@ -388,45 +388,45 @@ preparar_nginx_deploy() {
     chmod 0644 "$key_path.pub"
   fi
 
-  nginx_host="$(perguntar 'FQDN ou IPv4 SSH do servidor Nginx' 'wiki.exemplo.interno')"
+  nginx_host="$(perguntar 'SSH FQDN or IPv4 of the Nginx server' 'wiki.example.internal')"
   [[ "$nginx_host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || \
-    erro 'o host Nginx contém caracteres inválidos'
+    erro 'the Nginx host contains invalid characters'
   known_hosts="$key_dir/wiki_known_hosts"
   [[ ! -e "$known_hosts" ]] || \
-    erro 'wiki_known_hosts já existe; o instalador não irá sobrescrevê-lo'
+    erro 'wiki_known_hosts already exists; the installer will not overwrite it'
   if ! ssh-keyscan -T 5 -H "$nginx_host" > "$known_hosts"; then
     rm -f "$known_hosts"
-    erro 'não foi possível obter a chave pública SSH do Nginx'
+    erro 'could not fetch the SSH public key from Nginx'
   fi
   if [[ ! -s "$known_hosts" ]]; then
     rm -f "$known_hosts"
-    erro 'o Nginx não retornou uma chave pública SSH'
+    erro 'Nginx returned no SSH public key'
   fi
   chmod 0600 "$known_hosts"
 
-  printf '\nFingerprints apresentados pelo host %s:\n' "$nginx_host"
+  printf '\nFingerprints presented by host %s:\n' "$nginx_host"
   ssh-keygen -lf "$known_hosts"
-  printf '%s\n' 'ATENÇÃO: confirme esses fingerprints por um canal independente antes de usar WIKI_KNOWN_HOSTS.'
-  printf '\nArquivos gerados:\n  chave privada: %s\n  chave pública: %s.pub\n  known_hosts: %s\n' \
+  printf '%s\n' 'WARNING: confirm these fingerprints over an independent channel before using WIKI_KNOWN_HOSTS.'
+  printf '\nGenerated files:\n  private key: %s\n  public key:  %s.pub\n  known_hosts: %s\n' \
     "$key_path" "$key_path" "$known_hosts"
-  printf '%s\n' 'Instale somente a chave .pub no usuário não-root do Nginx, com restrict no authorized_keys.'
-  printf '%s\n' 'Cadastre a chave privada somente no segredo SSH_PRIVATE_KEY do repositório Gitea.'
+  printf '%s\n' 'Install only the .pub key on the non-root Nginx user, with restrict in authorized_keys.'
+  printf '%s\n' 'Register the private key only in the SSH_PRIVATE_KEY secret of the Gitea repository.'
 }
 
 case "${1:-}" in
   '') ;;
   --refresh-compose)
-    [[ "$#" -eq 1 ]] || erro 'este modo não aceita argumentos adicionais'
+    [[ "$#" -eq 1 ]] || erro 'this mode takes no additional arguments'
     atualizar_compose_local
     exit 0
     ;;
   --configure-gitea-runner)
-    [[ "$#" -eq 1 ]] || erro 'este modo não aceita argumentos adicionais'
+    [[ "$#" -eq 1 ]] || erro 'this mode takes no additional arguments'
     configurar_gitea_runner
     exit 0
     ;;
   --prepare-nginx-deploy)
-    [[ "$#" -eq 1 ]] || erro 'este modo não aceita argumentos adicionais'
+    [[ "$#" -eq 1 ]] || erro 'this mode takes no additional arguments'
     preparar_nginx_deploy
     exit 0
     ;;
@@ -441,78 +441,78 @@ case "${1:-}" in
 esac
 
 if [[ ! -f "$PROJECT_ROOT/docker-compose.yml" ]]; then
-  erro "docker-compose.yml ausente na raiz. Copie esse arquivo junto de backend/, certgen/, secret-scanner/ e deploy/ para o pacote isolado do Hub"
+  erro "docker-compose.yml missing at the repository root. Copy it alongside backend/, certgen/, secret-scanner/ and deploy/ into the isolated Hub package"
 fi
 
-exigir_artefato "$COMPOSE_BUILD_FILE" 'arquivo de build local das imagens'
-exigir_artefato "$PROJECT_ROOT/.dockerignore" 'proteção do contexto de build'
-exigir_artefato "$PROJECT_ROOT/backend/Dockerfile" 'imagem do Hub'
-exigir_artefato "$PROJECT_ROOT/certgen/Dockerfile" 'imagem do gerador de certificados'
-exigir_artefato "$PROJECT_ROOT/secret-scanner/Dockerfile" 'imagem do scanner de segredos'
+exigir_artefato "$COMPOSE_BUILD_FILE" 'local image build file'
+exigir_artefato "$PROJECT_ROOT/.dockerignore" 'build context protection'
+exigir_artefato "$PROJECT_ROOT/backend/Dockerfile" 'Hub image'
+exigir_artefato "$PROJECT_ROOT/certgen/Dockerfile" 'certificate generator image'
+exigir_artefato "$PROJECT_ROOT/secret-scanner/Dockerfile" 'secret scanner image'
 
 if [[ -e "$ENV_FILE" || -e "$COMPOSE_FILE" ]]; then
-  erro ".env ou docker-compose.local.yml já existe; o instalador não sobrescreve configurações"
+  erro ".env or docker-compose.local.yml already exists; the installer does not overwrite configuration"
 fi
 if [[ -d "$SECRETS_DIRECTORY" ]] && \
   [[ -n "$(find "$SECRETS_DIRECTORY" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-  erro "o diretório secrets/ já contém arquivos; o instalador não sobrescreve credenciais"
+  erro "the secrets/ directory already holds files; the installer does not overwrite credentials"
 fi
 
-command -v docker >/dev/null 2>&1 || erro "Docker não encontrado; instale-o antes de continuar"
-docker compose version >/dev/null 2>&1 || erro "Docker Compose v2 não está disponível"
+command -v docker >/dev/null 2>&1 || erro "Docker not found; install it before continuing"
+docker compose version >/dev/null 2>&1 || erro "Docker Compose v2 is not available"
 docker_cpu_count="$(docker info --format '{{.NCPU}}' 2>/dev/null)" || \
-  erro 'não foi possível consultar os recursos do daemon Docker'
+  erro 'could not query the Docker daemon resources'
 [[ "$docker_cpu_count" =~ ^[1-9][0-9]*$ ]] || \
-  erro "quantidade de CPUs inválida informada pelo Docker: $docker_cpu_count"
-command -v openssl >/dev/null 2>&1 || erro "OpenSSL não encontrado; ele é usado para gerar segredos"
-command -v realpath >/dev/null 2>&1 || erro "realpath não encontrado; instale coreutils antes de continuar"
+  erro "invalid CPU count reported by Docker: $docker_cpu_count"
+command -v openssl >/dev/null 2>&1 || erro "OpenSSL not found; it is used to generate secrets"
+command -v realpath >/dev/null 2>&1 || erro "realpath not found; install coreutils before continuing"
 for command_name in find sort xargs sha256sum install mktemp; do
   command -v "$command_name" >/dev/null 2>&1 || \
-    erro "$command_name não foi encontrado; instale coreutils/findutils antes de continuar"
+    erro "$command_name was not found; install coreutils/findutils before continuing"
 done
 
-printf '%s\n' 'Instalação guiada do Runbook API Hub'
-printf '%s\n' 'Serão criados .env (modo 0600) e docker-compose.local.yml editável.'
-printf '%s\n' 'Nenhum token será exibido no terminal.'
+printf '%s\n' 'Guided installation of the Runbook API Hub'
+printf '%s\n' 'This creates .env (mode 0600) and an editable docker-compose.local.yml.'
+printf '%s\n' 'No token is shown in the terminal.'
 
-hub_dns="$(perguntar 'FQDN que os clientes usarão para acessar o Hub' 'runbook.exemplo.interno')"
+hub_dns="$(perguntar 'FQDN clients will use to reach the Hub' 'runbook.example.internal')"
 [[ "$hub_dns" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || \
-  erro 'o FQDN contém caracteres inválidos'
+  erro 'the FQDN contains invalid characters'
 
-if confirmar 'Expor HTTPS para a rede em TCP/8443'; then
+if confirmar 'Expose HTTPS to the network on TCP/8443'; then
   hub_bind_address='0.0.0.0'
 else
   hub_bind_address='127.0.0.1'
 fi
 
-cert_ip="$(perguntar 'IP adicional para o SAN do certificado' '127.0.0.1')"
-[[ "$cert_ip" =~ ^[0-9A-Fa-f:.]+$ ]] || erro 'o IP do certificado contém caracteres inválidos'
+cert_ip="$(perguntar 'Additional IP for the certificate SAN' '127.0.0.1')"
+[[ "$cert_ip" =~ ^[0-9A-Fa-f:.]+$ ]] || erro 'the certificate IP contains invalid characters'
 
-if confirmar 'Executar a SLM Ollama nesta mesma máquina'; then
+if confirmar 'Run the Ollama SLM on this same machine'; then
   compose_profile='consolidated'
   slm_base_url='http://slm:11434'
 else
   compose_profile='server'
-  slm_base_url="$(perguntar 'URL interna da SLM remota' 'http://slm.exemplo.interno:11434')"
+  slm_base_url="$(perguntar 'Internal URL of the remote SLM' 'http://slm.example.internal:11434')"
   exigir_valor_dotenv 'SLM_BASE_URL' "$slm_base_url"
 fi
 
-slm_model="$(perguntar 'Modelo da SLM' 'qwen2.5-coder:3b')"
+slm_model="$(perguntar 'SLM model' 'qwen2.5-coder:3b')"
 exigir_valor_dotenv 'SLM_MODEL' "$slm_model"
-slm_language_runbook="$(perguntar 'Idioma dos runbooks (pt-br ou en)' 'pt-br')"
+slm_language_runbook="$(perguntar 'Runbook language (pt-br or en)' 'pt-br')"
 case "$slm_language_runbook" in
   pt-br|en) ;;
-  *) erro 'o idioma dos runbooks deve ser pt-br ou en' ;;
+  *) erro 'the runbook language must be pt-br or en' ;;
 esac
 
 cat <<'EOF'
-Modo de publicação e visualização:
-  1) local-viewer  - disco local + portal HTTPS com revisão controlada em TCP/9091
-  2) github        - GitHub-hosted Actions + GitHub Pages, sem runner próprio
-  3) gitea-compact - builder fixo + Nginx neste host, sem Docker socket
-  4) gitea-runner  - Gitea Actions em VM dedicada (modo avançado)
+Publication and viewing mode:
+  1) local-viewer  - local disk + HTTPS portal with controlled review on TCP/9091
+  2) github        - GitHub-hosted Actions + GitHub Pages, no self-hosted runner
+  3) gitea-compact - fixed builder + Nginx on this host, no Docker socket
+  4) gitea-runner  - Gitea Actions on a dedicated VM (advanced mode)
 EOF
-read -r -p 'Escolha [1]: ' publication_choice
+read -r -p 'Choose [1]: ' publication_choice
 publication_choice="${publication_choice:-1}"
 
 publication_mode='local-viewer'
@@ -541,9 +541,9 @@ case "$publication_choice" in
   1)
     compose_profiles="$compose_profile,local-viewer"
     exigir_artefato "$PROJECT_ROOT/runbook-viewer/Dockerfile" \
-      'imagem do visualizador local'
-    exigir_artefato "$PROJECT_ROOT/logo-lucien.png" 'logo do visualizador local'
-    if confirmar 'Expor o visualizador HTTPS para a rede em TCP/9091'; then
+      'local viewer image'
+    exigir_artefato "$PROJECT_ROOT/logo-lucien.png" 'local viewer logo'
+    if confirmar 'Expose the HTTPS viewer to the network on TCP/9091'; then
       viewer_bind_address='0.0.0.0'
     fi
     ;;
@@ -552,14 +552,14 @@ case "$publication_choice" in
     storage_provider='github'
     configurar_git='true'
     cat <<'EOF'
-ATENÇÃO: repositório privado não torna o site Pages privado. No GitHub.com, a
-publicação a partir de repositório privado depende do plano; acesso privado ao
-site exige uma organização no GitHub Enterprise Cloud. Nos demais cenários o
-site pode ficar público mesmo que o código-fonte seja privado. O workflow
-entregue não suporta GitHub Enterprise Server.
+WARNING: a private repository does not make the Pages site private. On
+GitHub.com, publishing from a private repository depends on the plan; private
+access to the site requires an organization on GitHub Enterprise Cloud. In any
+other scenario the site may end up public even when the source code is private.
+The workflow shipped here does not support GitHub Enterprise Server.
 EOF
-    confirmar 'Confirma que o plano e a visibilidade do site foram validados' || \
-      erro 'modo GitHub cancelado para evitar publicação com visibilidade incorreta'
+    confirmar 'Confirm that the plan and the site visibility have been validated' || \
+      erro 'GitHub mode canceled to avoid publishing with the wrong visibility'
     ;;
   3)
     publication_mode='gitea-compact'
@@ -567,27 +567,27 @@ EOF
     storage_provider='gitea'
     configurar_git='true'
     exigir_artefato "$PROJECT_ROOT/wiki-builder/Dockerfile" \
-      'imagem do builder fixo'
+      'fixed builder image'
     exigir_artefato "$PROJECT_ROOT/deploy/nginx/wiki-compact.conf" \
-      'configuração Nginx do modo compacto'
+      'compact mode Nginx configuration'
     ;;
   4)
     publication_mode='gitea-runner'
     storage_provider='gitea'
     configurar_git='true'
     ;;
-  *) erro 'modo de publicação inválido' ;;
+  *) erro 'invalid publication mode' ;;
 esac
 
 if [[ "$configurar_git" == 'true' ]]; then
   if [[ "$storage_provider" == 'gitea' ]]; then
-    git_api_base="$(perguntar 'Base da API do Gitea' 'https://gitea.exemplo.interno/api/v1')"
+    git_api_base="$(perguntar 'Gitea API base' 'https://gitea.example.internal/api/v1')"
   fi
-  git_owner="$(perguntar 'Organização ou proprietário do repositório' 'infraestrutura')"
-  git_repo="$(perguntar 'Nome do repositório de documentação' 'runbooks')"
-  git_branch="$(perguntar 'Branch de publicação' 'main')"
-  git_docs_prefix="$(perguntar 'Diretório MkDocs dos runbooks' 'docs/runbooks')"
-  read -r -s -p 'Token de publicação Git (não será exibido): ' git_token
+  git_owner="$(perguntar 'Repository organization or owner' 'infrastructure')"
+  git_repo="$(perguntar 'Documentation repository name' 'runbooks')"
+  git_branch="$(perguntar 'Publication branch' 'main')"
+  git_docs_prefix="$(perguntar 'MkDocs directory for the runbooks' 'docs/runbooks')"
+  read -r -s -p 'Git publication token (never shown): ' git_token
   printf '\n'
 
   exigir_nao_vazio 'GIT_TOKEN' "$git_token"
@@ -599,7 +599,7 @@ if [[ "$configurar_git" == 'true' ]]; then
 fi
 
 if [[ "$storage_provider" == 'gitea' ]]; then
-  git_ca_source="$(perguntar 'CA pública usada para validar o Gitea no host' './certs/ca.crt')"
+  git_ca_source="$(perguntar 'Public CA used to validate Gitea on the host' './certs/ca.crt')"
   exigir_valor_dotenv 'GIT_CA_SOURCE' "$git_ca_source"
   if [[ "$git_ca_source" != './certs/ca.crt' ]]; then
     git_ca_source="$(resolver_caminho_host "$git_ca_source")"
@@ -612,11 +612,11 @@ fi
 if [[ "$publication_mode" == 'gitea-compact' ]]; then
   gitea_web_base="${git_api_base%/}"
   gitea_web_base="${gitea_web_base%/api/v1}"
-  wiki_repository_url="$(perguntar 'URL HTTPS de clone do repositório' \
+  wiki_repository_url="$(perguntar 'HTTPS clone URL of the repository' \
     "$gitea_web_base/$git_owner/$git_repo.git")"
-  wiki_repository_user="$(perguntar 'Usuário de serviço somente leitura do builder' \
+  wiki_repository_user="$(perguntar 'Read-only service user for the builder' \
     'lucien-builder')"
-  read -r -s -p 'Token separado, somente leitura, do builder (não será exibido): ' \
+  read -r -s -p 'Separate read-only builder token (never shown): ' \
     wiki_repository_token
   printf '\n'
 
@@ -627,7 +627,7 @@ if [[ "$publication_mode" == 'gitea-compact' ]]; then
 fi
 
 user_creation_enabled='false'
-if confirmar 'Abrir a janela temporária para criar o primeiro administrador'; then
+if confirmar 'Open the temporary window to create the first administrator'; then
   user_creation_enabled='true'
 fi
 
@@ -708,7 +708,7 @@ install -d -m 0700 "$SECRETS_DIRECTORY"
 for secret_name in postgres_password database_url bootstrap_api_key auth_pepper \
   git_token viewer_session_secret wiki_repository_token; do
   [[ ! -e "$SECRETS_DIRECTORY/$secret_name" ]] || \
-    erro "o segredo já existe e não será sobrescrito: $SECRETS_DIRECTORY/$secret_name"
+    erro "the secret already exists and will not be overwritten: $SECRETS_DIRECTORY/$secret_name"
 done
 instalar_segredo postgres_password "$postgres_password"
 instalar_segredo database_url \
@@ -724,13 +724,13 @@ chmod 0644 "$COMPOSE_FILE"
 trap - EXIT
 rm -f "$temporary_env"
 
-printf '\nArquivos criados:\n  %s\n  %s\n  %s/ (modo 0700; arquivos 0444)\n' \
+printf '\nCreated files:\n  %s\n  %s\n  %s/ (mode 0700; files 0444)\n' \
   "$ENV_FILE" "$COMPOSE_FILE" "$SECRETS_DIRECTORY"
-printf '%s\n' 'Edite docker-compose.local.yml se precisar de ajustes específicos do administrador.'
+printf '%s\n' 'Edit docker-compose.local.yml if you need administrator-specific adjustments.'
 
 preparar_certificados_tls
 
-if confirmar 'Subir o Hub agora'; then
+if confirmar 'Bring the Hub up now'; then
   # Impede que o Docker crie um diretório quando a origem de CA estiver ausente.
   validar_ca_existente "$git_ca_source"
   (
@@ -741,11 +741,11 @@ if confirmar 'Subir o Hub agora'; then
 fi
 
 if [[ "$user_creation_enabled" == 'true' ]]; then
-  printf '%s\n' 'Bootstrap ativado: crie apenas o primeiro administrador em um host controlado.'
-  printf '%s\n' 'No Linux, instale e configure o cliente separadamente: ./deploy/install-cli.sh'
-  printf '%s\n' 'Em seguida, altere USER_CREATION_ENABLED para false no .env e recrie somente o Hub.'
+  printf '%s\n' 'Bootstrap enabled: create only the first administrator, on a controlled host.'
+  printf '%s\n' 'On Linux, install and configure the client separately: ./deploy/install-cli.sh'
+  printf '%s\n' 'Then set USER_CREATION_ENABLED to false in .env and recreate the Hub only.'
 else
-  printf '%s\n' 'Bootstrap desativado. Abra USER_CREATION_ENABLED apenas durante a criação controlada do primeiro administrador.'
+  printf '%s\n' 'Bootstrap disabled. Open USER_CREATION_ENABLED only during the controlled creation of the first administrator.'
 fi
 
 case "$publication_mode" in
@@ -755,22 +755,22 @@ case "$publication_mode" in
     else
       viewer_access_host="$hub_dns"
     fi
-    printf '\nVisualizador local configurado em https://%s:9091.\n' "$viewer_access_host"
-    printf '%s\n' 'O acesso exige username e token pessoal; admin e senior podem criar revisões imutáveis via Hub.'
-    printf '%s\n' 'Senior fica limitado ao próprio domínio; o volume do portal permanece somente leitura.'
+    printf '\nLocal viewer configured at https://%s:9091.\n' "$viewer_access_host"
+    printf '%s\n' 'Access requires a username and a personal token; admin and senior can create immutable revisions through the Hub.'
+    printf '%s\n' 'Senior is limited to its own domain; the portal volume stays read-only.'
     ;;
   github)
-    printf '\nGitHub Pages selecionado: use o workflow hospedado .github/workflows/deploy.yml.\n'
-    printf '%s\n' 'Em Settings > Pages, selecione GitHub Actions; nenhum runner próprio é necessário.'
+    printf '\nGitHub Pages selected: use the hosted workflow .github/workflows/deploy.yml.\n'
+    printf '%s\n' 'Under Settings > Pages, select GitHub Actions; no self-hosted runner is needed.'
     ;;
   gitea-compact)
-    printf '\nModo Gitea compacto configurado na porta local TCP/9092.\n'
-    printf '%s\n' 'O builder fixo não usa Docker socket nem executa workflows do repositório.'
-    printf '%s\n' 'Para acesso remoto, mantenha o bind local e use um proxy HTTPS autenticado.'
+    printf '\nCompact Gitea mode configured on local port TCP/9092.\n'
+    printf '%s\n' 'The fixed builder uses no Docker socket and runs no workflows from the repository.'
+    printf '%s\n' 'For remote access, keep the local bind and put an authenticated HTTPS proxy in front.'
     ;;
   gitea-runner)
-    printf '\nApós criar o admin e fechar o bootstrap, configure o modo avançado em hosts separados:\n'
-    printf '  Host dedicado do runner: %s\n' './deploy/install-hub.sh --configure-gitea-runner'
-    printf '  Host administrativo:     %s\n' './deploy/install-hub.sh --prepare-nginx-deploy'
+    printf '\nAfter creating the admin and closing the bootstrap, set up advanced mode on separate hosts:\n'
+    printf '  Dedicated runner host: %s\n' './deploy/install-hub.sh --configure-gitea-runner'
+    printf '  Administrative host:   %s\n' './deploy/install-hub.sh --prepare-nginx-deploy'
     ;;
 esac

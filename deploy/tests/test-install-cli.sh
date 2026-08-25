@@ -91,7 +91,7 @@ printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
   HOME="$TEST_ROOT/home-locale-ok" SHELL=/bin/bash EDITOR=vi \
     LANG=pt_BR.UTF-8 LC_ALL='' \
     bash "$ROOT_DIR/deploy/install-cli.sh" > "$saida_locale_ok" 2>&1
-grep -Fq 'UTF-8, mantido' "$saida_locale_ok" || {
+grep -Fq 'UTF-8, kept' "$saida_locale_ok" || {
   printf 'locale UTF-8 existente deveria ser preservado sem alteração\n' >&2
   exit 1
 }

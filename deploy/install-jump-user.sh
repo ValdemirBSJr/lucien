@@ -6,23 +6,23 @@ set -euo pipefail
 umask 077
 
 erro() {
-  printf 'Erro: %s\n' "$1" >&2
+  printf 'Error: %s\n' "$1" >&2
   exit 1
 }
 
-[[ "$(uname -s)" == 'Linux' ]] || erro 'este instalador suporta somente Linux'
-(( EUID != 0 )) || erro 'execute como a conta individual que usará o Lucien, não como root'
-[[ -n "${HOME:-}" && -d "$HOME" ]] || erro 'HOME não está disponível'
-command -v lucien >/dev/null 2>&1 || erro 'lucien não foi encontrado no PATH'
+[[ "$(uname -s)" == 'Linux' ]] || erro 'this installer supports Linux only'
+(( EUID != 0 )) || erro 'run as the individual account that will use Lucien, not as root'
+[[ -n "${HOME:-}" && -d "$HOME" ]] || erro 'HOME is not available'
+command -v lucien >/dev/null 2>&1 || erro 'lucien was not found in PATH'
 
 config_dir="$HOME/.config/lucien"
 hook_file="$config_dir/jump-shell.sh"
 bashrc="$HOME/.bashrc"
 source_line="[ -r '$hook_file' ] && . '$hook_file'"
 
-read -r -p 'Permitir fallback em arquivo chmod 600 quando o keyring não existir [s/N]: ' resposta
+read -r -p 'Allow a chmod 600 file fallback when no keyring exists [y/N]: ' resposta
 allow_file='false'
-if [[ "$resposta" =~ ^([sS]|[sS][iI][mM])$ ]]; then
+if [[ "$resposta" =~ ^([yY]|[yY][eE][sS])$ ]]; then
   allow_file='true'
 fi
 
@@ -39,7 +39,7 @@ if [[ -z "\${LUCIEN_AUTH_ENSURED:-}" && -t 0 && -t 1 ]]; then
   export LUCIEN_ALLOW_FILE_TOKEN='$allow_file'
   [[ -r "\$HOME/.config/lucien/env" ]] && . "\$HOME/.config/lucien/env"
   lucien auth ensure || printf '%s\n' \
-    'Aviso: autenticação Lucien não foi concluída; execute lucien login antes de operações remotas.' >&2
+    'Warning: Lucien authentication did not complete; run lucien login before remote operations.' >&2
 fi
 EOF
 chmod 0600 "$hook_file"
@@ -49,5 +49,5 @@ if ! grep -Fqx -- "$source_line" "$bashrc" 2>/dev/null; then
   printf '\n%s\n' "$source_line" >> "$bashrc"
 fi
 
-printf 'Hook instalado em %s\n' "$hook_file"
-printf '%s\n' 'Abra uma nova sessão SSH. Se necessário, o token será solicitado sem eco.'
+printf 'Hook installed at %s\n' "$hook_file"
+printf '%s\n' 'Open a new SSH session. If needed, the token is requested without echo.'
