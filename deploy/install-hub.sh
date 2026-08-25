@@ -22,8 +22,8 @@ erro() {
 
 confirmar() {
   local resposta
-  read -r -p "$1 [s/N]: " resposta
-  [[ "$resposta" =~ ^([sS]|[sS][iI][mM])$ ]]
+  read -r -p "$1 [y/N]: " resposta
+  [[ "$resposta" =~ ^([yY]|[yY][eE][sS])$ ]]
 }
 
 perguntar() {

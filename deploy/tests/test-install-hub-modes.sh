@@ -128,7 +128,7 @@ executar_instalador() {
 testar_certificados_tls() {
   local raiz raiz_parcial
 
-  raiz="$(executar_instalador tls-ausentes $'\n\n\ns\n\n\n1\n\n\n\n' ausentes)"
+  raiz="$(executar_instalador tls-ausentes $'\n\n\ny\n\n\n1\n\n\n\n' ausentes)"
   [[ -f "$raiz/certs/ca.crt" && -f "$raiz/certs/server.crt" && \
     -f "$raiz/certs/server.key" ]] || \
     falhar 'instalação limpa não gerou o conjunto TLS'
@@ -137,7 +137,7 @@ testar_certificados_tls() {
   grep -Fq -- 'Certificados TLS ausentes; gerando' "$raiz/saida.txt" || \
     falhar 'geração automática de TLS não foi informada'
 
-  raiz="$(executar_instalador tls-existentes $'\n\n\ns\n\n\n1\n\n\n\n' completos)"
+  raiz="$(executar_instalador tls-existentes $'\n\n\ny\n\n\n1\n\n\n\n' completos)"
   [[ ! -e "$raiz/docker-calls.txt" ]] || \
     falhar 'certificados existentes acionaram o Docker indevidamente'
   grep -Fq -- 'Certificados TLS existentes detectados' "$raiz/saida.txt" || \
@@ -146,7 +146,7 @@ testar_certificados_tls() {
   raiz_parcial="$(preparar_pacote tls-parciais parciais)"
   if (
     cd "$raiz_parcial"
-    printf '%s' $'\n\n\ns\n\n\n1\n\n\n\n' | \
+    printf '%s' $'\n\n\ny\n\n\n1\n\n\n\n' | \
       FAKE_PROJECT_ROOT="$raiz_parcial" \
       PATH="$raiz_parcial/fakebin:/usr/bin:/bin" ./deploy/install-hub.sh \
         > "$raiz_parcial/saida.txt" 2>&1
@@ -159,7 +159,7 @@ testar_certificados_tls() {
 
 testar_local_viewer() {
   local raiz hash_antes hash_depois
-  raiz="$(executar_instalador local-viewer $'\n\n\ns\n\n\n1\n\n\n\n\n')"
+  raiz="$(executar_instalador local-viewer $'\n\n\ny\n\n\n1\n\n\n\n\n')"
 
   assert_linha "$raiz/.env" 'COMPOSE_PROFILES=consolidated,local-viewer'
   assert_linha "$raiz/.env" 'SLM_LANGUAGE_RUNBOOK=pt-br'
@@ -188,7 +188,7 @@ testar_local_viewer() {
 testar_github() {
   local raiz token='token_publicacao_github'
   raiz="$(executar_instalador github \
-    $'\n\n\ns\n\nen\n2\ns\n\n\n\n\ntoken_publicacao_github\n\n\n\n')"
+    $'\n\n\ny\n\nen\n2\ny\n\n\n\n\ntoken_publicacao_github\n\n\n\n')"
 
   assert_linha "$raiz/.env" 'COMPOSE_PROFILES=consolidated'
   assert_linha "$raiz/.env" 'SLM_LANGUAGE_RUNBOOK=en'
@@ -208,7 +208,7 @@ testar_github() {
 testar_gitea_compact() {
   local raiz publish_token='token_publicacao_gitea' read_token='token_leitura_builder'
   raiz="$(executar_instalador gitea-compact \
-    $'\n\n\ns\n\n\n3\n\n\n\n\n\ntoken_publicacao_gitea\n\n\n\ntoken_leitura_builder\n\n\n\n')"
+    $'\n\n\ny\n\n\n3\n\n\n\n\n\ntoken_publicacao_gitea\n\n\n\ntoken_leitura_builder\n\n\n\n')"
 
   assert_linha "$raiz/.env" 'COMPOSE_PROFILES=consolidated,gitea-compact'
   assert_linha "$raiz/.env" 'STORAGE_PROVIDER=gitea'
@@ -233,7 +233,7 @@ testar_gitea_compact() {
 testar_gitea_runner() {
   local raiz token='token_publicacao_runner'
   raiz="$(executar_instalador gitea-runner \
-    $'\n\n\ns\n\n\n4\n\n\n\n\n\ntoken_publicacao_runner\n\n\n\n\n')"
+    $'\n\n\ny\n\n\n4\n\n\n\n\n\ntoken_publicacao_runner\n\n\n\n\n')"
 
   assert_linha "$raiz/.env" 'COMPOSE_PROFILES=consolidated'
   assert_linha "$raiz/.env" 'STORAGE_PROVIDER=gitea'
@@ -288,7 +288,7 @@ testar_secrets_sem_zero_byte() {
       local-viewer) entrada=$'
 
 
-s
+y
 
 
 1
@@ -299,11 +299,11 @@ s
       github)       entrada=$'
 
 
-s
+y
 
 en
 2
-s
+y
 
 
 
@@ -325,7 +325,7 @@ token_publicacao_github
   raiz="$(executar_instalador aviso-vazio $'
 
 
-s
+y
 
 
 1
