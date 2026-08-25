@@ -32,8 +32,36 @@ theme:
         name: Usar tema claro
 
 plugins:
+  # A busca indexa os dois idiomas; sem `en` a versao inglesa nao seria
+  # encontravel pela propria busca do site.
   - search:
-      lang: pt
+      lang:
+        - pt
+        - en
+  # Estrutura por pasta: o que esta em `docs/en/` e ingles, o resto e o padrao.
+  # O idioma padrao fica na RAIZ do site, e nao em `/pt/`, para que as URLs
+  # atuais da documentacao continuem valendo.
+  #
+  # Isto vale so para a documentacao de consulta. Os runbooks publicados sao
+  # construidos por `wiki-builder/mkdocs.yml`, que nao carrega este plugin:
+  # a publicacao permanece na raiz, com a mesma estrutura, agnostica de idioma.
+  - i18n:
+      docs_structure: folder
+      # Enquanto o espelho ingles nao esta completo, a pagina que falta cai na
+      # versao em portugues em vez de sumir do site.
+      fallback_to_default: true
+      languages:
+        - locale: pt
+          name: Português (Brasil)
+          default: true
+          build: true
+          theme:
+            language: pt-BR
+        - locale: en
+          name: English
+          build: true
+          theme:
+            language: en
 
 # O mesmo hook confiável usado pelo builder compacto remove HTML ativo antes de
 # o conteúdo entrar no tema. O código do hook deve permanecer protegido na main.

@@ -1,7 +1,5 @@
 # Lucien Runbooks
 
-**Português (Brasil)** · [English](en/index.md)
-
 Esta wiki reúne procedimentos operacionais capturados pelo Lucien, filtrados por um
 SLM e obrigatoriamente revisados por uma pessoa antes da publicação.
 

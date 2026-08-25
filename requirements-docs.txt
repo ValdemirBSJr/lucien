@@ -2,3 +2,4 @@
 bleach==6.2.0
 mkdocs==1.6.1
 mkdocs-material==9.7.6
+mkdocs-static-i18n==1.3.1

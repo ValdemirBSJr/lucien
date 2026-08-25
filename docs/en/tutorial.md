@@ -1,7 +1,5 @@
 # Quick start
 
-[Português (Brasil)](../tutorial.md) · **English**
-
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2;
@@ -66,5 +64,5 @@ lucien job <job-id>
 lucien job sent <job-id>
 ```
 
-See the [complete Portuguese tutorial](../tutorial.md) for identity bootstrap,
+See the Portuguese version of this page for identity bootstrap,
 LDAP, TLS, RBAC, retries, revisions, and production operations.

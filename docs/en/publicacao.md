@@ -1,7 +1,5 @@
 # Publication backends
 
-[Português (Brasil)](../publicacao.md) · **English**
-
 The Hub publishes through one of three storage providers. The CLI never writes
 to Git or chooses the destination path. New artifacts use
 `docs/runbooks/<year>/<area>` and published files remain immutable.
@@ -55,4 +53,4 @@ systemd unit under `deploy/systemd/`, and the guided commands:
 
 For the complete environment variables, secrets, pre-receive Gitleaks hook,
 rollback procedure, and threat boundaries, use the
-[Portuguese publication guide](../publicacao.md).
+the Portuguese version of this page.

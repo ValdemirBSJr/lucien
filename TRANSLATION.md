@@ -20,6 +20,29 @@ entra no site gerado: é material de quem contribui, não de quem opera.
 - Identificadores que o Hub emite ou consome, como `PENDING`, `PUBLISHED`,
   `FAILED`, `adotada`, `aplicada`, `modelo`.
 
+## Como `docs/en` espelha `docs`
+
+O `mkdocs-static-i18n` reconhece duas páginas como a mesma em idiomas
+diferentes pelo **caminho idêntico** dentro da pasta do idioma. Então o arquivo
+inglês usa o nome do arquivo português, com o conteúdo em inglês:
+
+| Português | Inglês |
+| --- | --- |
+| `docs/manual-instalacao.md` | `docs/en/manual-instalacao.md` |
+| `docs/tutorial.md` | `docs/en/tutorial.md` |
+| `docs/operacao.md` | `docs/en/operacao.md` |
+
+Nome de arquivo em português numa pasta inglesa é estranho à primeira vista,
+mas é o que faz o seletor de idioma trocar entre as duas versões da **mesma**
+página. Renomear os arquivos portugueses quebraria as URLs que já existem.
+
+O português fica na raiz do site (`/tutorial/`) e o inglês em `/en/`
+(`/en/tutorial/`). Enquanto o espelho não está completo, `fallback_to_default`
+faz a página que falta cair na versão portuguesa em vez de sumir do site.
+
+Nada disso alcança os runbooks publicados: eles são construídos por
+`wiki-builder/mkdocs.yml`, que não carrega o plugin.
+
 ## Glossário
 
 A coluna de ocorrências vem da contagem nas mensagens atuais de `scripts/` e
