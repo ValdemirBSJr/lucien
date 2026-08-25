@@ -15,6 +15,7 @@ cli/lucien
 cli/coverage.out
 graphify-out/
 site/
+website/
 .venv-docs/
 
 # Copias do banco: material sensivel, nunca versionado.
