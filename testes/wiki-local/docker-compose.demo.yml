@@ -114,7 +114,7 @@ services:
 
   wiki-static:
     ports: !override
-      - "127.0.0.1:19092:8080"
+      - "127.0.0.1:${WIKI_DEMO_PORT:-19092}:8080"
 
 volumes:
   demo-certs:

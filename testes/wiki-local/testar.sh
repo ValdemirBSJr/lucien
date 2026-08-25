@@ -21,6 +21,7 @@ compose=(
   -f docker-compose.build.yml
   -f testes/wiki-local/docker-compose.demo.yml
 )
+wiki_url="http://127.0.0.1:${WIKI_DEMO_PORT:-19092}"
 
 printf '%s\n' 'Construindo o wiki-builder e o gerador de certificados...'
 "${compose[@]}" --profile gitea-compact --profile tools build wiki-builder certgen
@@ -37,8 +38,8 @@ printf '%s\n' 'Subindo a origem Git HTTPS, o builder e a página local...'
 printf '%s\n' 'Aguardando a primeira release válida...'
 for _ in $(seq 1 60); do
   if curl --fail --silent --show-error --output /dev/null \
-    http://127.0.0.1:19092/; then
-    printf '%s\n' 'Wiki disponível em http://127.0.0.1:19092'
+    "$wiki_url/"; then
+    printf 'Wiki disponível em %s\n' "$wiki_url"
     "${compose[@]}" --profile gitea-compact ps
     exit 0
   fi
