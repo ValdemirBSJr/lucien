@@ -301,7 +301,7 @@ Quem publica com `STORAGE_PROVIDER=local` pode remover `git_egress` do `hub`, e
 quem carrega o modelo no volume por outro meio pode remover `slm_egress` do
 `slm`; nos dois casos a instalação passa a não ter saída nenhuma.
 
-`scripts/verificar.sh` recusa a mudança que ampliar esse conjunto: acrescentar
+`scripts/verify.sh` recusa a mudança que ampliar esse conjunto: acrescentar
 uma rede de egresso a um serviço não autorizado, ou criar rede nova sem marcá-la
 interna, reprova o portão `compose`.
 
@@ -501,17 +501,17 @@ ao modo avançado com VM dedicada.
 
 ## Verificação de mudanças
 
-`scripts/verificar.sh` roda todos os portões na mesma forma que o CI, e existe
+`scripts/verify.sh` roda todos os portões na mesma forma que o CI, e existe
 para ser executado **antes** de copiar arquivos para o servidor -- a implantação
 é manual, então um CI que só dispara no push não protegeria o momento em que a
 mudança chega à produção.
 
 ```bash
-scripts/verificar.sh
+scripts/verify.sh
 ```
 
 Cada portão é independente: todos rodam e o veredito sai no fim. Para um só,
-passe o nome (`scripts/verificar.sh backend`).
+passe o nome (`scripts/verify.sh backend`).
 
 ## Dependências
 
@@ -529,7 +529,7 @@ sem verificação no meio do processo.
 Para atualizar depois de mexer numa dependência direta:
 
 ```bash
-scripts/atualizar-locks.sh
+scripts/update-locks.sh
 ```
 
 A resolução roda dentro da mesma imagem base da produção. Os wheels escolhidos

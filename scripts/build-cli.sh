@@ -22,7 +22,7 @@ command -v sha256sum >/dev/null 2>&1 || erro 'sha256sum não encontrado'
 [[ -f "$ROOT_DIR/LICENSE" ]] || erro 'LICENSE ausente'
 [[ -f "$ROOT_DIR/NOTICE" ]] || erro 'NOTICE ausente'
 [[ -f "$ROOT_DIR/THIRD-PARTY-NOTICES.txt" ]] || \
-  erro 'THIRD-PARTY-NOTICES.txt ausente; execute scripts/atualizar-avisos-cli.sh'
+  erro 'THIRD-PARTY-NOTICES.txt ausente; execute scripts/update-cli-notices.sh'
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$BUILD_CACHE_DIR/build" "$BUILD_CACHE_DIR/mod"

@@ -15,7 +15,7 @@
 # escolhidos dependem da plataforma e da versão do Python, então resolver no
 # Windows produziria um lock que não descreve o que roda no servidor.
 #
-# Uso: scripts/atualizar-locks.sh [serviço ...]
+# Uso: scripts/update-locks.sh [serviço ...]
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

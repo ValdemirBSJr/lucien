@@ -96,4 +96,4 @@ if [[ "$BACKUP_RETENTION" -gt 0 ]]; then
 fi
 
 printf '\nProve esta copia antes de confiar nela:\n'
-printf '  BACKUP_DIR=%s scripts/testar-restauracao.sh %s\n' "$BACKUP_DIR" "$DESTINO"
+printf '  BACKUP_DIR=%s scripts/test-restore.sh %s\n' "$BACKUP_DIR" "$DESTINO"

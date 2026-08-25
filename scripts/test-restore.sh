@@ -9,8 +9,8 @@
 # com senha efêmera, e é removido ao fim mesmo se algo falhar. # gitleaks:allow
 #
 # Uso:
-#   scripts/testar-restauracao.sh                       # cópia mais recente
-#   scripts/testar-restauracao.sh backups/lucien-....dump
+#   scripts/test-restore.sh                       # cópia mais recente
+#   scripts/test-restore.sh backups/lucien-....dump
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

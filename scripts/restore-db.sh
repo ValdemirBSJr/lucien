@@ -6,7 +6,7 @@
 # um estado que não corresponde nem à cópia nem ao que havia.
 #
 # Antes de usar em produção, prove a cópia:
-#   scripts/testar-restauracao.sh <arquivo>
+#   scripts/test-restore.sh <arquivo>
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

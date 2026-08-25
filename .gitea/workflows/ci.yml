@@ -1,6 +1,6 @@
 # Portões de qualidade. Nada é publicado se algum reprovar.
 #
-# Os mesmos portões estão em scripts/verificar.sh, que é o que roda antes da
+# Os mesmos portões estão em scripts/verify.sh, que é o que roda antes da
 # cópia manual para o servidor. O workflow existe para o caso de haver runner;
 # a fonte de verdade dos comandos é o script, para não divergirem.
 name: CI

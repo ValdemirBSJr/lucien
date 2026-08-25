@@ -300,7 +300,7 @@ trate-o como material sensível independentemente da opção escolhida.
 Uma cópia nunca restaurada é uma hipótese, não um plano de recuperação.
 
 ```bash
-scripts/testar-restauracao.sh
+scripts/test-restore.sh
 ```
 
 Sem argumento, usa a mais recente. O teste sobe um PostgreSQL descartável **sem
@@ -323,7 +323,7 @@ antes — restaurar com eles escrevendo produz um estado que não corresponde ne
 à cópia nem ao que havia. Se a restauração falhar, os dois permanecem parados
 de propósito: subir sobre um banco meio restaurado é pior que ficar fora do ar.
 
-Prove a cópia com `testar-restauracao.sh` **antes** de usar este comando.
+Prove a cópia com `test-restore.sh` **antes** de usar este comando.
 
 ### Objetivos e responsabilidades
 
@@ -340,7 +340,7 @@ quem opera, e um cron silencioso que falha é pior que a ausência dele.
 
 ### Evidência do último teste
 
-Registre aqui a cada execução de `testar-restauracao.sh`, para que a data seja
+Registre aqui a cada execução de `test-restore.sh`, para que a data seja
 verificável e não uma lembrança:
 
 | Data | Arquivo | Resultado |
@@ -354,7 +354,7 @@ que dispara no push não protege esse momento, então os mesmos portões existem
 como script, para rodar antes da cópia.
 
 ```bash
-bash scripts/verificar.sh
+bash scripts/verify.sh
 ```
 
 Ele executa onze portões — imagens de teste do backend, do portal, do
@@ -368,7 +368,7 @@ precisa de conserto.
 Para trabalhar num portão específico:
 
 ```bash
-bash scripts/verificar.sh backend
+bash scripts/verify.sh backend
 ```
 
 Um portão que dependa de ferramenta ausente na máquina — `go`, `mkdocs` — é
@@ -381,7 +381,7 @@ dois não divergirem.
 
 ## Conferir a implantação depois de subir
 
-`verificar.sh` valida o **código**. O que roda no servidor é outra coisa, e as
+`verify.sh` valida o **código**. O que roda no servidor é outra coisa, e as
 duas divergem em silêncio: numa única noite o `docker-compose.local.yml` estava
 anterior à segmentação de rede, uma imagem tinha perdido um arquivo que o
 serviço lê a cada ciclo, e o fonte de um serviço no servidor era semanas mais
@@ -393,7 +393,7 @@ Rode no host do Hub, a partir da raiz da instalação, depois de qualquer
 implantação:
 
 ```bash
-bash scripts/conferir-implantacao.sh
+bash scripts/verify-deploy.sh
 ```
 
 Ele compara cinco coisas contra o repositório:

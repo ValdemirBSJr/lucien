@@ -151,7 +151,7 @@ portao_compose() {
   docker compose --env-file .env.example config --quiet || return 1
   # A segmentacao so e visivel com todos os perfis ativos: cada perfil traz
   # servicos diferentes, e "quem alcanca a internet" vale para a uniao deles.
-  docker compose --env-file .env.example     --profile server --profile consolidated --profile local-viewer     --profile gitea-compact --profile tools     config --format json     | docker run --rm -i         --mount "type=bind,src=$ROOT_DIR/scripts,dst=/scripts,readonly"         --network none         "$IMAGEM_LINT" python3 /scripts/verificar-redes.py
+  docker compose --env-file .env.example     --profile server --profile consolidated --profile local-viewer     --profile gitea-compact --profile tools     config --format json     | docker run --rm -i         --mount "type=bind,src=$ROOT_DIR/scripts,dst=/scripts,readonly"         --network none         "$IMAGEM_LINT" python3 /scripts/verify-networks.py
 }
 
 portao_docs() {

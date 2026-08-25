@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Confere o que está NO AR contra o que está no repositório.
 #
-# `scripts/verificar.sh` valida o código. Este valida a implantação, que é
+# `scripts/verify.sh` valida o código. Este valida a implantação, que é
 # outra coisa. Numa noite os dois divergiram em quatro pontos e nenhum portão
 # viu:
 #
