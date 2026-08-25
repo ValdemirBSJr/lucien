@@ -14,7 +14,7 @@ EOF
 chmod 0755 "$TEST_ROOT/bin/lucien"
 
 for _ in 1 2; do
-  printf 's\n' | HOME="$TEST_ROOT/home" PATH="$TEST_ROOT/bin:$PATH" \
+  printf 'y\n' | HOME="$TEST_ROOT/home" PATH="$TEST_ROOT/bin:$PATH" \
     bash "$ROOT_DIR/deploy/install-jump-user.sh" >/dev/null
 done
 
