@@ -113,3 +113,18 @@ grep -Fq 'LC_ALL' "$saida_locale_lcall" || {
   exit 1
 }
 test -x "$TEST_ROOT/home-locale-lcall/.local/bin/lucien"
+
+# Imagens Linux mínimas podem não declarar LANG. Com `set -u`, isso não pode
+# interromper a instalação; o instalador deve tratar o caso como locale vazio.
+mkdir -p "$TEST_ROOT/home-locale-unset"
+saida_locale_unset="$TEST_ROOT/locale-unset.txt"
+printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
+  "$TEST_ROOT/$pacote_dir.tar.gz" "$TEST_ROOT/ca.crt" | \
+  env -u LANG -u LC_ALL \
+    HOME="$TEST_ROOT/home-locale-unset" SHELL=/bin/bash EDITOR=vi \
+    bash "$ROOT_DIR/deploy/install-cli.sh" > "$saida_locale_unset" 2>&1
+test -x "$TEST_ROOT/home-locale-unset/.local/bin/lucien"
+grep -Fq 'not set' "$saida_locale_unset" || {
+  printf 'an unset LANG was not handled explicitly\n' >&2
+  exit 1
+}

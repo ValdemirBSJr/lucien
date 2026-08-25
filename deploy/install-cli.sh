@@ -59,7 +59,8 @@ executar_privilegiado() {
 locale_utf8_alvo() {
   # Preserva idioma e região; troca somente a codificação. Um host pt_BR vira
   # pt_BR.UTF-8, nunca en_US.UTF-8 — trocar o idioma seria efeito colateral.
-  local base="${LANG%%.*}"
+  local atual="${LANG:-}"
+  local base="${atual%%.*}"
 
   case "$base" in
     ''|C|POSIX) printf 'C.UTF-8' ;;
