@@ -196,7 +196,7 @@ IMAGEM_LINT="python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c69
 tem docker || { printf 'Docker é necessário para os portões de imagem.\n' >&2; exit 2; }
 
 portao "backend" portao_backend
-portao "migrações" portao_migracoes
+portao "migrations" portao_migracoes
 portao "runbook-viewer" portao_viewer
 portao "wiki-builder" portao_wiki
 portao "secret-scanner" portao_scanner
@@ -210,10 +210,10 @@ fi
 portao "shell" portao_shell
 portao "compose" portao_compose
 
-portao "documentação" portao_docs
+portao "docs" portao_docs
 
-portao "lint python" portao_lint_python
-portao "tipagem" portao_tipagem
+portao "lint-python" portao_lint_python
+portao "types" portao_tipagem
 
 # --- veredito ---------------------------------------------------------------
 
