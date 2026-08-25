@@ -318,7 +318,7 @@ verificação existe.
 scripts/restore-db.sh /mnt/backup/lucien-20260820T210000Z.dump
 ```
 
-**Operação destrutiva.** Exige digitar `RESTAURAR`, e para o Hub e o worker
+**Operação destrutiva.** Exige digitar `RESTORE`, e para o Hub e o worker
 antes — restaurar com eles escrevendo produz um estado que não corresponde nem
 à cópia nem ao que havia. Se a restauração falhar, os dois permanecem parados
 de propósito: subir sobre um banco meio restaurado é pior que ficar fora do ar.

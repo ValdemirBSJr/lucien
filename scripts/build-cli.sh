@@ -10,19 +10,19 @@ TARGETS="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64"
 BUILD_CACHE_DIR="${LUCIEN_BUILD_CACHE_DIR:-/tmp/lucien-go-cache-$(id -u)}"
 
 erro() {
-  printf 'Erro: %s\n' "$1" >&2
+  printf 'Error: %s\n' "$1" >&2
   exit 1
 }
 
-[[ "$VERSION" =~ ^[A-Za-z0-9._-]+$ ]] || erro 'VERSION contém caracteres inválidos'
-command -v docker >/dev/null 2>&1 || erro 'Docker não encontrado'
-docker info >/dev/null 2>&1 || erro 'daemon Docker indisponível'
-command -v tar >/dev/null 2>&1 || erro 'tar não encontrado'
-command -v sha256sum >/dev/null 2>&1 || erro 'sha256sum não encontrado'
-[[ -f "$ROOT_DIR/LICENSE" ]] || erro 'LICENSE ausente'
-[[ -f "$ROOT_DIR/NOTICE" ]] || erro 'NOTICE ausente'
+[[ "$VERSION" =~ ^[A-Za-z0-9._-]+$ ]] || erro 'VERSION contains invalid characters'
+command -v docker >/dev/null 2>&1 || erro 'Docker not found'
+docker info >/dev/null 2>&1 || erro 'Docker daemon unavailable'
+command -v tar >/dev/null 2>&1 || erro 'tar not found'
+command -v sha256sum >/dev/null 2>&1 || erro 'sha256sum not found'
+[[ -f "$ROOT_DIR/LICENSE" ]] || erro 'LICENSE is missing'
+[[ -f "$ROOT_DIR/NOTICE" ]] || erro 'NOTICE is missing'
 [[ -f "$ROOT_DIR/THIRD-PARTY-NOTICES.txt" ]] || \
-  erro 'THIRD-PARTY-NOTICES.txt ausente; execute scripts/update-cli-notices.sh'
+  erro 'THIRD-PARTY-NOTICES.txt is missing; run scripts/update-cli-notices.sh'
 
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$BUILD_CACHE_DIR/build" "$BUILD_CACHE_DIR/mod"
@@ -96,5 +96,5 @@ for target in $TARGETS; do
   cat "$OUTPUT_DIR/$archive_name.sha256" >> "$checksum_file"
 done
 
-printf 'Pacotes gerados em %s\n' "$OUTPUT_DIR"
+printf 'Packages written to %s\n' "$OUTPUT_DIR"
 printf 'Checksums: %s\n' "$checksum_file"

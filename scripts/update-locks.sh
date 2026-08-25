@@ -27,7 +27,7 @@ export MSYS2_ARG_CONV_EXCL='*'
 IMAGEM_PY="python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91"
 UV="uv==0.9.9"
 
-erro() { printf 'Erro: %s\n' "$1" >&2; exit 1; }
+erro() { printf 'Error: %s\n' "$1" >&2; exit 1; }
 
 compilar() {
   local diretorio="$1" comando="$2"
@@ -37,7 +37,7 @@ compilar() {
     --workdir /trabalho \
     "$IMAGEM_PY" \
     sh -euc "pip install --quiet --no-cache-dir $UV >/dev/null && $comando" \
-    || erro "falha ao compilar as dependências de $diretorio"
+    || erro "failed to compile dependencies for $diretorio"
 }
 
 # Serviços com pyproject.toml. `setuptools` entra no lock de propósito: a
@@ -66,7 +66,7 @@ requisitos() {
   "
 }
 
-command -v docker >/dev/null 2>&1 || erro 'docker não encontrado'
+command -v docker >/dev/null 2>&1 || erro 'docker not found'
 
 ALVOS=("$@")
 if [[ "${#ALVOS[@]}" -eq 0 ]]; then
@@ -83,9 +83,9 @@ for alvo in "${ALVOS[@]}"; do
           --generate-hashes --quiet --output-file requirements-docs.lock
       "
       ;;
-    *) erro "alvo desconhecido: $alvo" ;;
+    *) erro "unknown target: $alvo" ;;
   esac
 done
 
-printf '\nLocks atualizados. Revise o diff antes de commitar:\n'
+printf '\nLocks updated. Review the diff before committing:\n'
 printf '  git diff -- "*.lock"\n'
