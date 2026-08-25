@@ -681,7 +681,7 @@ decision, and it may bear no relation to their title.
 If you serve more than one area, the admin grants both at once:
 
 ```bash
-lucien admin user update N5669203 -r servidores,acessos
+lucien admin user update U000004 -r servidores,acessos
 ```
 
 The first one is the primary — the destination without `-r`. Check what you hold:
@@ -691,7 +691,7 @@ lucien auth status
 ```
 
 ```
-Authenticated as N5669203 (f8c38ca8-...); level=senior areas=servidores, acessos.
+Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servidores, acessos.
 ```
 
 ### `lucien stop`

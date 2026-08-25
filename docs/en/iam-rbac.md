@@ -100,7 +100,7 @@ credential with the Hub, which determines the identity and the runbook metadata.
 
 In the jump server automated mode, a separate M2M credential holds only the
 `jump_enrollment` scope. It reaches neither jobs nor administrative routes. The
-Hub correlates the POSIX ID (`N0123456`, for example) with the Lucien username,
+Hub correlates the POSIX ID (`U000001`, for example) with the Lucien username,
 always creates new users as `pleno`, and accepts only `acessos`, `servidores`,
 `redes`, or `suporte`. The helper never changes the role or domain of an existing
 identity: `junior`, `pleno`, and `senior` keep their scopes. `admin` accounts use
@@ -225,7 +225,7 @@ access.
 ## Author name in the published runbook
 
 The frontmatter identifies the author in the mixed format
-`N5669203 - Valdemir Bezerra de Souza Júnior`. The full name comes from the GECOS
+`U000004 - Example Demonstration Operator Jr.`. The full name comes from the GECOS
 field of the POSIX account, which SSSD fills from LDAP — no new lookup and no new
 credential are involved.
 
@@ -257,7 +257,7 @@ areas** granted by the admin. The primary one is the destination when
 frontmatter by default. `-r` accepts any area the user holds.
 
 ```bash
-lucien admin user update N5669203 -r servidores,acessos
+lucien admin user update U000004 -r servidores,acessos
 ```
 
 The first in the list becomes the primary; the rest become additional. The list
@@ -290,7 +290,7 @@ not `junior`, `pleno`, or `senior`.
 `senior` is a human decision:
 
 ```bash
-lucien admin user update N5669203 --level senior
+lucien admin user update U000004 --level senior
 ```
 
 ## Schema migration
