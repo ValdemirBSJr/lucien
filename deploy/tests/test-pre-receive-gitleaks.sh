@@ -7,7 +7,7 @@ set -uo pipefail
 RAIZ="$(mktemp -d)"
 # Resolvido antes de qualquer cd: os `cp` seguintes rodam de outros diretorios.
 HOOK="$(cd "$(dirname -- "$1")" && pwd)/$(basename -- "$1")"
-[ -r "$HOOK" ] || { printf 'hook nao encontrado: %s
+[ -r "$HOOK" ] || { printf 'hook not found: %s
 ' "$1" >&2; exit 1; }
 trap 'rm -rf "$RAIZ"' EXIT
 
@@ -29,14 +29,14 @@ for arg in "$@"; do
       ;;
     --redact=*)
       valor="${arg#--redact=}"
-      case "$valor" in *[!0-9]*|"") echo "Error: --redact invalido" >&2; exit 1;; esac
+      case "$valor" in *[!0-9]*|"") echo "Error: --redact invalid" >&2; exit 1;; esac
       ;;
     --exit-code=*)
       valor="${arg#--exit-code=}"
-      case "$valor" in *[!0-9]*|"") echo "Error: --exit-code invalido" >&2; exit 1;; esac
+      case "$valor" in *[!0-9]*|"") echo "Error: --exit-code invalid" >&2; exit 1;; esac
       ;;
     stdin|--config=*|--no-banner|--no-color) ;;
-    *) echo "Error: flag desconhecido: $arg" >&2; exit 1 ;;
+    *) echo "Error: unknown flag: $arg" >&2; exit 1 ;;
   esac
 done
 c="$(cat)"
@@ -89,15 +89,15 @@ avaliar() {
   local rotulo="$1" esperado="$2" rc="$3" saida="${4:-}"
   local erro=''
 
-  [ "$rc" -eq "$esperado" ] || erro="rc=$rc esperado=$esperado"
+  [ "$rc" -eq "$esperado" ] || erro="rc=$rc expected=$esperado"
   if [ "$esperado" -ne 0 ] && ! printf %s "$saida" | grep -q "PUSH REJECTED"; then
-    erro="${erro:+$erro; }recusou sem mensagem"
+    erro="${erro:+$erro; }rejected without a message"
   fi
 
   if [ -z "$erro" ]; then
     printf 'OK    %-46s rc=%s\n' "$rotulo" "$rc"
   else
-    printf 'FALHA %-46s %s\n' "$rotulo" "$erro"
+    printf 'FAIL  %-46s %s\n' "$rotulo" "$erro"
     FALHAS=$((FALHAS + 1))
   fi
 }
@@ -106,13 +106,13 @@ avaliar() {
 printf 'procedimento limpo\n' > a.md
 git add a.md && git commit -q -m "raiz limpa"
 saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
-avaliar "branch nova, commit raiz limpo" 0 $? "$saida"
+avaliar "new branch, clean root commit" 0 $? "$saida"
 
 # 2. Branch existente, commit com segredo -> deve recusar.
 printf 'SEGREDO_DE_TESTE aqui\n' > b.md
 git add b.md && git commit -q -m "com segredo"
 saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
-avaliar "branch existente, com segredo" 1 $? "$saida"
+avaliar "existing branch, with a secret" 1 $? "$saida"
 
 # 3. Segredo introduzido e removido no mesmo push -> deve recusar mesmo assim.
 git reset -q --hard HEAD~1
@@ -120,22 +120,22 @@ printf 'SEGREDO_DE_TESTE transitorio\n' > c.md
 git add c.md && git commit -q -m "introduz"
 git rm -q c.md && git commit -q -m "remove"
 saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
-avaliar "segredo introduzido e removido no push" 1 $? "$saida"
+avaliar "secret added and removed in the push" 1 $? "$saida"
 
 # 4. Branch existente, commit limpo -> deve passar.
 git reset -q --hard HEAD~2
 printf 'outro procedimento\n' > d.md
 git add d.md && git commit -q -m "limpo"
 saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
-avaliar "branch existente, commit limpo" 0 $? "$saida"
+avaliar "existing branch, clean commit" 0 $? "$saida"
 
 # 5. Branch nova a partir de commits ja existentes -> deve passar.
 saida="$(git push -q origin HEAD:refs/heads/outra 2>&1)"
-avaliar "branch nova sem commits novos" 0 $? "$saida"
+avaliar "new branch, no new commits" 0 $? "$saida"
 
 # 6. Remocao de branch -> deve passar sem varrer.
 saida="$(git push -q origin --delete outra 2>&1)"
-avaliar "remocao de branch" 0 $? "$saida"
+avaliar "branch deletion" 0 $? "$saida"
 
 # 7. Primeira branch com segredo no commit raiz -> deve recusar.
 git init -q --bare "$RAIZ/remoto2.git"
@@ -150,12 +150,12 @@ git config user.name Teste
 printf 'SEGREDO_DE_TESTE na raiz\n' > e.md
 git add e.md && git commit -q -m "raiz com segredo"
 saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
-avaliar "commit raiz com segredo (sem pai)" 1 $? "$saida"
+avaliar "root commit with a secret (no parent)" 1 $? "$saida"
 
 printf '\n'
 if [ "$FALHAS" -eq 0 ]; then
-  printf 'pre-receive: todos os %s casos passaram.\n' 7
+  printf 'pre-receive: all %s cases passed.\n' 7
 else
-  printf 'pre-receive: %s caso(s) com falha.\n' "$FALHAS"
+  printf 'pre-receive: %s case(s) failed.\n' "$FALHAS"
   exit 1
 fi

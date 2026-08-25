@@ -8,7 +8,7 @@ TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
 falhar() {
-  printf 'Falha: %s\n' "$1" >&2
+  printf 'Failure: %s\n' "$1" >&2
   exit 1
 }
 
@@ -16,14 +16,14 @@ assert_linha() {
   local arquivo="$1"
   local linha="$2"
   grep -Fqx -- "$linha" "$arquivo" || \
-    falhar "linha ausente em $arquivo: $linha"
+    falhar "missing line in $arquivo: $linha"
 }
 
 assert_regex() {
   local arquivo="$1"
   local regex="$2"
   grep -Eq -- "$regex" "$arquivo" || \
-    falhar "padrão ausente em $arquivo: $regex"
+    falhar "missing pattern in $arquivo: $regex"
 }
 
 preparar_pacote() {
@@ -50,7 +50,7 @@ preparar_pacote() {
       ;;
     ausentes) ;;
     parciais) touch "$raiz/certs/ca.crt" ;;
-    *) falhar "estado de certificados inválido: $estado_certificados" ;;
+    *) falhar "invalid certificate state: $estado_certificados" ;;
   esac
 
   # O stub aceita apenas a sondagem de versão; qualquer execução real falha o teste.
@@ -74,7 +74,7 @@ if [ "$ultimo_argumento" = 'certgen' ]; then
     "$FAKE_PROJECT_ROOT/certs/server.key"
   exit 0
 fi
-printf 'Docker real não deve ser chamado neste teste: %s\n' "$*" >&2
+printf 'the real Docker must not be called in this test: %s\n' "$*" >&2
 exit 99
 EOF
   cat > "$raiz/fakebin/openssl" <<'EOF'
@@ -83,7 +83,7 @@ if [ "$#" -eq 3 ] && [ "$1" = 'rand' ] && [ "$2" = '-hex' ] && [ "$3" = '32' ]; 
   printf '%s\n' 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   exit 0
 fi
-printf 'Uso inesperado do stub OpenSSL\n' >&2
+printf 'Unexpected use of the OpenSSL stub\n' >&2
 exit 99
 EOF
   chmod +x "$raiz/deploy/install-hub.sh" "$raiz/fakebin/docker" \
@@ -106,16 +106,16 @@ executar_instalador() {
         > "$raiz/saida.txt" 2>&1
   )
   [[ "$(stat -c '%a' "$raiz/.env")" == '600' ]] || \
-    falhar '.env não foi criado com modo 0600'
+    falhar '.env was not created with mode 0600'
   [[ "$(stat -c '%a' "$raiz/secrets")" == '700' ]] || \
-    falhar 'diretório secrets não foi criado com modo 0700'
+    falhar 'the secrets directory was not created with mode 0700'
   local secret_file
   for secret_file in "$raiz"/secrets/*; do
     [[ "$(stat -c '%a' "$secret_file")" == '444' ]] || \
-      falhar "segredo não foi criado com modo 0444: $secret_file"
+      falhar "secret was not created with mode 0444: $secret_file"
   done
   ! grep -Eq '^(POSTGRES_PASSWORD|DATABASE_URL|BOOTSTRAP_API_KEY|AUTH_PEPPER|GIT_TOKEN|VIEWER_SESSION_SECRET|WIKI_REPOSITORY_TOKEN)=' "$raiz/.env" || \
-    falhar 'um segredo foi persistido no .env'
+    falhar 'a secret was persisted into .env'
   assert_linha "$raiz/.env" 'SECRETS_DIR=./secrets'
   assert_regex "$raiz/.env" '^LUCIEN_IMAGE_TAG=src-[a-f0-9]{16}$'
   assert_linha "$raiz/.env" 'LUCIEN_TINY_CPU_LIMIT=0.50'
@@ -131,17 +131,17 @@ testar_certificados_tls() {
   raiz="$(executar_instalador tls-ausentes $'\n\n\ny\n\n\n1\n\n\n\n' ausentes)"
   [[ -f "$raiz/certs/ca.crt" && -f "$raiz/certs/server.crt" && \
     -f "$raiz/certs/server.key" ]] || \
-    falhar 'instalação limpa não gerou o conjunto TLS'
+    falhar 'a clean install did not generate the TLS set'
   grep -Fq -- 'certgen' "$raiz/docker-calls.txt" || \
-    falhar 'certgen não foi invocado quando os certificados estavam ausentes'
+    falhar 'certgen was not invoked when the certificates were missing'
   grep -Fq -- 'TLS certificates missing; generating' "$raiz/saida.txt" || \
-    falhar 'geração automática de TLS não foi informada'
+    falhar 'automatic TLS generation was not reported'
 
   raiz="$(executar_instalador tls-existentes $'\n\n\ny\n\n\n1\n\n\n\n' completos)"
   [[ ! -e "$raiz/docker-calls.txt" ]] || \
-    falhar 'certificados existentes acionaram o Docker indevidamente'
+    falhar 'existing certificates triggered Docker unnecessarily'
   grep -Fq -- 'Existing TLS certificates detected' "$raiz/saida.txt" || \
-    falhar 'reutilização de TLS não foi informada'
+    falhar 'TLS reuse was not reported'
 
   raiz_parcial="$(preparar_pacote tls-parciais parciais)"
   if (
@@ -151,10 +151,10 @@ testar_certificados_tls() {
       PATH="$raiz_parcial/fakebin:/usr/bin:/bin" ./deploy/install-hub.sh \
         > "$raiz_parcial/saida.txt" 2>&1
   ); then
-    falhar 'conjunto TLS parcial foi aceito'
+    falhar 'a partial TLS set was accepted'
   fi
   grep -Fq -- 'incomplete TLS set' "$raiz_parcial/saida.txt" || \
-    falhar 'erro de conjunto TLS parcial não foi informado'
+    falhar 'the partial TLS set error was not reported'
 }
 
 testar_local_viewer() {
@@ -167,9 +167,9 @@ testar_local_viewer() {
   assert_linha "$raiz/.env" 'VIEWER_BIND_ADDRESS=127.0.0.1'
   assert_regex "$raiz/secrets/viewer_session_secret" '^[a-f0-9]{64}$'
   [[ ! -s "$raiz/secrets/wiki_repository_token" ]] || \
-    falhar 'token do builder deveria estar vazio no modo local'
+    falhar 'the builder token should be empty in local mode'
   grep -Fq -- 'https://localhost:9091' "$raiz/saida.txt" || \
-    falhar 'URL do visualizador não foi informada'
+    falhar 'the viewer URL was not reported'
 
   # Uma segunda execução deve falhar sem alterar a configuração já emitida.
   hash_antes="$(sha256sum "$raiz/.env" | awk '{print $1}')"
@@ -178,11 +178,11 @@ testar_local_viewer() {
     PATH="$raiz/fakebin:/usr/bin:/bin" ./deploy/install-hub.sh \
       > "$raiz/segunda-saida.txt" 2>&1
   ); then
-    falhar 'o instalador sobrescreveu uma configuração existente'
+    falhar 'the installer overwrote an existing configuration'
   fi
   hash_depois="$(sha256sum "$raiz/.env" | awk '{print $1}')"
   [[ "$hash_antes" == "$hash_depois" ]] || \
-    falhar 'a configuração existente foi alterada na segunda execução'
+    falhar 'the existing configuration changed on the second run'
 }
 
 testar_github() {
@@ -199,10 +199,10 @@ testar_github() {
   # no boot do runbook-viewer, com uma mensagem que não apontava a instalação.
   assert_regex "$raiz/secrets/viewer_session_secret" '^[a-f0-9]{64}$'
   [[ ! -s "$raiz/secrets/wiki_repository_token" ]] || \
-    falhar 'token do builder deveria estar vazio no modo GitHub'
+    falhar 'the builder token should be empty in GitHub mode'
   grep -Fq -- 'no self-hosted runner is needed' "$raiz/saida.txt" || \
-    falhar 'orientação do GitHub-hosted runner ausente'
-  ! grep -Fq -- "$token" "$raiz/saida.txt" || falhar 'token GitHub vazou na saída'
+    falhar 'GitHub-hosted runner guidance missing'
+  ! grep -Fq -- "$token" "$raiz/saida.txt" || falhar 'the GitHub token leaked into the output'
 }
 
 testar_gitea_compact() {
@@ -223,11 +223,11 @@ testar_gitea_compact() {
   assert_regex "$raiz/docker-compose.local.yml" '^    cap_add: \["CHOWN", "FOWNER"\]$'
   [[ "$(grep -Fc -- 'condition: service_completed_successfully' \
     "$raiz/docker-compose.local.yml")" == '3' ]] || \
-    falhar 'builder, Nginx e SLM não aguardam a preparação dos volumes'
+    falhar 'builder, Nginx and SLM do not wait for volume preparation'
   ! grep -Fq -- "$publish_token" "$raiz/saida.txt" || \
-    falhar 'token de publicação Gitea vazou na saída'
+    falhar 'the Gitea publication token leaked into the output'
   ! grep -Fq -- "$read_token" "$raiz/saida.txt" || \
-    falhar 'token do builder vazou na saída'
+    falhar 'the builder token leaked into the output'
 }
 
 testar_gitea_runner() {
@@ -238,10 +238,10 @@ testar_gitea_runner() {
   assert_linha "$raiz/.env" 'COMPOSE_PROFILES=consolidated'
   assert_linha "$raiz/.env" 'STORAGE_PROVIDER=gitea'
   [[ ! -s "$raiz/secrets/wiki_repository_token" ]] || \
-    falhar 'token do builder deveria estar vazio no modo runner'
+    falhar 'the builder token should be empty in runner mode'
   grep -Fq -- '--configure-gitea-runner' "$raiz/saida.txt" || \
-    falhar 'orientação da VM dedicada do runner ausente'
-  ! grep -Fq -- "$token" "$raiz/saida.txt" || falhar 'token do runner vazou na saída'
+    falhar 'dedicated runner VM guidance missing'
+  ! grep -Fq -- "$token" "$raiz/saida.txt" || falhar 'the runner token leaked into the output'
 }
 
 testar_atualizacao_compose() {
@@ -256,13 +256,13 @@ testar_atualizacao_compose() {
   )
 
   cmp -s "$raiz/docker-compose.yml" "$raiz/docker-compose.local.yml" || \
-    falhar 'a atualização não sincronizou o Compose local com a base'
+    falhar 'the refresh did not sync the local Compose with the base'
   backup="$(find "$raiz" -maxdepth 1 -name 'docker-compose.local.yml.bak.*' -print -quit)"
-  [[ -n "$backup" ]] || falhar 'a atualização não preservou o Compose anterior'
+  [[ -n "$backup" ]] || falhar 'the refresh did not preserve the previous Compose'
   assert_linha "$backup" '  postgres:'
   assert_linha "$raiz/docker-compose.local.yml" '  upload-worker:'
   grep -Fq -- 'resource limits for every service' "$raiz/saida.txt" || \
-    falhar 'o resultado da atualização não foi informado'
+    falhar 'the refresh result was not reported'
 
   (
     cd "$raiz"
@@ -272,9 +272,9 @@ testar_atualizacao_compose() {
   quantidade_backups="$(find "$raiz" -maxdepth 1 \
     -name 'docker-compose.local.yml.bak.*' | wc -l)"
   [[ "$quantidade_backups" == '1' ]] || \
-    falhar 'a atualização idempotente criou um backup desnecessário'
+    falhar 'the idempotent refresh created an unnecessary backup'
   grep -Fq -- 'is already up to date' "$raiz/segunda-saida.txt" || \
-    falhar 'a atualização idempotente não informou o estado atual'
+    falhar 'the idempotent refresh did not report the current state'
 }
 
 testar_secrets_sem_zero_byte() {
@@ -317,7 +317,7 @@ token_publicacao_github
     esac
     raiz="$(executar_instalador "zero-byte-$preset" "$entrada")"
     assert_regex "$raiz/secrets/viewer_session_secret" '^[a-f0-9]{64}$'
-    [[ -s "$raiz/secrets/viewer_session_secret" ]] ||       falhar "viewer_session_secret ficou vazio no preset $preset"
+    [[ -s "$raiz/secrets/viewer_session_secret" ]] ||       falhar "viewer_session_secret came out empty in preset $preset"
   done
 
   # Secrets que dependem de valor externo podem ficar vazios, mas a instalação
@@ -333,7 +333,7 @@ y
 
 
 ')"
-  grep -Fq -- 'came out empty' "$raiz/saida.txt" ||     falhar 'instalação não avisou sobre secret criado vazio'
+  grep -Fq -- 'came out empty' "$raiz/saida.txt" ||     falhar 'the install did not warn about an empty secret'
 }
 
 testar_hardening_compose() {
@@ -360,9 +360,9 @@ testar_hardening_compose() {
     }
   ' "$compose")"
   [[ -z "$sem_limite" ]] || \
-    falhar "serviços sem limites e reservas: ${sem_limite//$'\n'/, }"
+    falhar "services without limits and reservations: ${sem_limite//$'\n'/, }"
   ! grep -Fq -- '    build:' "$compose" || \
-    falhar 'o Compose de runtime não pode reconstruir imagens'
+    falhar 'the runtime Compose must not rebuild images'
   assert_linha "$compose" '      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password'
   assert_linha "$compose" '      DATABASE_URL_FILE: /run/secrets/database_url'
   assert_linha "$compose" '      GIT_TOKEN_FILE: /run/secrets/git_token'
@@ -370,10 +370,10 @@ testar_hardening_compose() {
   assert_linha "$compose" '  upload-worker:'
   assert_linha "$compose" '    command: ["python", "-m", "app.worker"]'
   ! grep -Eq -- '^[[:space:]]+(POSTGRES_PASSWORD|DATABASE_URL|BOOTSTRAP_API_KEY|AUTH_PEPPER|GIT_TOKEN|VIEWER_SESSION_SECRET|WIKI_REPOSITORY_TOKEN):' "$compose" || \
-    falhar 'o Compose de runtime ainda injeta um segredo diretamente'
+    falhar 'the runtime Compose still injects a secret directly'
   assert_linha "$compose" '    user: "10003:10003"'
   [[ "$(grep -Fc -- 'ollama/ollama:0.31.2@sha256:' "$compose")" == '3' ]] || \
-    falhar 'as imagens Ollama não estão fixadas por digest'
+    falhar 'the Ollama images are not pinned by digest'
 }
 
 bash -n "$PROJECT_ROOT/deploy/install-hub.sh"
@@ -385,4 +385,4 @@ testar_gitea_runner
 testar_atualizacao_compose
 testar_hardening_compose
 testar_secrets_sem_zero_byte
-printf '%s\n' 'install-hub: instalação, atualização e quatro modos validados sem acessar o Docker real.'
+printf '%s\n' 'install-hub: install, refresh and four modes validated without touching real Docker.'

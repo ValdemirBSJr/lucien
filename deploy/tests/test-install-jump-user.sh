@@ -24,8 +24,8 @@ test "$(stat -c '%a' "$hook")" = '600'
 test "$(grep -Fxc -- "$source_line" "$TEST_ROOT/home/.bashrc")" = '1'
 grep -Fq 'lucien auth ensure' "$hook"
 if grep -Eqi 'luc_(tmp_)?[A-Za-z0-9_-]{8,}' "$hook" "$TEST_ROOT/home/.bashrc"; then
-  printf '%s\n' 'O hook contém material semelhante a token' >&2
+  printf '%s\n' 'The hook contains token-like material' >&2
   exit 1
 fi
 
-printf '%s\n' 'Smoke test do hook de jump server: OK'
+printf '%s\n' 'Jump server hook smoke test: OK'
