@@ -25,7 +25,7 @@ recusar() {
   printf '\n' >&2
   printf 'The content was NOT written. Remove the secret, rotate the exposed\n' >&2
   printf 'credential and redo the commit. Replace the value with a placeholder\n' >&2
-  printf 'such as YOUR_PASSWORD_HERE before publishing.\n' >&2
+  printf 'such as SUA_SENHA_AQUI before publishing.\n' >&2
   exit 1
 }
 
