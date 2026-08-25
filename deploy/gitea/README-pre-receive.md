@@ -181,8 +181,8 @@ git add teste-hook.md && git commit -m "teste do hook"
 git push
 ```
 
-O push deve ser **recusado**, com a mensagem `PUSH RECUSADO — Gitleaks detectou
-possivel segredo.` e sem exibir o valor do segredo, porque o hook usa
+O push deve ser **recusado**, com a mensagem `PUSH REJECTED — Gitleaks detected
+a possible secret.` e sem exibir o valor do segredo, porque o hook usa
 `--redact=100`.
 
 Confirme depois que um commit legítimo passa:

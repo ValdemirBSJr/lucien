@@ -90,7 +90,7 @@ avaliar() {
   local erro=''
 
   [ "$rc" -eq "$esperado" ] || erro="rc=$rc esperado=$esperado"
-  if [ "$esperado" -ne 0 ] && ! printf %s "$saida" | grep -q "PUSH RECUSADO"; then
+  if [ "$esperado" -ne 0 ] && ! printf %s "$saida" | grep -q "PUSH REJECTED"; then
     erro="${erro:+$erro; }recusou sem mensagem"
   fi
 

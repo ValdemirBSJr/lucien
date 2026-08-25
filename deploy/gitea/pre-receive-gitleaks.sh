@@ -20,25 +20,25 @@ ZERO='0000000000000000000000000000000000000000'
 
 recusar() {
   printf '\n' >&2
-  printf 'PUSH RECUSADO — Gitleaks detectou possivel segredo.\n' >&2
+  printf 'PUSH REJECTED — Gitleaks detected a possible secret.\n' >&2
   printf '%s\n' "$1" >&2
   printf '\n' >&2
-  printf 'O conteudo NAO foi gravado. Remova o segredo, rotacione a credencial\n' >&2
-  printf 'exposta e refaca o commit. Substitua o valor por um placeholder como\n' >&2
-  printf 'SUA_SENHA_AQUI antes de publicar.\n' >&2
+  printf 'The content was NOT written. Remove the secret, rotate the exposed\n' >&2
+  printf 'credential and redo the commit. Replace the value with a placeholder\n' >&2
+  printf 'such as YOUR_PASSWORD_HERE before publishing.\n' >&2
   exit 1
 }
 
 falhar_fechado() {
   printf '\n' >&2
-  printf 'PUSH RECUSADO — o secret scanning nao pode ser executado.\n' >&2
+  printf 'PUSH REJECTED — secret scanning could not run.\n' >&2
   printf '%s\n' "$1" >&2
-  printf 'Falhamos fechado de proposito: sem varredura, nao ha publicacao.\n' >&2
+  printf 'We fail closed on purpose: no scan, no publication.\n' >&2
   exit 1
 }
 
-[[ -x "$GITLEAKS_BIN" ]] || falhar_fechado "gitleaks ausente em $GITLEAKS_BIN"
-[[ -r "$GITLEAKS_CONFIG" ]] || falhar_fechado "configuracao ausente em $GITLEAKS_CONFIG"
+[[ -x "$GITLEAKS_BIN" ]] || falhar_fechado "gitleaks missing at $GITLEAKS_BIN"
+[[ -r "$GITLEAKS_CONFIG" ]] || falhar_fechado "configuration missing at $GITLEAKS_CONFIG"
 
 # O hook gerado pelo Gitea repassa o stdin recebido do git para cada script em
 # hooks/pre-receive.d/ e recusa o push se algum sair diferente de zero. Cada
@@ -80,10 +80,10 @@ while read -r antigo novo referencia; do
     23)
       # --redact=100 garante que o achado nunca imprime o valor do segredo;
       # apenas arquivo, linha e regra chegam ao operador.
-      recusar "Referencia: $referencia"$'\n'"$saida"
+      recusar "Reference: $referencia"$'\n'"$saida"
       ;;
     *)
-      falhar_fechado "gitleaks retornou codigo $status na referencia $referencia"$'\n'"$saida"
+      falhar_fechado "gitleaks returned code $status on reference $referencia"$'\n'"$saida"
       ;;
   esac
 done
