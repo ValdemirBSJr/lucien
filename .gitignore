@@ -3,6 +3,7 @@ docker-compose.local.yml
 dist/
 certs/*
 !certs/.gitkeep
+/secrets/git_token
 secrets/
 data/
 .pytest_cache/
