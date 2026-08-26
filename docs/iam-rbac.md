@@ -317,7 +317,7 @@ schema atual inteiro e as doze versões nascem quitadas como `modelo`.
 ### Antes de uma janela de manutenção
 
 Faça a cópia de segurança e prove que ela restaura (`scripts/backup-db.sh` e
-`scripts/testar-restauracao.sh`). A `001` e a `003` adquirem `ACCESS EXCLUSIVE`
+`scripts/test-restore.sh`). A `001` e a `003` adquirem `ACCESS EXCLUSIVE`
 em `users` e `jobs` para instalar constraints sem aceitar estado parcial; em
 banco com volume, estime a duração em homologação antes.
 

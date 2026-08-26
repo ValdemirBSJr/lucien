@@ -187,12 +187,12 @@ modo SSH recusa gravar a chave privada dentro do repositório.
 Para o procedimento manual ou implantação apenas da API, consulte
 [docs/implantacao-isolada.md](docs/implantacao-isolada.md).
 
-```powershell
-Copy-Item .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.build.yml `
+```bash
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile tools build certgen
 docker compose --profile tools run --rm certgen
-docker compose -f docker-compose.yml -f docker-compose.build.yml `
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile consolidated build
 docker compose --profile consolidated up -d
 docker compose --profile consolidated logs -f slm-init
@@ -251,7 +251,7 @@ O admin cria os demais usuários por `POST /admin/users`. O Hub exibe uma
 credencial provisória de uso único, válida por quatro horas; no cliente use o
 prompt sem eco:
 
-```powershell
+```bash
 lucien login
 ```
 
@@ -262,7 +262,7 @@ credenciais — nunca papel ou função.
 
 O CLI mantém estado local entre processos no perfil do usuário:
 
-```powershell
+```bash
 # Terminal 1: a descrição é opcional, mas recomendada para orientar a SLM.
 lucien start provision-linux -d "Atualizar pacotes e validar serviços"
 
@@ -300,9 +300,9 @@ perfil `server` abaixo é apenas a alternativa em que a SLM fica remota.
 No servidor, copie `.env.server.example` para `.env`, gere certificado incluindo o
 FQDN real em `CERT_DNS` e execute:
 
-```powershell
+```bash
 docker compose --profile tools run --rm certgen
-docker compose -f docker-compose.yml -f docker-compose.build.yml `
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile server build
 docker compose --profile server up -d
 ```
@@ -322,10 +322,10 @@ exato usado por `API_HOST`.
 
 Para visualizar ou validar a wiki localmente:
 
-```powershell
+```bash
 python -m venv .venv-docs
-.\.venv-docs\Scripts\python -m pip install -r requirements-docs.txt
-.\.venv-docs\Scripts\python -m mkdocs serve
+.venv-docs/bin/python -m pip install -r requirements-docs.txt
+.venv-docs/bin/python -m mkdocs serve
 ```
 
 Os quatro modos coexistem. O disco local usa o portal autenticado na porta 9091,
@@ -412,9 +412,9 @@ um worker de publicação e reconciliação. Não envolva chamada Git em transa�
 
 ## Verificação
 
-```powershell
+```bash
 docker compose --env-file .env.example config --quiet
-docker compose --env-file .env.example -f docker-compose.yml `
+docker compose --env-file .env.example -f docker-compose.yml \
   -f docker-compose.build.yml --profile tools build hub certgen
 docker build --target test -t lucien-hub-test backend
 docker run --rm lucien-hub-test
@@ -422,7 +422,7 @@ docker run --rm lucien-hub-test
 python -m pip install -r requirements-docs.txt
 python -m mkdocs build --strict
 
-Set-Location cli
+cd cli
 go test ./...
 ```
 

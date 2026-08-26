@@ -7,7 +7,7 @@ umask 077
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 erro() {
-  printf 'Erro: %s\n' "$1" >&2
+  printf 'Error: %s\n' "$1" >&2
   exit 1
 }
 
@@ -17,39 +17,39 @@ perguntar() {
   printf '%s' "${resposta:-$padrao}"
 }
 
-[[ "$(uname -s)" == Linux ]] || erro 'este instalador suporta somente Linux'
-(( EUID == 0 )) || erro 'execute como root'
+[[ "$(uname -s)" == Linux ]] || erro 'this installer supports Linux only'
+(( EUID == 0 )) || erro 'run as root'
 for comando in install python3 curl openssl visudo sshd sudo runuser; do
-  command -v "$comando" >/dev/null 2>&1 || erro "comando obrigatório ausente: $comando"
+  command -v "$comando" >/dev/null 2>&1 || erro "required command missing: $comando"
 done
-[[ -f "$SCRIPT_DIR/jump/lucien-jump-enroll.py" ]] || erro 'cópia incompleta do deploy/jump'
-[[ -x /usr/local/bin/lucien ]] || erro 'instale primeiro o CLI em /usr/local/bin/lucien'
-getent group lucien-primary >/dev/null || erro 'grupo lucien-primary não existe; configure o SSSD primeiro'
+[[ -f "$SCRIPT_DIR/jump/lucien-jump-enroll.py" ]] || erro 'incomplete copy of deploy/jump'
+[[ -x /usr/local/bin/lucien ]] || erro 'install the CLI at /usr/local/bin/lucien first'
+getent group lucien-primary >/dev/null || erro 'the lucien-primary group does not exist; configure SSSD first'
 
-api_host="$(perguntar 'URL HTTPS do Hub' 'https://runbook.exemplo.interno:8443')"
-[[ "$api_host" =~ ^https://[^[:space:]]+$ ]] || erro 'API_HOST deve usar HTTPS'
+api_host="$(perguntar 'Hub HTTPS URL' 'https://runbook.example.internal:8443')"
+[[ "$api_host" =~ ^https://[^[:space:]]+$ ]] || erro 'API_HOST must use HTTPS'
 api_host="${api_host%/}"
-ca_source="$(perguntar 'Caminho da CA pública do Hub' '/etc/lucien/ca.crt')"
-[[ -r "$ca_source" ]] || erro 'CA pública não pode ser lida'
-openssl x509 -in "$ca_source" -noout >/dev/null 2>&1 || erro 'arquivo informado não é um certificado X.509 válido'
-local_admin="$(perguntar 'Conta local que representa o administrador' 'operador')"
-hub_admin="$(perguntar 'Username administrativo correspondente no Hub' 'Admin')"
-[[ "$local_admin" =~ ^[a-z_][a-z0-9_-]*$ ]] || erro 'conta local inválida'
-[[ "$hub_admin" =~ ^[A-Za-z0-9_.-]{3,64}$ ]] || erro 'username administrativo inválido'
+ca_source="$(perguntar 'Path to the Hub public CA' '/etc/lucien/ca.crt')"
+[[ -r "$ca_source" ]] || erro 'the public CA cannot be read'
+openssl x509 -in "$ca_source" -noout >/dev/null 2>&1 || erro 'the file provided is not a valid X.509 certificate'
+local_admin="$(perguntar 'Local account that represents the administrator' 'admin')"
+hub_admin="$(perguntar 'Matching administrative username on the Hub' 'Admin')"
+[[ "$local_admin" =~ ^[a-z_][a-z0-9_-]*$ ]] || erro 'invalid local account'
+[[ "$hub_admin" =~ ^[A-Za-z0-9_.-]{3,64}$ ]] || erro 'invalid administrative username'
 
-printf '%s' 'Credencial M2M luc_jump_ emitida pelo Hub (não será exibida): '
+printf '%s' 'M2M credential luc_jump_ issued by the Hub (never shown): '
 IFS= read -r -s enrollment_token
 printf '\n'
-[[ "$enrollment_token" == luc_jump_* ]] || erro 'credencial M2M inválida'
-(( ${#enrollment_token} <= 4096 )) || erro 'credencial M2M excede o limite'
+[[ "$enrollment_token" == luc_jump_* ]] || erro 'invalid M2M credential'
+(( ${#enrollment_token} <= 4096 )) || erro 'the M2M credential exceeds the size limit'
 
 # Falhe antes de modificar o host se URL, CA ou certificado não forem coerentes.
 curl --fail --silent --show-error \
   --cacert "$ca_source" \
-  "$api_host/health" >/dev/null || erro 'não foi possível validar o Hub por TLS'
+  "$api_host/health" >/dev/null || erro 'could not validate the Hub over TLS'
 grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config.d/\*\.conf' \
-  /etc/ssh/sshd_config || erro 'sshd_config não inclui /etc/ssh/sshd_config.d/*.conf'
-sshd -t || erro 'a configuração SSH atual já é inválida'
+  /etc/ssh/sshd_config || erro 'sshd_config does not include /etc/ssh/sshd_config.d/*.conf'
+sshd -t || erro 'the current SSH configuration is already invalid'
 
 secret_tmp="$(mktemp)"
 config_tmp="$(mktemp)"
@@ -90,7 +90,7 @@ cat >"$sudoers_tmp" <<'EOF'
 %lucien-primary ALL=(root) NOPASSWD: /usr/local/libexec/lucien-jump-enroll
 EOF
 chmod 0440 "$sudoers_tmp"
-visudo -cf "$sudoers_tmp" >/dev/null || erro 'regra sudoers inválida'
+visudo -cf "$sudoers_tmp" >/dev/null || erro 'invalid sudoers rule'
 install -o root -g root -m 0440 "$sudoers_tmp" \
   /etc/sudoers.d/lucien-jump-enroll
 
@@ -101,7 +101,7 @@ printf '%s\n' 'Banner /etc/issue.net' > /etc/ssh/sshd_config.d/01-lucien-banner.
 chmod 0644 /etc/ssh/sshd_config.d/01-lucien-banner.conf
 if ! sshd -t; then
   rm -f /etc/ssh/sshd_config.d/01-lucien-banner.conf
-  erro 'configuração SSH inválida; o drop-in do banner foi removido'
+  erro 'invalid SSH configuration; the banner drop-in was removed'
 fi
 
 if systemctl is-active --quiet ssh; then
@@ -110,5 +110,5 @@ elif systemctl is-active --quiet sshd; then
   systemctl reload sshd
 fi
 
-printf '%s\n' 'Integração do jump server instalada com sucesso.'
-printf '%s\n' 'Abra uma nova sessão SSH LDAP para validar o provisionamento automático.'
+printf '%s\n' 'Jump server integration installed successfully.'
+printf '%s\n' 'Open a new LDAP SSH session to validate automatic provisioning.'

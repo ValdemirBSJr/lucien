@@ -12,10 +12,10 @@ export LUCIEN_JUMP_MODE=true
 export LUCIEN_ALLOW_FILE_TOKEN=true
 
 lucien_os_user="$(id -un)"
-if [[ "$lucien_os_user" == "${LUCIEN_LOCAL_ADMIN_USER:-operador}" ]]; then
+if [[ "$lucien_os_user" == "${LUCIEN_LOCAL_ADMIN_USER:-admin}" ]]; then
   export LUCIEN_EXPECTED_USERNAME="${LUCIEN_HUB_ADMIN_USER:-Admin}"
   if ! lucien auth status >/dev/null 2>&1; then
-    printf '%s\n' 'A credencial administrativa do Lucien precisa ser validada.' >&2
+    printf '%s\n' 'The Lucien administrative credential needs to be validated.' >&2
     lucien auth ensure >/dev/null || export LUCIEN_AUTH_FAILED=1
   fi
 elif id -nG "$lucien_os_user" | tr ' ' '\n' | grep -Fqx 'lucien-primary'; then
@@ -30,7 +30,7 @@ fi
 if [[ "${LUCIEN_AUTH_FAILED:-0}" == 1 ]] || ! lucien auth status >/dev/null 2>&1; then
   export LUCIEN_AUTH_FAILED=1
   printf '%s\n' \
-    'Aviso: autenticação Lucien indisponível. Comandos protegidos permanecerão bloqueados.' >&2
+    'Warning: Lucien authentication unavailable. Protected commands stay blocked.' >&2
 fi
 
 unset lucien_os_user

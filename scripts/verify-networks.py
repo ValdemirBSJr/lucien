@@ -13,9 +13,9 @@ import sys
 
 # Redes com rota para fora, e a razão de cada uma existir.
 EGRESSO = {
-    "git_egress": "publicar no GitHub ou Gitea",
-    "slm_egress": "baixar o modelo com `ollama pull`",
-    "wiki_egress": "clonar o repositório da wiki",
+    "git_egress": "publish to GitHub or Gitea",
+    "slm_egress": "pull the model with `ollama pull`",
+    "wiki_egress": "clone the wiki repository",
 }
 
 # Quem tem permissão de sair, e por qual rede. Serviço fora deste mapa não
@@ -36,11 +36,11 @@ def main() -> int:
     for nome, definicao in redes.items():
         interna = bool((definicao or {}).get("internal"))
         if nome in EGRESSO and interna:
-            falhas.append(f"rede {nome} está interna, mas precisa {EGRESSO[nome]}")
+            falhas.append(f"network {nome} is internal but needs to {EGRESSO[nome]}")
         if nome not in EGRESSO and not interna:
             falhas.append(
-                f"rede {nome} não é interna e não está declarada como egresso; "
-                "acrescente a justificativa em EGRESSO ou marque internal: true"
+                f"network {nome} is neither internal nor declared as egress; "
+                "add the reason to EGRESSO or mark it internal: true"
             )
 
     for nome, definicao in servicos.items():
@@ -50,13 +50,13 @@ def main() -> int:
         excedente = saidas - permitidas
         if excedente:
             falhas.append(
-                f"serviço {nome} alcança a internet por {sorted(excedente)} "
-                "sem autorização declarada"
+                f"service {nome} reaches the internet through {sorted(excedente)} "
+                "with no declared authorization"
             )
         faltando = permitidas - saidas
         if faltando:
             falhas.append(
-                f"serviço {nome} perdeu {sorted(faltando)}, de que depende para "
+                f"service {nome} lost {sorted(faltando)}, which it needs to "
                 + ", ".join(EGRESSO[rede] for rede in sorted(faltando))
             )
 
@@ -66,8 +66,8 @@ def main() -> int:
         return 1
 
     isoladas = sorted(set(redes) - set(EGRESSO))
-    print(f"redes internas: {', '.join(isoladas)}")
-    print(f"com saída: {', '.join(sorted(nome for nome in AUTORIZADOS))}")
+    print(f"internal networks: {', '.join(isoladas)}")
+    print(f"with egress: {', '.join(sorted(nome for nome in AUTORIZADOS))}")
     return 0
 
 

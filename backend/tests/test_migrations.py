@@ -4,7 +4,7 @@ Migração é o código que só roda uma vez, na hora em que o banco de produç�
 está na mesa. SQLite não serve para prová-lo: nem os tipos nem o catálogo são
 os mesmos, e é justamente o catálogo que sustenta os marcadores.
 
-O portão `migracoes` de `scripts/verificar.sh` sobe um PostgreSQL descartável e
+O portão `migrations` de `scripts/verify.sh` sobe um PostgreSQL descartável e
 roda este arquivo. Sem `POSTGRES_TEST_DATABASE_URL` os testes são pulados.
 """
 

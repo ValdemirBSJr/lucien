@@ -10,7 +10,7 @@ temporario="$(mktemp -d /tmp/lucien-go-licenses.XXXXXX)"
 limpar() {
   case "$temporario" in
     /tmp/lucien-go-licenses.*) rm -rf -- "$temporario" ;;
-    *) printf 'Diretório temporário inesperado: %s\n' "$temporario" >&2 ;;
+    *) printf 'Unexpected temporary directory: %s\n' "$temporario" >&2 ;;
   esac
 }
 trap limpar EXIT
@@ -42,7 +42,7 @@ docker run --rm \
   "
 
 if grep -Fq ',Unknown,Unknown' "$temporario/report.csv"; then
-  printf '%s\n' 'Licença desconhecida detectada; arquivo não atualizado.' >&2
+  printf '%s\n' 'Unknown license detected; file left unchanged.' >&2
   grep -F ',Unknown,Unknown' "$temporario/report.csv" >&2
   exit 1
 fi
@@ -72,4 +72,4 @@ parcial="$destino.parcial"
 } > "$parcial"
 
 mv -f -- "$parcial" "$destino"
-printf 'Avisos de terceiros atualizados em %s\n' "$destino"
+printf 'Third-party notices updated in %s\n' "$destino"

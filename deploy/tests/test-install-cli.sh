@@ -9,7 +9,7 @@ trap 'rm -rf -- "$TEST_ROOT"' EXIT
 case "$(uname -m)" in
   x86_64) arquitetura='amd64' ;;
   aarch64|arm64) arquitetura='arm64' ;;
-  *) printf 'Arquitetura não suportada pelo teste\n' >&2; exit 1 ;;
+  *) printf 'Architecture not supported by this test\n' >&2; exit 1 ;;
 esac
 
 pacote_dir="lucien_test_linux_${arquitetura}"
@@ -53,7 +53,7 @@ test -s "$TEST_ROOT/home/.config/lucien/completion.bash"
 completion_source="[ -r '$TEST_ROOT/home/.config/lucien/completion.bash' ] && . '$TEST_ROOT/home/.config/lucien/completion.bash'"
 grep -Fqx -- "$completion_source" "$TEST_ROOT/home/.bashrc"
 if grep -Eq 'BOOTSTRAP|TOKEN' "$TEST_ROOT/home/.config/lucien/env"; then
-  printf 'O arquivo persistente contém nome de variável sensível\n' >&2
+  printf 'The persisted file contains a sensitive variable name\n' >&2
   exit 1
 fi
 
@@ -79,7 +79,7 @@ printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
     bash "$ROOT_DIR/deploy/install-cli.sh" >/dev/null
 test -s "$TEST_ROOT/home-fish/.config/fish/completions/lucien.fish"
 
-printf '%s\n' 'Smoke test do instalador do CLI: OK'
+printf '%s\n' 'CLI installer smoke test: OK'
 
 # Locale: a captura e o Markdown são UTF-8. O instalador deve detectar o caso,
 # nunca trocar idioma ou teclado, e jamais travar esperando entrada extra.
@@ -91,12 +91,12 @@ printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
   HOME="$TEST_ROOT/home-locale-ok" SHELL=/bin/bash EDITOR=vi \
     LANG=pt_BR.UTF-8 LC_ALL='' \
     bash "$ROOT_DIR/deploy/install-cli.sh" > "$saida_locale_ok" 2>&1
-grep -Fq 'UTF-8, mantido' "$saida_locale_ok" || {
-  printf 'locale UTF-8 existente deveria ser preservado sem alteração\n' >&2
+grep -Fq 'UTF-8, kept' "$saida_locale_ok" || {
+  printf 'an existing UTF-8 locale should be preserved untouched\n' >&2
   exit 1
 }
 if grep -Fq 'set-locale' "$saida_locale_ok"; then
-  printf 'instalador tentou alterar um locale que já era UTF-8\n' >&2
+  printf 'installer tried to change a locale that was already UTF-8\n' >&2
   exit 1
 fi
 
@@ -109,7 +109,22 @@ printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
     LANG=C LC_ALL=C \
     bash "$ROOT_DIR/deploy/install-cli.sh" > "$saida_locale_lcall" 2>&1
 grep -Fq 'LC_ALL' "$saida_locale_lcall" || {
-  printf 'precedência de LC_ALL não foi informada\n' >&2
+  printf 'LC_ALL precedence was not reported\n' >&2
   exit 1
 }
 test -x "$TEST_ROOT/home-locale-lcall/.local/bin/lucien"
+
+# Imagens Linux mínimas podem não declarar LANG. Com `set -u`, isso não pode
+# interromper a instalação; o instalador deve tratar o caso como locale vazio.
+mkdir -p "$TEST_ROOT/home-locale-unset"
+saida_locale_unset="$TEST_ROOT/locale-unset.txt"
+printf '1\n%s\n%s\nhttps://hub.test:8443\nvi\nn\nn\n' \
+  "$TEST_ROOT/$pacote_dir.tar.gz" "$TEST_ROOT/ca.crt" | \
+  env -u LANG -u LC_ALL \
+    HOME="$TEST_ROOT/home-locale-unset" SHELL=/bin/bash EDITOR=vi \
+    bash "$ROOT_DIR/deploy/install-cli.sh" > "$saida_locale_unset" 2>&1
+test -x "$TEST_ROOT/home-locale-unset/.local/bin/lucien"
+grep -Fq 'not set' "$saida_locale_unset" || {
+  printf 'an unset LANG was not handled explicitly\n' >&2
+  exit 1
+}

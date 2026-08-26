@@ -42,7 +42,7 @@ portao() {
 
 pular() {
   IGNORADOS+=("$1 — $2")
-  printf '\033[0;33m-- %s ignorado: %s\033[0m\n' "$1" "$2"
+  printf '\033[0;33m-- %s skipped: %s\033[0m\n' "$1" "$2"
 }
 
 tem() { command -v "$1" >/dev/null 2>&1; }
@@ -82,8 +82,7 @@ portao_migracoes() {
       docker run --rm --network "$rede"         -e POSTGRES_TEST_DATABASE_URL="postgresql+asyncpg://lucien:$senha@$pg:5432/postgres"         lucien-hub-test python -m pytest -q tests/test_migrations.py
       estado=$?
     else
-      printf 'PostgreSQL descartavel nao ficou pronto
-' >&2
+      printf 'the throwaway PostgreSQL never became ready\n' >&2
     fi
   fi
   docker rm -f "$pg" >/dev/null 2>&1 || true
@@ -114,7 +113,7 @@ portao_cli() {
     local desformatado
     desformatado="$(gofmt -l .)"
     if [[ -n "$desformatado" ]]; then
-      printf 'gofmt reprovou:\n%s\n' "$desformatado" >&2
+      printf 'gofmt rejected:\n%s\n' "$desformatado" >&2
       exit 1
     fi
     go vet ./... || exit 1
@@ -140,7 +139,7 @@ portao_shell() {
     shellcheck --severity=warning --exclude=SC1091 \
       "${arquivos_shell[@]}" || falhou=1
   else
-    printf 'shellcheck ausente; somente bash -n foi executado\n' >&2
+    printf 'shellcheck not installed; only bash -n ran\n' >&2
   fi
   return "$falhou"
 }
@@ -151,7 +150,7 @@ portao_compose() {
   docker compose --env-file .env.example config --quiet || return 1
   # A segmentacao so e visivel com todos os perfis ativos: cada perfil traz
   # servicos diferentes, e "quem alcanca a internet" vale para a uniao deles.
-  docker compose --env-file .env.example     --profile server --profile consolidated --profile local-viewer     --profile gitea-compact --profile tools     config --format json     | docker run --rm -i         --mount "type=bind,src=$ROOT_DIR/scripts,dst=/scripts,readonly"         --network none         "$IMAGEM_LINT" python3 /scripts/verificar-redes.py
+  docker compose --env-file .env.example     --profile server --profile consolidated --profile local-viewer     --profile gitea-compact --profile tools     config --format json     | docker run --rm -i         --mount "type=bind,src=$ROOT_DIR/scripts,dst=/scripts,readonly"         --network none         "$IMAGEM_LINT" python3 /scripts/verify-networks.py
 }
 
 portao_docs() {
@@ -193,10 +192,10 @@ IMAGEM_LINT="python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c69
 
 # --- execução ---------------------------------------------------------------
 
-tem docker || { printf 'Docker é necessário para os portões de imagem.\n' >&2; exit 2; }
+tem docker || { printf 'Docker is required for the image gates.\n' >&2; exit 2; }
 
 portao "backend" portao_backend
-portao "migrações" portao_migracoes
+portao "migrations" portao_migracoes
 portao "runbook-viewer" portao_viewer
 portao "wiki-builder" portao_wiki
 portao "secret-scanner" portao_scanner
@@ -204,32 +203,32 @@ portao "secret-scanner" portao_scanner
 if tem go; then
   portao "cli" portao_cli
 else
-  pular "cli" "go não encontrado"
+  pular "cli" "go not found"
 fi
 
 portao "shell" portao_shell
 portao "compose" portao_compose
 
-portao "documentação" portao_docs
+portao "docs" portao_docs
 
-portao "lint python" portao_lint_python
-portao "tipagem" portao_tipagem
+portao "lint-python" portao_lint_python
+portao "types" portao_tipagem
 
 # --- veredito ---------------------------------------------------------------
 
-printf '\n\033[1m== Resultado\033[0m\n'
+printf '\n\033[1m== Result\033[0m\n'
 for nome in "${APROVADOS[@]:-}"; do
   [[ -n "$nome" ]] && printf '\033[0;32m  OK      %s\033[0m\n' "$nome"
 done
 for nome in "${IGNORADOS[@]:-}"; do
-  [[ -n "$nome" ]] && printf '\033[0;33m  IGNORADO %s\033[0m\n' "$nome"
+  [[ -n "$nome" ]] && printf '\033[0;33m  SKIPPED %s\033[0m\n' "$nome"
 done
 for nome in "${REPROVADOS[@]:-}"; do
-  [[ -n "$nome" ]] && printf '\033[0;31m  FALHOU  %s\033[0m\n' "$nome"
+  [[ -n "$nome" ]] && printf '\033[0;31m  FAILED  %s\033[0m\n' "$nome"
 done
 
 if [[ "${#REPROVADOS[@]}" -gt 0 ]]; then
-  printf '\n%d portão(ões) reprovado(s). Nada deve ser publicado.\n' "${#REPROVADOS[@]}"
+  printf '\n%d gate(s) failed. Nothing should be published.\n' "${#REPROVADOS[@]}"
   exit 1
 fi
-printf '\nTodos os portões passaram.\n'
+printf '\nAll gates passed.\n'

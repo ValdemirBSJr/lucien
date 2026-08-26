@@ -20,25 +20,25 @@ ZERO='0000000000000000000000000000000000000000'
 
 recusar() {
   printf '\n' >&2
-  printf 'PUSH RECUSADO — Gitleaks detectou possivel segredo.\n' >&2
+  printf 'PUSH REJECTED — Gitleaks detected a possible secret.\n' >&2
   printf '%s\n' "$1" >&2
   printf '\n' >&2
-  printf 'O conteudo NAO foi gravado. Remova o segredo, rotacione a credencial\n' >&2
-  printf 'exposta e refaca o commit. Substitua o valor por um placeholder como\n' >&2
-  printf 'SUA_SENHA_AQUI antes de publicar.\n' >&2
+  printf 'The content was NOT written. Remove the secret, rotate the exposed\n' >&2
+  printf 'credential and redo the commit. Replace the value with a placeholder\n' >&2
+  printf 'such as SUA_SENHA_AQUI before publishing.\n' >&2
   exit 1
 }
 
 falhar_fechado() {
   printf '\n' >&2
-  printf 'PUSH RECUSADO — o secret scanning nao pode ser executado.\n' >&2
+  printf 'PUSH REJECTED — secret scanning could not run.\n' >&2
   printf '%s\n' "$1" >&2
-  printf 'Falhamos fechado de proposito: sem varredura, nao ha publicacao.\n' >&2
+  printf 'We fail closed on purpose: no scan, no publication.\n' >&2
   exit 1
 }
 
-[[ -x "$GITLEAKS_BIN" ]] || falhar_fechado "gitleaks ausente em $GITLEAKS_BIN"
-[[ -r "$GITLEAKS_CONFIG" ]] || falhar_fechado "configuracao ausente em $GITLEAKS_CONFIG"
+[[ -x "$GITLEAKS_BIN" ]] || falhar_fechado "gitleaks missing at $GITLEAKS_BIN"
+[[ -r "$GITLEAKS_CONFIG" ]] || falhar_fechado "configuration missing at $GITLEAKS_CONFIG"
 
 # O hook gerado pelo Gitea repassa o stdin recebido do git para cada script em
 # hooks/pre-receive.d/ e recusa o push se algum sair diferente de zero. Cada
@@ -71,19 +71,24 @@ while read -r antigo novo referencia; do
   # script assim que o Gitleaks devolve 23, o `case` abaixo nunca roda e a
   # recusa acontece sem nenhuma mensagem para quem tentou o push.
   set +e
-    saida="$(printf %s "$conteudo" | "$GITLEAKS_BIN" stdin --config="$GITLEAKS_CONFIG" --no-banner --no-color --redact=100 --exit-code=23 --timeout="$GITLEAKS_TIMEOUT" 2>&1)"
+    saida="$(printf %s "$conteudo" | "$GITLEAKS_BIN" stdin --config="$GITLEAKS_CONFIG" --no-banner --no-color --redact=100 --verbose --exit-code=23 --timeout="$GITLEAKS_TIMEOUT" 2>&1)"
   status=$?
   set -e
 
   case "$status" in
     0) ;;
     23)
-      # --redact=100 garante que o achado nunca imprime o valor do segredo;
-      # apenas arquivo, linha e regra chegam ao operador.
-      recusar "Referencia: $referencia"$'\n'"$saida"
+      # --verbose e o que faz o achado chegar a quem teve o push recusado.
+      # Sem ele o gitleaks imprime apenas "leaks found: 1", e o operador fica
+      # sem saber o que procurar num runbook de dezenas de blocos.
+      #
+      # --redact=100 continua valendo: o valor sai como REDACTED, e o que
+      # aparece a mais e a regra que casou. Em modo stdin nao existe arquivo
+      # nem linha -- a entrada e um fluxo, nao arquivos.
+      recusar "Reference: $referencia"$'\n'"$saida"
       ;;
     *)
-      falhar_fechado "gitleaks retornou codigo $status na referencia $referencia"$'\n'"$saida"
+      falhar_fechado "gitleaks returned code $status on reference $referencia"$'\n'"$saida"
       ;;
   esac
 done

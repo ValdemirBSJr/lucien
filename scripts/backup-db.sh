@@ -22,16 +22,16 @@ BACKUP_RETENTION="${BACKUP_RETENTION:-14}"
 # claro e a proteção é apenas a permissão do sistema de arquivos.
 BACKUP_ENCRYPT_KEY_FILE="${BACKUP_ENCRYPT_KEY_FILE:-}"
 
-erro() { printf 'Erro: %s\n' "$1" >&2; exit 1; }
-aviso() { printf '\033[0;33mAviso: %s\033[0m\n' "$1" >&2; }
+erro() { printf 'Error: %s\n' "$1" >&2; exit 1; }
+aviso() { printf '\033[0;33mWarning: %s\033[0m\n' "$1" >&2; }
 
 compose() {
   docker compose --env-file .env -f "$COMPOSE_FILE" "$@"
 }
 
-[[ -f .env ]] || erro "arquivo .env ausente; execute a partir da raiz da instalação"
-[[ -f "$COMPOSE_FILE" ]] || erro "$COMPOSE_FILE ausente"
-[[ "$BACKUP_RETENTION" =~ ^[0-9]+$ ]] || erro 'BACKUP_RETENTION deve ser inteiro'
+[[ -f .env ]] || erro "no .env file; run this from the installation root"
+[[ -f "$COMPOSE_FILE" ]] || erro "$COMPOSE_FILE is missing"
+[[ "$BACKUP_RETENTION" =~ ^[0-9]+$ ]] || erro 'BACKUP_RETENTION must be an integer'
 
 POSTGRES_DB="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2-)"
 POSTGRES_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2-)"
@@ -42,7 +42,7 @@ install -d -m 0700 "$BACKUP_DIR"
 CARIMBO="$(date -u +%Y%m%dT%H%M%SZ)"
 DESTINO="$BACKUP_DIR/lucien-$CARIMBO.dump"
 
-printf 'Gerando cópia de %s...\n' "$POSTGRES_DB"
+printf 'Backing up %s...\n' "$POSTGRES_DB"
 # Formato custom: permite restauração seletiva e verificação do índice sem
 # reexecutar o SQL inteiro.
 if ! compose exec -T postgres pg_dump \
@@ -52,21 +52,21 @@ if ! compose exec -T postgres pg_dump \
   --compress=6 \
   > "$DESTINO.parcial"; then
   rm -f "$DESTINO.parcial"
-  erro 'pg_dump falhou; nenhuma cópia foi gravada'
+  erro 'pg_dump failed; no backup was written'
 fi
 chmod 0600 "$DESTINO.parcial"
 
 # Verificação: um dump que não pode ser lido não é cópia de segurança, é a
 # ilusão de uma. Ler o índice prova que o arquivo chegou íntegro.
-printf 'Verificando o índice do arquivo...\n'
+printf 'Verifying the archive index...\n'
 if ! compose exec -T postgres pg_restore --list < "$DESTINO.parcial" > /dev/null; then
   rm -f "$DESTINO.parcial"
-  erro 'o arquivo gerado não pôde ser lido; cópia descartada'
+  erro 'the generated archive could not be read; backup discarded'
 fi
 
 if [[ -n "$BACKUP_ENCRYPT_KEY_FILE" ]]; then
-  [[ -r "$BACKUP_ENCRYPT_KEY_FILE" ]] || erro "chave ilegível: $BACKUP_ENCRYPT_KEY_FILE"
-  command -v openssl >/dev/null 2>&1 || erro 'openssl não encontrado para cifrar'
+  [[ -r "$BACKUP_ENCRYPT_KEY_FILE" ]] || erro "unreadable key: $BACKUP_ENCRYPT_KEY_FILE"
+  command -v openssl >/dev/null 2>&1 || erro 'openssl not found; cannot encrypt'
   openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
     -pass "file:$BACKUP_ENCRYPT_KEY_FILE" \
     -in "$DESTINO.parcial" -out "$DESTINO.enc"
@@ -75,11 +75,11 @@ if [[ -n "$BACKUP_ENCRYPT_KEY_FILE" ]]; then
   DESTINO="$DESTINO.enc"
 else
   mv "$DESTINO.parcial" "$DESTINO"
-  aviso 'dump em texto claro; defina BACKUP_ENCRYPT_KEY_FILE para cifrar em repouso'
+  aviso 'plaintext dump; set BACKUP_ENCRYPT_KEY_FILE to encrypt at rest'
 fi
 
 TAMANHO="$(du -h "$DESTINO" | cut -f1)"
-printf 'Cópia concluída: %s (%s)\n' "$DESTINO" "$TAMANHO"
+printf 'Backup complete: %s (%s)\n' "$DESTINO" "$TAMANHO"
 
 if [[ "$BACKUP_RETENTION" -gt 0 ]]; then
   # Remove as mais antigas somente depois de a nova estar verificada no disco:
@@ -90,10 +90,10 @@ if [[ "$BACKUP_RETENTION" -gt 0 ]]; then
   )
   for arquivo in "${ANTIGAS[@]:-}"; do
     [[ -n "$arquivo" ]] || continue
-    printf 'Removendo cópia antiga: %s\n' "$(basename "$arquivo")"
+    printf 'Removing old backup: %s\n' "$(basename "$arquivo")"
     rm -f -- "$arquivo"
   done
 fi
 
-printf '\nProve esta copia antes de confiar nela:\n'
-printf '  BACKUP_DIR=%s scripts/testar-restauracao.sh %s\n' "$BACKUP_DIR" "$DESTINO"
+printf '\nProve this backup before relying on it:\n'
+printf '  BACKUP_DIR=%s scripts/test-restore.sh %s\n' "$BACKUP_DIR" "$DESTINO"

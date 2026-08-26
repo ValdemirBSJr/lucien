@@ -3,6 +3,7 @@ docker-compose.local.yml
 dist/
 certs/*
 !certs/.gitkeep
+/secrets/git_token
 secrets/
 data/
 .pytest_cache/
@@ -15,6 +16,7 @@ cli/lucien
 cli/coverage.out
 graphify-out/
 site/
+website/
 .venv-docs/
 
 # Copias do banco: material sensivel, nunca versionado.
@@ -22,3 +24,9 @@ backups/
 
 # Exportação independente preparada para publicação open source.
 publisher/
+
+# Documento interno de entrega entre agentes. Descreve caminhos do repositório
+# de desenvolvimento, decisões pendentes e o roteiro de sincronização — nada
+# disso pertence ao repositório público. Ignorado aqui para que uma cópia de
+# árvore inteira não o traga por acidente.
+HANDOFF-*.md

@@ -92,9 +92,9 @@ Use esta referência para responder aos prompts:
 | Prompt | Resposta recomendada | Explicação |
 | --- | --- | --- |
 | FQDN usado pelos clientes | `hub.exemplo.interno` | Nome presente em `API_HOST` e no certificado. Prefira DNS a IP. |
-| Expor HTTPS em TCP/8443 | `s` somente para CLI remoto | Faz bind em todas as interfaces; o firewall ainda deve limitar as origens. |
+| Expor HTTPS em TCP/8443 | `y` somente para CLI remoto | Faz bind em todas as interfaces; o firewall ainda deve limitar as origens. |
 | IP adicional do SAN | IP pelo qual o CLI acessará o Hub | Necessário quando o cliente usa diretamente um endereço IP. |
-| Executar Ollama na mesma máquina | `s` | Seleciona o perfil `consolidated`. |
+| Executar Ollama na mesma máquina | `y` | Seleciona o perfil `consolidated`. |
 | Modelo da SLM | `qwen2.5-coder:3b` ou modelo homologado | O primeiro uso baixa o modelo e pode demorar. |
 | Idioma dos runbooks | `pt-br` ou `en` | Define o template entregue pelo Hub ao CLI e o idioma das tags inferidas. |
 | Modo de publicação | `4` para Gitea Actions | Use `3` somente para o builder compacto no próprio host. |
@@ -104,8 +104,8 @@ Use esta referência para responder aos prompts:
 | Branch | `main` | Deve ser a mesma branch observada pelo workflow. |
 | Diretório MkDocs | `docs/runbooks` | Mantém os documentos dentro da árvore compilada. |
 | Token Git | token de serviço restrito ao repositório | Conceda somente leitura/escrita de conteúdo; nunca privilégios administrativos. |
-| Abrir bootstrap | `s` somente na primeira instalação | A janela deve ser fechada logo após criar o primeiro administrador. |
-| Subir o Hub | `s` | Constrói e inicia os serviços selecionados. |
+| Abrir bootstrap | `y` somente na primeira instalação | A janela deve ser fechada logo após criar o primeiro administrador. |
+| Subir o Hub | `y` | Constrói e inicia os serviços selecionados. |
 
 O instalador consulta a quantidade de CPUs efetivamente disponibilizada pelo
 daemon Docker e não gera limites acima dela. Isso é especialmente importante no

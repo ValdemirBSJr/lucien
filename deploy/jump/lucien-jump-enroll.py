@@ -45,24 +45,24 @@ def read_config() -> dict[str, str]:
             "TLS_CA_FILE",
             "LUCIEN_BINARY",
         }:
-            raise RuntimeError("configuração inválida do jump server")
+            raise RuntimeError("invalid jump server configuration")
         values[key] = value
     required = {"API_HOST", "TLS_CA_FILE", "LUCIEN_BINARY"}
     if set(values) != required or not values["API_HOST"].startswith("https://"):
-        raise RuntimeError("configuração incompleta do jump server")
+        raise RuntimeError("incomplete jump server configuration")
     return values
 
 
 def current_ldap_user() -> tuple[str, pwd.struct_passwd]:
     if os.geteuid() != 0:
-        raise RuntimeError("o helper deve ser executado pelo sudoers restrito")
+        raise RuntimeError("the helper must run through the restricted sudoers rule")
     username = os.environ.get("SUDO_USER", "")
     if re.fullmatch(r"[A-Za-z][0-9]+", username) is None:
-        raise RuntimeError("identidade POSIX inválida para provisionamento")
+        raise RuntimeError("invalid POSIX identity for provisioning")
     account = pwd.getpwnam(username)
     primary_gid = grp.getgrnam("lucien-primary").gr_gid
     if primary_gid not in os.getgrouplist(username, account.pw_gid):
-        raise RuntimeError("usuário não pertence ao grupo LDAP autorizado")
+        raise RuntimeError("user does not belong to the authorized LDAP group")
     return username, account
 
 
@@ -114,21 +114,21 @@ def request_enrollment(
             with urllib.request.urlopen(request, context=context, timeout=15) as response:
                 payload = response.read(65_537)
                 if len(payload) > 65_536:
-                    raise RuntimeError("resposta do Hub excede o limite")
+                    raise RuntimeError("the Hub response exceeds the size limit")
                 result = json.loads(payload)
                 if not isinstance(result, dict):
-                    raise RuntimeError("resposta inválida do Hub")
+                    raise RuntimeError("invalid response from the Hub")
                 return result
         except urllib.error.HTTPError as error:
             try:
-                detail = json.loads(error.read(8192)).get("detail", "erro do Hub")
+                detail = json.loads(error.read(8192)).get("detail", "Hub error")
             except (AttributeError, json.JSONDecodeError):
-                detail = "erro do Hub"
+                detail = "Hub error"
             raise EnrollmentError(error.code, str(detail)) from error
         except (TimeoutError, urllib.error.URLError):
             if attempt == 1:
-                raise RuntimeError("Hub indisponível durante o provisionamento")
-    raise RuntimeError("falha inesperada no provisionamento")
+                raise RuntimeError("Hub unavailable during provisioning")
+    raise RuntimeError("unexpected provisioning failure")
 
 
 def select_domain() -> str:
@@ -138,19 +138,19 @@ def select_domain() -> str:
     # "File or stream is not seekable" e o operador fica sem Lucien.
     with open("/dev/tty", "w", encoding="utf-8") as saida:
         saida.write(
-            "Selecione sua área no Lucien:\n"
-            "  1 - Acessos\n"
-            "  2 - Servidores\n"
+            "Select your area in Lucien:\n"
+            "  1 - Access\n"
+            "  2 - Servers\n"
             "  3 - Network\n"
-            "  4 - Suporte\n"
-            "Opção: "
+            "  4 - Support\n"
+            "Choice: "
         )
         saida.flush()
     with open("/dev/tty", "r", encoding="utf-8") as entrada:
         selected = entrada.readline().strip()
     domain = ALLOWED_DOMAINS.get(selected)
     if domain is None:
-        raise RuntimeError("opção de área inválida")
+        raise RuntimeError("invalid area choice")
     return domain
 
 
@@ -182,7 +182,7 @@ def save_user_token(
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError("o CLI não conseguiu armazenar a credencial do usuário")
+        raise RuntimeError("the CLI could not store the user credential")
 
 
 def main() -> int:
@@ -191,7 +191,7 @@ def main() -> int:
         config = read_config()
         service_token = TOKEN_FILE.read_text(encoding="utf-8").strip()
         if not service_token.startswith("luc_jump_") or len(service_token) > 4096:
-            raise RuntimeError("credencial técnica inválida")
+            raise RuntimeError("invalid service credential")
         try:
             full_name = full_name_from_gecos(account)
             result = request_enrollment(
@@ -212,11 +212,11 @@ def main() -> int:
             or not isinstance(provisional, str)
             or not provisional.startswith("luc_tmp_")
         ):
-            raise RuntimeError("Hub retornou identidade incompatível")
+            raise RuntimeError("the Hub returned a mismatched identity")
         save_user_token(config, username, account, provisional)
         return 0
     except (EnrollmentError, OSError, RuntimeError, ValueError) as error:
-        print(f"Lucien indisponível: {error}", file=sys.stderr)
+        print(f"Lucien unavailable: {error}", file=sys.stderr)
         return 1
 
 

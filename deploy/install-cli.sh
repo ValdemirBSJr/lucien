@@ -10,14 +10,14 @@ PROJECT_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)"
 declare -a PRIVILEGE_COMMAND=()
 
 erro() {
-  printf 'Erro: %s\n' "$1" >&2
+  printf 'Error: %s\n' "$1" >&2
   exit 1
 }
 
 confirmar() {
   local resposta
-  read -r -p "$1 [s/N]: " resposta
-  [[ "$resposta" =~ ^([sS]|[sS][iI][mM])$ ]]
+  read -r -p "$1 [y/N]: " resposta
+  [[ "$resposta" =~ ^([yY]|[yY][eE][sS])$ ]]
 }
 
 perguntar() {
@@ -30,7 +30,7 @@ perguntar() {
 }
 
 exigir_comando() {
-  command -v "$1" >/dev/null 2>&1 || erro "$1 não foi encontrado"
+  command -v "$1" >/dev/null 2>&1 || erro "$1 was not found"
 }
 
 preparar_privilegios() {
@@ -40,12 +40,12 @@ preparar_privilegios() {
   fi
 
   if command -v sudo >/dev/null 2>&1; then
-    sudo -v || erro 'não foi possível obter privilégios com sudo'
+    sudo -v || erro 'could not obtain privileges with sudo'
     PRIVILEGE_COMMAND=(sudo)
     return
   fi
 
-  erro 'sudo não está disponível; execute a instalação de sistema como root'
+  erro 'sudo is not available; run the system-wide install as root'
 }
 
 executar_privilegiado() {
@@ -59,7 +59,8 @@ executar_privilegiado() {
 locale_utf8_alvo() {
   # Preserva idioma e região; troca somente a codificação. Um host pt_BR vira
   # pt_BR.UTF-8, nunca en_US.UTF-8 — trocar o idioma seria efeito colateral.
-  local base="${LANG%%.*}"
+  local atual="${LANG:-}"
+  local base="${atual%%.*}"
 
   case "$base" in
     ''|C|POSIX) printf 'C.UTF-8' ;;
@@ -89,44 +90,44 @@ configurar_locale_utf8() {
   local alvo
 
   if [[ "${LC_ALL:-}" != '' ]]; then
-    printf 'Aviso: LC_ALL=%s tem precedência sobre LANG e não será alterado.\n' \
+    printf 'Warning: LC_ALL=%s takes precedence over LANG and will not be changed.\n' \
       "$LC_ALL" >&2
-    printf '  Ajuste-o manualmente para uma variante .UTF-8.\n' >&2
+    printf '  Set it manually to a .UTF-8 variant.\n' >&2
     return
   fi
 
   if [[ "${LANG:-}" == *.[uU][tT][fF]8 || "${LANG:-}" == *.[uU][tT][fF]-8 ]]; then
-    printf '  locale:       %s (UTF-8, mantido)\n' "$LANG"
+    printf '  locale:       %s (UTF-8, kept)\n' "$LANG"
     return
   fi
 
   alvo="$(locale_utf8_alvo)"
-  printf '\nO locale atual (%s) não é UTF-8.\n' "${LANG:-nao definido}"
-  printf 'Sem UTF-8, acentos em -d são rejeitados e o runbook sai ilegível.\n'
+  printf '\nThe current locale (%s) is not UTF-8.\n' "${LANG:-not set}"
+  printf 'Without UTF-8, accented input to -d is rejected and the runbook comes out unreadable.\n'
 
   if ! locale_disponivel "$alvo"; then
-    printf 'O locale %s não está gerado neste host. Gere-o e repita:\n' "$alvo" >&2
+    printf 'Locale %s is not generated on this host. Generate it and try again:\n' "$alvo" >&2
     printf '  sudo locale-gen %s && sudo update-locale LANG=%s\n' "$alvo" "$alvo" >&2
     return
   fi
 
   if ! command -v localectl >/dev/null 2>&1; then
-    printf 'localectl não está disponível. Ajuste manualmente:\n' >&2
+    printf 'localectl is not available. Set it manually:\n' >&2
     printf '  sudo update-locale LANG=%s\n' "$alvo" >&2
     return
   fi
 
-  confirmar "Definir LANG=$alvo para todo o host (idioma e teclado preservados)" || {
-    printf 'Locale mantido. Para ajustar depois: sudo localectl set-locale LANG=%s\n' \
+  confirmar "Set LANG=$alvo for the whole host (language and keyboard preserved)" || {
+    printf 'Locale kept. To set it later: sudo localectl set-locale LANG=%s\n' \
       "$alvo"
     return
   }
 
   executar_privilegiado localectl set-locale "LANG=$alvo" || {
-    printf 'Aviso: não foi possível definir o locale; ajuste manualmente.\n' >&2
+    printf 'Warning: could not set the locale; set it manually.\n' >&2
     return
   }
-  printf '  locale:       %s (aplicado; reabra a sessão para valer)\n' "$alvo"
+  printf '  locale:       %s (applied; reopen the session for it to take effect)\n' "$alvo"
 }
 
 adicionar_linha_usuario() {
@@ -146,7 +147,7 @@ gerar_completion() {
   local gerado="$temporario/completion-$shell"
 
   "$bin_origem" completion "$shell" > "$gerado"
-  [[ -s "$gerado" ]] || erro "o binário não gerou completion para $shell"
+  [[ -s "$gerado" ]] || erro "the binary produced no completion for $shell"
 
   if [[ "$privilegiado" == 'true' ]]; then
     executar_privilegiado install -d -o root -g root -m 0755 "$(dirname -- "$destino")"
@@ -186,8 +187,8 @@ instalar_completion_usuario() {
       gerar_completion fish "$destino" false
       ;;
     *)
-      printf '  completion:   não instalado; shell de login não suportado: %s\n' \
-        "${shell_login:-desconhecido}"
+      printf '  completion:   not installed; unsupported login shell: %s\n' \
+        "${shell_login:-unknown}"
       ;;
   esac
 }
@@ -205,9 +206,9 @@ validar_valor_shell() {
   local nome="$1"
   local valor="$2"
 
-  [[ -n "$valor" ]] || erro "$nome não pode ficar vazio"
+  [[ -n "$valor" ]] || erro "$nome cannot be empty"
   [[ "$valor" != *$'\n'* && "$valor" != *$'\r'* && "$valor" != *"'"* ]] || \
-    erro "$nome contém caracteres incompatíveis com o arquivo de ambiente"
+    erro "$nome contains characters incompatible with the environment file"
 }
 
 ler_api_host_padrao() {
@@ -238,12 +239,12 @@ detectar_arquivo_pacote() {
 
 uso() {
   cat <<'EOF'
-Uso:
+Usage:
   ./deploy/install-cli.sh
-      Instala e configura interativamente o Lucien CLI nativo em Linux.
+      Interactively installs and configures the native Lucien CLI on Linux.
 
   ./deploy/install-cli.sh --help
-      Exibe esta ajuda.
+      Shows this help.
 EOF
 }
 
@@ -255,15 +256,15 @@ case "${1:-}" in
     ;;
   *)
     uso >&2
-    erro "opção desconhecida: $1"
+    erro "unknown option: $1"
     ;;
 esac
 
-[[ "$(uname -s)" == 'Linux' ]] || erro 'este instalador suporta somente Linux'
+[[ "$(uname -s)" == 'Linux' ]] || erro 'this installer supports Linux only'
 case "$(uname -m)" in
   x86_64) arquitetura='amd64' ;;
   aarch64|arm64) arquitetura='arm64' ;;
-  *) erro "arquitetura não suportada: $(uname -m)" ;;
+  *) erro "unsupported architecture: $(uname -m)" ;;
 esac
 
 exigir_comando install
@@ -272,27 +273,27 @@ exigir_comando openssl
 exigir_comando sha256sum
 exigir_comando tar
 
-printf '%s\n' 'Instalação guiada do Lucien CLI para Linux'
-printf '%s\n' 'A chave de bootstrap será usada somente em memória, se você optar por criar o primeiro admin.'
-printf '%s\n' 'Informe a CA pública gerada no Hub; este cliente nunca cria uma autoridade certificadora.'
-printf '%s\n' 'Escopo: 1) usuário atual (~/.local/bin)  2) sistema (/usr/local/bin)'
-read -r -p 'Escolha [1]: ' escopo
+printf '%s\n' 'Guided installation of the Lucien CLI for Linux'
+printf '%s\n' 'The bootstrap key is held in memory only, and only if you choose to create the first admin.'
+printf '%s\n' 'Provide the public CA generated on the Hub; this client never creates a certificate authority.'
+printf '%s\n' 'Scope: 1) current user (~/.local/bin)  2) system-wide (/usr/local/bin)'
+read -r -p 'Choose [1]: ' escopo
 escopo="${escopo:-1}"
 
 arquivo_pacote_padrao="$(detectar_arquivo_pacote "$arquitetura")"
 if [[ -z "$arquivo_pacote_padrao" ]]; then
-  arquivo_pacote_padrao="/caminho/lucien_VERSAO_linux_${arquitetura}.tar.gz"
+  arquivo_pacote_padrao="/path/lucien_VERSION_linux_${arquitetura}.tar.gz"
 fi
-arquivo_pacote="$(perguntar 'Pacote do Lucien CLI acompanhado de checksum' "$arquivo_pacote_padrao")"
-[[ -f "$arquivo_pacote" ]] || erro "pacote não encontrado: $arquivo_pacote"
-[[ -f "$arquivo_pacote.sha256" ]] || erro "checksum não encontrado: $arquivo_pacote.sha256"
+arquivo_pacote="$(perguntar 'Lucien CLI package, alongside its checksum' "$arquivo_pacote_padrao")"
+[[ -f "$arquivo_pacote" ]] || erro "package not found: $arquivo_pacote"
+[[ -f "$arquivo_pacote.sha256" ]] || erro "checksum not found: $arquivo_pacote.sha256"
 
 nome_pacote="$(basename -- "$arquivo_pacote")"
 [[ "$nome_pacote" =~ ^(lucien_[A-Za-z0-9._-]+_linux_(amd64|arm64))\.tar\.gz$ ]] || \
-  erro 'o pacote não segue o padrão lucien_VERSAO_linux_ARQUITETURA.tar.gz'
+  erro 'the package does not follow the lucien_VERSION_linux_ARCH.tar.gz pattern'
 diretorio_pacote="${BASH_REMATCH[1]}"
 [[ "${BASH_REMATCH[2]}" == "$arquitetura" ]] || \
-  erro "o pacote não corresponde à arquitetura $arquitetura"
+  erro "the package does not match architecture $arquitetura"
 
 (
   cd -- "$(dirname -- "$arquivo_pacote")"
@@ -300,35 +301,35 @@ diretorio_pacote="${BASH_REMATCH[1]}"
 )
 
 ca_origem_padrao="$PROJECT_ROOT/certs/ca.crt"
-ca_origem="$(perguntar 'Caminho da CA pública do Hub' "$ca_origem_padrao")"
+ca_origem="$(perguntar 'Path to the Hub public CA' "$ca_origem_padrao")"
 [[ -f "$ca_origem" ]] || \
-  erro "CA não encontrada: $ca_origem. Gere os certificados no Hub e copie somente certs/ca.crt para este host"
-openssl x509 -in "$ca_origem" -noout >/dev/null 2>&1 || erro 'a CA não contém um certificado PEM válido'
+  erro "CA not found: $ca_origem. Generate the certificates on the Hub and copy only certs/ca.crt to this host"
+openssl x509 -in "$ca_origem" -noout >/dev/null 2>&1 || erro 'the CA holds no valid PEM certificate'
 texto_ca="$(openssl x509 -in "$ca_origem" -noout -text)"
-[[ "$texto_ca" == *'CA:TRUE'* ]] || erro 'o certificado informado não é uma CA'
+[[ "$texto_ca" == *'CA:TRUE'* ]] || erro 'the certificate provided is not a CA'
 [[ "$texto_ca" == *'Certificate Sign'* ]] || \
-  erro 'a CA não possui keyUsage para assinatura de certificados'
+  erro 'the CA has no keyUsage for certificate signing'
 
 api_host_padrao="$(ler_api_host_padrao)"
 api_host_padrao="${api_host_padrao:-https://localhost:8443}"
-api_host="$(perguntar 'URL HTTPS usada pelo CLI para acessar o Hub' "$api_host_padrao")"
+api_host="$(perguntar 'HTTPS URL the CLI uses to reach the Hub' "$api_host_padrao")"
 validar_valor_shell 'API_HOST' "$api_host"
-[[ "$api_host" == https://* ]] || erro 'API_HOST deve começar com https://'
+[[ "$api_host" == https://* ]] || erro 'API_HOST must start with https://'
 [[ "$api_host" != *'?'* && "$api_host" != *'#'* ]] || \
-  erro 'API_HOST não deve conter query string ou fragmento'
+  erro 'API_HOST must not carry a query string or fragment'
 autoridade="${api_host#https://}"
 autoridade="${autoridade%%/*}"
 [[ -n "$autoridade" && "$autoridade" != *'@'* ]] || \
-  erro 'API_HOST deve conter um host e não pode incluir credenciais'
+  erro 'API_HOST must name a host and must not include credentials'
 api_host="${api_host%/}"
 
 editor_padrao="${EDITOR:-vi}"
-editor="$(perguntar 'Editor usado para redigir os runbooks' "$editor_padrao")"
+editor="$(perguntar 'Editor used to write the runbooks' "$editor_padrao")"
 validar_valor_shell 'EDITOR' "$editor"
 
 case "$escopo" in
   1)
-    [[ -n "${HOME:-}" ]] || erro 'HOME não está definido para a instalação do usuário'
+    [[ -n "${HOME:-}" ]] || erro 'HOME is not set, and the per-user install needs it'
     usuario_home="$HOME"
     bin_dir="$usuario_home/.local/bin"
     ca_dir="$usuario_home/.local/share/lucien"
@@ -346,14 +347,14 @@ case "$escopo" in
     env_file='/etc/profile.d/lucien.sh'
     executar_privilegiado install -d -o root -g root -m 0755 "$bin_dir" "$ca_dir" "$env_dir"
     ;;
-  *) erro 'escopo inválido' ;;
+  *) erro 'invalid scope' ;;
 esac
 
 temporario="$(mktemp -d)"
 trap 'rm -rf -- "$temporario"' EXIT
 tar -xzf "$arquivo_pacote" -C "$temporario" "$diretorio_pacote/lucien"
 bin_origem="$temporario/$diretorio_pacote/lucien"
-[[ -f "$bin_origem" && ! -L "$bin_origem" ]] || erro 'o pacote não contém um binário regular do Lucien'
+[[ -f "$bin_origem" && ! -L "$bin_origem" ]] || erro 'the package holds no regular Lucien binary'
 "$bin_origem" help >/dev/null
 
 bin_destino="$bin_dir/lucien"
@@ -384,36 +385,36 @@ else
   executar_privilegiado install -o root -g root -m 0644 "$env_temporario" "$env_file"
 fi
 
-printf '\nArquivos instalados:\n'
-printf '  binário:      %s\n' "$bin_destino"
-printf '  CA pública:   %s\n' "$ca_destino"
-printf '  ambiente:     %s\n' "$env_file"
+printf '\nInstalled files:\n'
+printf '  binary:       %s\n' "$bin_destino"
+printf '  public CA:    %s\n' "$ca_destino"
+printf '  environment:  %s\n' "$env_file"
 if [[ "$escopo" == '1' ]]; then
   instalar_completion_usuario
 else
   instalar_completion_sistema
 fi
 if [[ "$escopo" == '1' ]]; then
-  printf '  perfil shell: %s\n' "$profile_file"
+  printf '  profile:      %s\n' "$profile_file"
 fi
 configurar_locale_utf8
 
-if confirmar 'Validar agora a conexão TLS com o endpoint /health'; then
+if confirmar 'Validate the TLS connection to the /health endpoint now'; then
   exigir_comando curl
   curl --fail --silent --show-error --cacert "$ca_destino" "$api_host/health"
-  printf '\nConexão TLS validada.\n'
+  printf '\nTLS connection validated.\n'
 fi
 
-if confirmar 'Criar agora o primeiro usuário administrador'; then
-  administrador="$(perguntar 'Nome do primeiro administrador' 'administrador')"
-  [[ "$administrador" =~ ^[A-Za-z0-9_.-]{3,64}$ ]] || erro 'nome de usuário inválido'
-  read -r -s -p 'LUCIEN_BOOTSTRAP_KEY (não será exibida nem salva): ' bootstrap_key
+if confirmar 'Create the first administrator user now'; then
+  administrador="$(perguntar 'Name of the first administrator' 'administrator')"
+  [[ "$administrador" =~ ^[A-Za-z0-9_.-]{3,64}$ ]] || erro 'invalid username'
+  read -r -s -p 'LUCIEN_BOOTSTRAP_KEY (never shown, never saved): ' bootstrap_key
   printf '\n'
-  [[ -n "$bootstrap_key" ]] || erro 'a chave de bootstrap não pode ficar vazia'
+  [[ -n "$bootstrap_key" ]] || erro 'the bootstrap key cannot be empty'
 
   permitir_fallback='false'
-  printf '%s\n' 'Em servidor sem keyring gráfico, o CLI pode guardar o token em arquivo chmod 600.'
-  if confirmar 'Permitir esse fallback somente para salvar o token deste administrador'; then
+  printf '%s\n' 'On a server with no graphical keyring, the CLI can keep the token in a chmod 600 file.'
+  if confirmar 'Allow that fallback, only to save this administrator token'; then
     permitir_fallback='true'
   fi
 
@@ -425,9 +426,9 @@ if confirmar 'Criar agora o primeiro usuário administrador'; then
     "$bin_destino" create user "$administrador"
   unset bootstrap_key
 
-  printf '%s\n' 'Perfil e credencial foram salvos pelo próprio CLI para o usuário que executou este script.'
-  printf '%s\n' 'Agora defina USER_CREATION_ENABLED=false no .env do Hub e recrie somente o serviço hub.'
+  printf '%s\n' 'Profile and credential were saved by the CLI itself, for the user who ran this script.'
+  printf '%s\n' 'Now set USER_CREATION_ENABLED=false in the Hub .env and recreate the hub service only.'
 fi
 
-printf '\nPara usar o comando neste terminal, execute:\n  . %q\n' "$env_file"
-printf '%s\n' 'Novos terminais de login carregarão a configuração automaticamente.'
+printf '\nTo use the command in this shell, run:\n  . %q\n' "$env_file"
+printf '%s\n' 'New login shells load the configuration automatically.'
