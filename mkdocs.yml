@@ -67,6 +67,9 @@ plugins:
 # o conteúdo entrar no tema. O código do hook deve permanecer protegido na main.
 hooks:
   - wiki-builder/app/mkdocs_hook.py
+  # URLs em ingles sem renomear arquivo: o pareamento do i18n depende
+  # do nome ser identico nos dois idiomas.
+  - mkdocs_en_urls.py
 
 markdown_extensions:
   - admonition
