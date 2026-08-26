@@ -190,11 +190,16 @@ sem_saida() {
   # IP e não nome: o que `internal: true` remove é rota, não resolução. E o
   # comando serve tanto ao alpine do postgres, que traz nc e não traz Python,
   # quanto às imagens Python, que trazem o contrário.
+  #
+  # 1.1.1.1 é ALVO DE SONDA, não dado do ambiente: precisa ser um endereço
+  # público que realmente responde. Substituí-lo por uma faixa privada faz a
+  # conexão falhar sempre, e então esta função aprova até um contêiner com
+  # internet total -- o oposto do que ela existe para medir. Não sanitizar.
   if compose exec -T "$servico" sh -c '
 if command -v nc >/dev/null 2>&1; then
-  nc -z -w 5 10.200.0.1 443
+  nc -z -w 5 1.1.1.1 443
 else
-  python -c "import socket;socket.create_connection((\"10.200.0.1\",443),5)"
+  python -c "import socket;socket.create_connection((\"1.1.1.1\",443),5)"
 fi' >/dev/null 2>&1; then
     falha "$servico reaches the internet and should not"
   else
