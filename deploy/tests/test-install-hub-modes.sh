@@ -222,8 +222,8 @@ testar_gitea_compact() {
   assert_regex "$raiz/docker-compose.local.yml" '^  wiki-volume-init:$'
   assert_regex "$raiz/docker-compose.local.yml" '^    cap_add: \["CHOWN", "FOWNER"\]$'
   [[ "$(grep -Fc -- 'condition: service_completed_successfully' \
-    "$raiz/docker-compose.local.yml")" == '3' ]] || \
-    falhar 'builder, Nginx and SLM do not wait for volume preparation'
+    "$raiz/docker-compose.local.yml")" == '4' ]] || \
+    falhar 'builder, Nginx, SLM and worker do not wait for their initialization'
   ! grep -Fq -- "$publish_token" "$raiz/saida.txt" || \
     falhar 'the Gitea publication token leaked into the output'
   ! grep -Fq -- "$read_token" "$raiz/saida.txt" || \

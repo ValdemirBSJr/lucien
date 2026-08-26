@@ -166,6 +166,12 @@ services:
         condition: service_healthy
       secret-scanner:
         condition: service_healthy
+      # No perfil consolidado, aceitar Jobs antes do download do modelo
+      # consome todos os retries com 404. Em `server` a SLM é externa e o
+      # serviço não existe, por isso a dependência precisa continuar opcional.
+      slm-init:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
       interval: 10s
