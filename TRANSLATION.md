@@ -40,6 +40,39 @@ O português fica na raiz do site (`/tutorial/`) e o inglês em `/en/`
 (`/en/tutorial/`). Enquanto o espelho não está completo, `fallback_to_default`
 faz a página que falta cair na versão portuguesa em vez de sumir do site.
 
+### Não renomeie os arquivos de `docs/en`
+
+O pareamento é feito **pelo nome do arquivo**. Renomear
+`docs/en/publicacao.md` para `publication.md` quebra o par em silêncio, e o
+build continua verde:
+
+- `/en/publicacao/` continua existindo e passa a servir **português**, por
+  causa do `fallback_to_default`;
+- `/en/publication/` nasce como página órfã, fora do seletor de idioma;
+- `mkdocs build --strict` **aprova**. Nada falha.
+
+Medido: renomeando um único arquivo, o título de `/en/publicacao/` volta a ser
+"Publicação da wiki".
+
+A URL em inglês é obtida sem renomear nada. O hook `mkdocs_en_urls.py`
+reescreve apenas o destino publicado, depois que o plugin já montou os pares:
+
+| arquivo (não muda) | URL publicada |
+| --- | --- |
+| `docs/en/publicacao.md` | `/en/publication/` |
+| `docs/en/manual-instalacao.md` | `/en/installation-manual/` |
+| `docs/en/operacao.md` | `/en/operations/` |
+| `docs/en/documentacao-tecnica.md` | `/en/technical-documentation/` |
+| `docs/en/implantacao-isolada.md` | `/en/isolated-deployment/` |
+
+`tutorial`, `iam-rbac`, `index` e `runbooks` já são iguais nos dois idiomas e
+não entram no mapa. As URLs portuguesas continuam intactas, os links internos
+seguem sozinhos e o `<link rel="alternate" hreflang="pt">` de
+`/en/publication/` aponta para `../../publicacao/`.
+
+Para acrescentar um documento novo com nome diferente entre os idiomas, edite
+o mapa do hook — não o nome do arquivo.
+
 Nada disso alcança os runbooks publicados: eles são construídos por
 `wiki-builder/mkdocs.yml`, que não carrega o plugin.
 
