@@ -23,3 +23,9 @@ backups/
 
 # Exportação independente preparada para publicação open source.
 publisher/
+
+# Documento interno de entrega entre agentes. Descreve caminhos do repositório
+# de desenvolvimento, decisões pendentes e o roteiro de sincronização — nada
+# disso pertence ao repositório público. Ignorado aqui para que uma cópia de
+# árvore inteira não o traga por acidente.
+HANDOFF-*.md
