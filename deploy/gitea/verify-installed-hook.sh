@@ -180,6 +180,14 @@ else
   falha 'the message gives no placeholder guidance'
 fi
 
+# Sem --verbose o gitleaks so diz "leaks found: 1", e quem teve o push
+# recusado nao sabe o que procurar.
+if printf %s "$saida_segredo" | grep -q 'RuleID:'; then
+  ok 'the rejection names the rule that matched'
+else
+  falha 'the rejection does not name the rule: the hook is missing --verbose'
+fi
+
 printf '\n--- rejection, as the operator sees it ---\n'
 printf '%s\n' "$saida_segredo" | sed 's/^/  /'
 printf -- '------------------------------------------\n'
@@ -191,5 +199,5 @@ if [[ "$FALHAS" -gt 0 ]]; then
   printf '%d check(s) failed. The installed hook is NOT correct.\n' "$FALHAS"
   exit 1
 fi
-printf 'Installed hook validated: 6 checks, no failures.\n'
+printf 'Installed hook validated: 7 checks, no failures.\n'
 printf 'Nothing was written to %s\n' "$REPO_REAL"

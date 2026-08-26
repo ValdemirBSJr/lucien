@@ -71,15 +71,20 @@ while read -r antigo novo referencia; do
   # script assim que o Gitleaks devolve 23, o `case` abaixo nunca roda e a
   # recusa acontece sem nenhuma mensagem para quem tentou o push.
   set +e
-    saida="$(printf %s "$conteudo" | "$GITLEAKS_BIN" stdin --config="$GITLEAKS_CONFIG" --no-banner --no-color --redact=100 --exit-code=23 --timeout="$GITLEAKS_TIMEOUT" 2>&1)"
+    saida="$(printf %s "$conteudo" | "$GITLEAKS_BIN" stdin --config="$GITLEAKS_CONFIG" --no-banner --no-color --redact=100 --verbose --exit-code=23 --timeout="$GITLEAKS_TIMEOUT" 2>&1)"
   status=$?
   set -e
 
   case "$status" in
     0) ;;
     23)
-      # --redact=100 garante que o achado nunca imprime o valor do segredo;
-      # apenas arquivo, linha e regra chegam ao operador.
+      # --verbose e o que faz o achado chegar a quem teve o push recusado.
+      # Sem ele o gitleaks imprime apenas "leaks found: 1", e o operador fica
+      # sem saber o que procurar num runbook de dezenas de blocos.
+      #
+      # --redact=100 continua valendo: o valor sai como REDACTED, e o que
+      # aparece a mais e a regra que casou. Em modo stdin nao existe arquivo
+      # nem linha -- a entrada e um fluxo, nao arquivos.
       recusar "Reference: $referencia"$'\n'"$saida"
       ;;
     *)

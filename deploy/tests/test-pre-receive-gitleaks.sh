@@ -16,6 +16,7 @@ cat > "$RAIZ/bin/gitleaks" <<'STUB'
 #!/usr/bin/env bash
 # Valida os flags como o binario real faria: um stub permissivo aprovaria
 # argumento que o gitleaks recusa, como --timeout com sufixo de duracao.
+verboso=0
 for arg in "$@"; do
   case "$arg" in
     --timeout=*)
@@ -35,6 +36,7 @@ for arg in "$@"; do
       valor="${arg#--exit-code=}"
       case "$valor" in *[!0-9]*|"") echo "Error: --exit-code invalid" >&2; exit 1;; esac
       ;;
+    --verbose|-v) verboso=1 ;;
     stdin|--config=*|--no-banner|--no-color) ;;
     *) echo "Error: unknown flag: $arg" >&2; exit 1 ;;
   esac
@@ -42,6 +44,18 @@ done
 c="$(cat)"
 [ -n "$c" ] || { echo "Error: entrada vazia" >&2; exit 1; }
 if printf '%s' "$c" | grep -q 'SEGREDO_DE_TESTE'; then
+  # O detalhe so sai com --verbose, como no binario real. Assim, se o hook
+  # perder o flag, a afirmacao do avaliar() falha em vez de seguir passando.
+  if [ "$verboso" -eq 1 ]; then
+    printf 'Finding:     SEGREDO_DE_TESTE REDACTED
+'
+    printf 'Secret:      REDACTED
+'
+    printf 'RuleID:      lucien-teste-sentinela
+'
+    printf '
+'
+  fi
   printf 'WRN leaks found: 1
 '
   exit 23
@@ -92,6 +106,12 @@ avaliar() {
   [ "$rc" -eq "$esperado" ] || erro="rc=$rc expected=$esperado"
   if [ "$esperado" -ne 0 ] && ! printf %s "$saida" | grep -q "PUSH REJECTED"; then
     erro="${erro:+$erro; }rejected without a message"
+  fi
+  # Recusar sem dizer o que casou manda o operador procurar as cegas. E o
+  # detalhe so existe porque o hook passa --verbose -- esta afirmacao e o que
+  # impede o flag de ser removido em silencio.
+  if [ "$esperado" -ne 0 ] && ! printf %s "$saida" | grep -q 'RuleID:'; then
+    erro="${erro:+$erro; }rejected without naming the rule"
   fi
 
   if [ -z "$erro" ]; then
