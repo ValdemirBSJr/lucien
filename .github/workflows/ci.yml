@@ -88,7 +88,7 @@ jobs:
             --mount "type=bind,src=$PWD,dst=/docs,readonly" \
             --workdir /docs \
             python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 \
-            sh -euc 'pip install --quiet --requirement requirements-docs.txt && mkdocs build --strict --site-dir /tmp/site'
+            sh -euc 'pip install --quiet --requirement requirements-docs.txt && mkdocs build --strict --site-dir /tmp/site && python scripts/test-docs-html.py /tmp/site'
 
   lint:
     runs-on: ubuntu-22.04
