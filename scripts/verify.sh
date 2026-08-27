@@ -162,7 +162,7 @@ portao_docs() {
     --mount "type=bind,src=$ROOT_DIR,dst=/docs,readonly" \
     --workdir /docs \
     "$IMAGEM_LINT" \
-    sh -euc 'pip install --quiet --require-hashes --requirement requirements-docs.lock >/dev/null && mkdocs build --strict --site-dir /tmp/site >/dev/null'
+    sh -euc 'pip install --quiet --require-hashes --requirement requirements-docs.lock >/dev/null && mkdocs build --strict --site-dir /tmp/site >/dev/null && python scripts/test-docs-html.py /tmp/site'
 }
 
 # --- lint e tipagem Python --------------------------------------------------
