@@ -23,8 +23,10 @@ for comando in install python3 curl openssl visudo sshd sudo runuser; do
   command -v "$comando" >/dev/null 2>&1 || erro "required command missing: $comando"
 done
 [[ -f "$SCRIPT_DIR/jump/lucien-jump-enroll.py" ]] || erro 'incomplete copy of deploy/jump'
+[[ -f "$SCRIPT_DIR/jump/00-lucien-jump.conf" ]] || erro 'incomplete copy of deploy/jump'
 [[ -x /usr/local/bin/lucien ]] || erro 'install the CLI at /usr/local/bin/lucien first'
 getent group lucien-primary >/dev/null || erro 'the lucien-primary group does not exist; configure SSSD first'
+getent group lucien-ssh-users >/dev/null || groupadd lucien-ssh-users
 
 api_host="$(perguntar 'Hub HTTPS URL' 'https://runbook.example.internal:8443')"
 [[ "$api_host" =~ ^https://[^[:space:]]+$ ]] || erro 'API_HOST must use HTTPS'
@@ -36,6 +38,12 @@ local_admin="$(perguntar 'Local account that represents the administrator' 'admi
 hub_admin="$(perguntar 'Matching administrative username on the Hub' 'Admin')"
 [[ "$local_admin" =~ ^[a-z_][a-z0-9_-]*$ ]] || erro 'invalid local account'
 [[ "$hub_admin" =~ ^[A-Za-z0-9_.-]{3,64}$ ]] || erro 'invalid administrative username'
+
+# Evita trancar de fora quem está instalando: garante que o usuário atual
+# (quem chamou sudo, ou o admin local informado acima) fique no AllowGroups.
+current_admin="${SUDO_USER:-$local_admin}"
+id "$current_admin" >/dev/null 2>&1 || erro "local account not found: $current_admin"
+gpasswd -a "$current_admin" lucien-ssh-users >/dev/null
 
 printf '%s' 'M2M credential luc_jump_ issued by the Hub (never shown): '
 IFS= read -r -s enrollment_token
@@ -77,10 +85,12 @@ LUCIEN_BINARY=/usr/local/bin/lucien
 EOF
 install -o root -g root -m 0644 "$config_tmp" /etc/lucien/jump.conf
 
-printf 'export API_HOST=%q\n' "$api_host" >"$profile_tmp"
-printf 'export TLS_CA_FILE=%q\n' '/etc/lucien/jump-ca.crt' >>"$profile_tmp"
-printf 'export LUCIEN_LOCAL_ADMIN_USER=%q\n' "$local_admin" >>"$profile_tmp"
-printf 'export LUCIEN_HUB_ADMIN_USER=%q\n' "$hub_admin" >>"$profile_tmp"
+{
+  printf 'export API_HOST=%q\n' "$api_host"
+  printf 'export TLS_CA_FILE=%q\n' '/etc/lucien/jump-ca.crt'
+  printf 'export LUCIEN_LOCAL_ADMIN_USER=%q\n' "$local_admin"
+  printf 'export LUCIEN_HUB_ADMIN_USER=%q\n' "$hub_admin"
+} >"$profile_tmp"
 install -o root -g root -m 0644 "$profile_tmp" \
   /etc/profile.d/29-lucien-jump-config.sh
 install -o root -g root -m 0644 "$SCRIPT_DIR/jump/jump-shell.sh" \
@@ -102,6 +112,13 @@ chmod 0644 /etc/ssh/sshd_config.d/01-lucien-banner.conf
 if ! sshd -t; then
   rm -f /etc/ssh/sshd_config.d/01-lucien-banner.conf
   erro 'invalid SSH configuration; the banner drop-in was removed'
+fi
+
+install -o root -g root -m 0644 "$SCRIPT_DIR/jump/00-lucien-jump.conf" \
+  /etc/ssh/sshd_config.d/00-lucien-jump.conf
+if ! sshd -t; then
+  rm -f /etc/ssh/sshd_config.d/00-lucien-jump.conf
+  erro 'invalid SSH configuration; the 00-lucien-jump.conf drop-in was removed'
 fi
 
 if systemctl is-active --quiet ssh; then
