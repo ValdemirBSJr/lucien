@@ -35,6 +35,30 @@ _PROMPTED_COMMAND_PATTERN = re.compile(
 )
 _PROMPT_ONLY_PATTERN = re.compile(r"^(?:\([^\r\n)]+\)[ \t]+)?\S*[#$>][ \t]*$")
 
+# Os comandos que controlam a própria captura. Nunca são procedimento: quem os
+# lê num runbook não aprende nada e ainda é induzido a executá-los.
+#
+# Vive no domínio porque a regra é a mesma nos dois lugares que precisam dela --
+# a extração de comandos e o recorte da saída. Enquanto morava só na
+# infraestrutura, a saída ficava desprotegida: bastava a linha final perder o
+# prompt para `lucien stop` entrar no bloco do comando anterior e chegar ao
+# documento publicado.
+CAPTURE_CONTROL_COMMAND = re.compile(
+    r"^(?:sudo[ \t]+)?(?:\S*/)?lucien[ \t]+(?:start|stop|upload)(?:[ \t]|$)"
+)
+
+
+def is_capture_control(line: str) -> bool:
+    """Informa se a linha é um comando de controle da captura.
+
+    Aceita a linha com prompt (`user@host:~$ lucien stop`) e sem prompt, que é
+    a forma que escapava: sem prompt a linha não é comando para o extrator, e
+    por isso era tratada como saída.
+    """
+
+    candidato = prompted_command(line) or line.strip()
+    return bool(candidato) and CAPTURE_CONTROL_COMMAND.match(candidato) is not None
+
 
 def prompted_command(line: str) -> str | None:
     """Retorna o comando quando a linha contém um prompt reconhecível."""
@@ -57,6 +81,54 @@ def prompted_command_lines(log: str, limit: int = 200) -> tuple[str, ...]:
             if len(commands) == limit:
                 break
     return tuple(commands)
+
+
+def completion_partials(log: str) -> set[str]:
+    """Estados intermediários deixados por completação com Tab.
+
+    CLIs de equipamento reexibem a linha inteira a cada Tab: emitem `\\r\\n`, o
+    prompt e o comando como está até ali. Cada quadro vira uma linha física, e
+    cada linha vira um comando -- foi assim que um runbook do CMTS saiu com
+    `cable priva`, `cable privacy host`, `cable privacy hostl` e mais dois,
+    quando só o último foi executado.
+
+    Medido no equipamento: a reexibição não usa `ESC[K` nem retorno de cursor.
+    São linhas de verdade, então a evidência está ENTRE elas.
+
+    Duas condições, e as duas importam:
+
+    - o comando é prefixo do seguinte (igualdade inclusa, que é o Tab ambíguo
+      reexibindo a linha sem completar nada);
+    - nada foi impresso entre os dois.
+
+    A segunda é o que separa o quadro de Tab de dois comandos legítimos. Em
+    `show cable modem` seguido de `show cable modem cable 1/0/0 counters`, o
+    primeiro foi executado e imprimiu a tabela; o quadro de Tab não imprime
+    nada, porque nunca foi executado.
+
+    Limitação conhecida: correção por backspace que troca caracteres no meio
+    -- `hostl` virando `hotli` -- não é prefixo do seguinte e continua
+    aparecendo. Não há sinal que a distinga de um comando que falhou e foi
+    reescrito, e inventar um apagaria comando de verdade.
+    """
+
+    anterior: str | None = None
+    houve_saida = False
+    parciais: set[str] = set()
+
+    for raw_line in log.splitlines():
+        comando = prompted_command(raw_line)
+        if comando is None:
+            if raw_line.strip() and not _PROMPT_ONLY_PATTERN.fullmatch(
+                raw_line.strip()
+            ):
+                houve_saida = True
+            continue
+        if anterior is not None and not houve_saida and comando.startswith(anterior):
+            parciais.add(anterior)
+        anterior = comando
+        houve_saida = False
+    return parciais
 
 
 def observed_command_lines(log: str) -> set[str]:
@@ -166,6 +238,12 @@ def extract_command_outputs(
             line = lines[cursor]
             prompted = prompted_command(line)
             if prompted is not None or line.strip() in remaining:
+                break
+            # `lucien stop` sem prompt não é comando para o extrator, então
+            # caía aqui como saída do comando anterior. Encerra o bloco em vez
+            # de pular a linha: o que vem depois do fim da captura não é saída
+            # de comando nenhum.
+            if is_capture_control(line):
                 break
             if not _PROMPT_ONLY_PATTERN.fullmatch(line.strip()):
                 captured.append(line)
