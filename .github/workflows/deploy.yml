@@ -10,6 +10,8 @@ on:
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - "wiki-builder/app/mkdocs_hook.py"
+      - "mkdocs_en_urls.py"
+      - "scripts/test-docs-html.py"
       - ".github/workflows/deploy.yml"
   pull_request:
     branches:
@@ -19,6 +21,8 @@ on:
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - "wiki-builder/app/mkdocs_hook.py"
+      - "mkdocs_en_urls.py"
+      - "scripts/test-docs-html.py"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -47,7 +51,9 @@ jobs:
         run: python -m pip install -r requirements-docs.txt
 
       - name: Compilar site estático
-        run: mkdocs build --strict
+        run: |
+          mkdocs build --strict
+          python scripts/test-docs-html.py site
 
       - name: Enviar artefato do Pages
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
