@@ -8,6 +8,8 @@ import httpx
 from app.domain.models import RunbookEnrichment, RunbookSuggestions
 from app.domain.ports import CommandExtractor, RunbookEnricher, UpstreamError
 from app.domain.transcript import (
+    CAPTURE_CONTROL_COMMAND,
+    completion_partials,
     observed_command_lines,
     prompt_view,
     prompted_command,
@@ -19,9 +21,9 @@ _COMMAND_NOT_FOUND_PATTERNS = (
     re.compile(r"(?i)\bCommand ['\"]([^'\"]+)['\"] not found\b"),
     re.compile(r"(?i)^(?:bash|sh|zsh):[ \t]+([^:\s]+):[ \t]+(?:command[ \t]+)?not found\b"),
 )
-_LUCIEN_CAPTURE_COMMAND_PATTERN = re.compile(
-    r"^(?:sudo[ \t]+)?(?:\S*/)?lucien[ \t]+(?:start|stop|upload)(?:[ \t]|$)"
-)
+# O padrão vive em app.domain.transcript: a mesma regra governa a extração de
+# comandos e o recorte da saída, e manter duas cópias deixou a saída
+# desprotegida por engano.
 
 
 class OllamaCommandExtractor(CommandExtractor):
@@ -98,6 +100,9 @@ autorização ou nível de acesso.
         seen: set[str] = set()
         observed_commands = observed_command_lines(sanitized_log)
         failed_executables = _failed_executables(sanitized_log)
+        # Quadros de completação com Tab: o equipamento reexibe a linha inteira
+        # a cada Tab, e cada reexibição chega aqui como um comando próprio.
+        partial_commands = completion_partials(sanitized_log)
         # Linhas precedidas por prompt são uma fonte conservadora de recall quando
         # uma SLM pequena omite comandos; todas continuam sujeitas aos mesmos filtros.
         # Elas vêm primeiro porque estão na ordem do terminal, e a ordem importa:
@@ -120,7 +125,8 @@ autorização ou nível de acesso.
                 or len(command.encode("utf-8")) > 4096
                 or command not in observed_commands
                 or _first_token(command) in failed_executables
-                or _LUCIEN_CAPTURE_COMMAND_PATTERN.match(command)
+                or CAPTURE_CONTROL_COMMAND.match(command)
+                or command in partial_commands
                 or command in seen
             ):
                 continue
