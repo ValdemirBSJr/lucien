@@ -1,4 +1,8 @@
-from app.domain.transcript import extract_command_outputs
+from app.domain.transcript import (
+    completion_partials,
+    extract_command_outputs,
+    is_capture_control,
+)
 
 
 def test_relaciona_saida_ao_comando_sem_incluir_echo_ou_proximo_prompt() -> None:
@@ -314,3 +318,114 @@ def test_visao_reduzida_respeita_o_teto_de_caracteres() -> None:
 
     assert len(reduzido) <= 8_000
     assert reduzido.startswith("operador@host:~$ echo comando-numero-0")
+
+
+def test_saida_nao_absorve_lucien_stop_sem_prompt() -> None:
+    """A linha final da captura nao pode virar saida do ultimo comando.
+
+    Reportado em producao: `lucien stop` chegou ao runbook publicado. O filtro
+    de comandos de controle existia, mas so protegia a LISTA de comandos.
+    Quando a linha final perde o prompt -- e o redesenho do readline faz isso
+    ao converter `\r` em quebra --, ela deixa de ser comando para o extrator e
+    era recolhida como saida do comando anterior.
+    """
+
+    log = (
+        "U000001@host:~$ ssh U000001@10.0.0.1\n"
+        "OLT01#quit\n"
+        "\n"
+        "  Configuration console exit, please retry to log on\n"
+        "Connection to 10.0.0.1 closed.\n"
+        "lucien stop\n"
+    )
+
+    (saida,) = extract_command_outputs(log, ("quit",))
+
+    assert "Configuration console exit" in saida
+    assert "lucien stop" not in saida
+
+
+def test_controle_de_captura_reconhecido_com_e_sem_prompt() -> None:
+    assert is_capture_control("lucien stop")
+    assert is_capture_control("U000001@host:~$ lucien stop")
+    assert is_capture_control("  sudo lucien upload  ")
+    assert is_capture_control("/usr/local/bin/lucien start nome")
+    # Nao pode engolir comando legitimo que apenas comece com a palavra.
+    assert not is_capture_control("lucien reviews")
+    assert not is_capture_control("lucienctl start")
+    assert not is_capture_control("display acl 3102")
+
+
+def test_descarta_quadros_de_tab_do_cmts() -> None:
+    """A sequencia real que produziu o runbook com cinco comandos parciais.
+
+    O CMTS reexibe a linha inteira a cada Tab. Medido no equipamento: sem
+    ESC[K e sem retorno de cursor, sao linhas fisicas com prompt proprio.
+    """
+
+    log = (
+        "CMTS-01(config)#cable priva\n"
+        "CMTS-01(config)#cable privacy host\n"
+        "CMTS-01(config)#cable privacy hostl\n"
+        "CMTS-01(config)#cable privacy hotli\n"
+        "CMTS-01(config)#cable privacy hotlist cm b85e.71d0.a1c4\n"
+        "CMTS-01(config)#end\n"
+    )
+
+    # Tres dos quatro quadros somem. `cable privacy hostl` sobrevive porque
+    # `hotli` nao comeca com `hostl`: ali o operador corrigiu `hos` para
+    # `hot`, e esse e o limite registrado no ultimo teste deste arquivo.
+    assert completion_partials(log) == {
+        "cable priva",
+        "cable privacy host",
+        "cable privacy hotli",
+    }
+
+
+def test_preserva_dois_comandos_reais_quando_um_e_prefixo_do_outro() -> None:
+    """`show cable modem` e `show cable modem cable ... counters` sao dois.
+
+    O primeiro foi executado e imprimiu a tabela. E a saida entre eles que
+    separa o comando de verdade do quadro de Tab; sem essa condicao, a regra
+    apagaria um passo do procedimento.
+    """
+
+    log = (
+        "CMTS-01(config)#show cable modem\n"
+        "MAC Address    US Packets\n"
+        "b01f.f41a.ea76 27896662\n"
+        "CMTS-01(config)#show cable modem cable 1/0/0 counters\n"
+        "MAC Address    US Packets\n"
+    )
+
+    assert completion_partials(log) == set()
+
+
+def test_tab_ambiguo_reexibe_a_linha_identica() -> None:
+    """Tab sem completar nada: bell e a mesma linha de novo.
+
+    Medido no CMTS: `18 car -> 18 car`, prefixo com o mesmo comprimento, que
+    e igualdade. Entra na regra pelo mesmo caminho.
+    """
+
+    log = (
+        "CMTS-01(config)#cable privacy hotlist\n"
+        "CMTS-01(config)#cable privacy hotlist\n"
+    )
+
+    assert completion_partials(log) == {"cable privacy hotlist"}
+
+
+def test_correcao_por_backspace_nao_e_coberta() -> None:
+    """Limitacao registrada: `hostl` -> `hotli` nao e prefixo do seguinte.
+
+    Nao ha sinal que separe isso de um comando que falhou e foi reescrito.
+    Este teste existe para que a limitacao seja deliberada, e nao surpresa.
+    """
+
+    log = (
+        "CMTS-01(config)#cable privacy hostl\n"
+        "CMTS-01(config)#cable privacy hotli\n"
+    )
+
+    assert completion_partials(log) == set()
