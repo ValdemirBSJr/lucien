@@ -22,6 +22,7 @@ from app.domain.ports import (
     PreconditionFailedError,
     SecretDetectedError,
     SecretScanner,
+    SecretScanResult,
     StorageProvider,
     UpstreamError,
     ValidationError,
@@ -36,9 +37,9 @@ class _Scanner(SecretScanner):
         self.blocked: set[str] = set()
         self.scanned: list[str] = []
 
-    async def detect(self, content: str) -> bool:
+    async def detect(self, content: str) -> SecretScanResult:
         self.scanned.append(content)
-        return content in self.blocked
+        return SecretScanResult(detected=content in self.blocked)
 
 
 class _FlakyStorage(StorageProvider):

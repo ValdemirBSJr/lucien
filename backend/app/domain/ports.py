@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 
 from app.domain.models import (
@@ -296,11 +297,28 @@ class RunbookEnricher(ABC):
     ) -> RunbookEnrichment: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SecretScanResult:
+    """Veredito do scanner, com a regra que casou quando ela é conhecida.
+
+    `rules` traz apenas o identificador da regra -- `lucien-snmp-community`,
+    `generic-api-key` --, nunca o trecho que casou nem o valor. É o que o
+    operador precisa para achar o segredo no próprio documento; recusar sem
+    dizer o quê obriga a caçar às cegas num Markdown de dezenas de blocos.
+
+    Vazia quando o scanner é antigo e não informa a regra. A recusa continua
+    valendo: o veredito é `detected`, e a regra é acréscimo.
+    """
+
+    detected: bool
+    rules: tuple[str, ...] = ()
+
+
 class SecretScanner(ABC):
     """Porta independente da DLP para detecção mandatória de segredos."""
 
     @abstractmethod
-    async def detect(self, content: str) -> bool: ...
+    async def detect(self, content: str) -> SecretScanResult: ...
 
 
 class UploadCipher(ABC):

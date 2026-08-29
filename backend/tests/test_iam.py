@@ -47,10 +47,13 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
     monkeypatch.setenv("BOOTSTRAP_API_KEY", "b" * 32)
     monkeypatch.setenv("AUTH_PEPPER", "p" * 32)
     from app.main import create_app
+    from app.domain.ports import SecretScanResult
     from app.infrastructure.secret_scanner import GitleaksSecretScanner
 
-    async def allow_content(_: GitleaksSecretScanner, _content: str) -> bool:
-        return False
+    async def allow_content(
+        _: GitleaksSecretScanner, _content: str
+    ) -> SecretScanResult:
+        return SecretScanResult(detected=False)
 
     monkeypatch.setattr(GitleaksSecretScanner, "detect", allow_content)
 

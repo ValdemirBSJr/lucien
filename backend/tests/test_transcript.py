@@ -429,3 +429,53 @@ def test_correcao_por_backspace_nao_e_coberta() -> None:
     )
 
     assert completion_partials(log) == set()
+
+
+def test_recusa_por_segredo_nomeia_a_regra_e_nao_o_valor() -> None:
+    """Reportado em producao: recusa sem motivo, impossivel de diagnosticar.
+
+    A recusa acontece depois de o operador escrever o procedimento inteiro.
+    Sem o nome da regra ele reabre o rascunho e procura as cegas.
+    """
+
+    from app.application import _mensagem_de_segredo
+    from app.domain.ports import SecretScanResult
+
+    mensagem = _mensagem_de_segredo(
+        SecretScanResult(detected=True, rules=("lucien-snmp-community",))
+    )
+
+    assert "lucien-snmp-community" in mensagem
+    assert "secret policy" in mensagem
+
+
+def test_recusa_sem_regra_conhecida_mantem_a_mensagem_antiga() -> None:
+    """Scanner anterior a esta mudanca nao informa regra.
+
+    O veredito e o que importa; a regra e acrescimo. Um scanner antigo nao
+    pode derrubar a publicacao nem produzir mensagem quebrada.
+    """
+
+    from app.application import _mensagem_de_segredo
+    from app.domain.ports import SecretScanResult
+
+    mensagem = _mensagem_de_segredo(SecretScanResult(detected=True))
+
+    assert mensagem == "content blocked by the secret policy"
+
+
+def test_adaptador_descarta_regra_que_nao_seja_identificador() -> None:
+    """Ultima barreira antes do operador: nada que nao seja id atravessa.
+
+    Se o scanner for adulterado ou mudar de formato, o Hub ainda recusa o que
+    parecer conteudo -- o custo e perder o motivo, nunca vazar o valor.
+    """
+
+    from app.infrastructure.secret_scanner import _regras
+
+    assert _regras(["lucien-snmp-community"]) == ("lucien-snmp-community",)
+    assert _regras(["senha do cliente: abc123"]) == ()
+    assert _regras(["x" * 200]) == ()
+    assert _regras("nao e lista") == ()
+    assert _regras(None) == ()
+    assert _regras([1, True, None]) == ()

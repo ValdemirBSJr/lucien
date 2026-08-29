@@ -540,10 +540,10 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
                     .with_for_update()
                 )
                 if row is None or not row.is_active:
-                    raise AuthenticationError("token provisório inválido")
+                    raise AuthenticationError("invalid provisional token")
                 expires_at = row.provisional_expires_at
                 if expires_at is None:
-                    raise AuthenticationError("token provisório inválido")
+                    raise AuthenticationError("invalid provisional token")
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=timezone.utc)
                 if expires_at <= exchanged_at:
@@ -984,7 +984,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
                 )
             )
             if row is None:
-                raise NotFoundError("runbook publicado não encontrado")
+                raise NotFoundError("published runbook not found")
             root_id = row.root_job_id or row.id
             root = row if root_id == row.id else await session.scalar(
                 select(JobRow).where(
@@ -1167,7 +1167,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
                 .with_for_update()
             )
             if source is None:
-                raise NotFoundError("runbook publicado não encontrado")
+                raise NotFoundError("published runbook not found")
             if source.content_hash != expected_content_hash:
                 raise PreconditionFailedError(
                     "versão base divergente; recarregue o runbook"

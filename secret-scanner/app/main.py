@@ -17,6 +17,41 @@ class ScanRequest(BaseModel):
 
 class ScanResponse(BaseModel):
     detected: bool
+    # Somente o identificador da regra que casou. O motivo atravessa; o valor
+    # nunca. Vazia quando o gitleaks não informou nenhuma regra reconhecível.
+    rules: list[str] = []
+
+
+# Um id de regra é um nome do nosso próprio TOML -- `lucien-snmp-community` --
+# ou uma regra padrão do gitleaks. Nunca contém espaço nem pontuação de texto.
+# Validar aqui é o que garante que, mesmo se o formato de saída do gitleaks
+# mudar, nada além de um identificador saia deste serviço.
+_RULE_ID = __import__("re").compile(r"^[A-Za-z0-9._-]{1,64}$")
+_MAX_RULES = 8
+
+
+def _regras_do_achado(saida: bytes | None) -> tuple[str, ...]:
+    """Extrai apenas as linhas `RuleID:` do relatório do gitleaks.
+
+    O relatório traz também `Finding`, `Secret`, `Match` e `File`. Nenhum
+    desses é lido: percorrer linha a linha e aceitar só o prefixo `RuleID:` é
+    mais seguro do que confiar que `--redact=100` cobriu tudo.
+
+    Falha fechada quanto à informação, nunca quanto ao veredito: qualquer coisa
+    inesperada devolve tupla vazia, e a recusa acontece do mesmo jeito.
+    """
+
+    if not saida:
+        return ()
+    encontradas: list[str] = []
+    for linha in saida.decode("utf-8", errors="replace").splitlines():
+        limpa = linha.strip()
+        if not limpa.startswith("RuleID:"):
+            continue
+        candidata = limpa[len("RuleID:") :].strip()
+        if _RULE_ID.fullmatch(candidata):
+            encontradas.append(candidata)
+    return tuple(sorted(dict.fromkeys(encontradas))[:_MAX_RULES])
 
 
 def _inteiro(nome: str, padrao: int, minimo: int, maximo: int) -> int:
@@ -80,7 +115,7 @@ async def _encerrar(processo: asyncio.subprocess.Process) -> None:
         await processo.wait()
 
 
-async def _executar(content: str) -> bool:
+async def _executar(content: str) -> tuple[bool, tuple[str, ...]]:
     try:
         processo = await asyncio.create_subprocess_exec(
             "gitleaks",
@@ -89,10 +124,17 @@ async def _executar(content: str) -> bool:
             "--no-banner",
             "--no-color",
             "--redact=100",
+            # Sem --verbose o gitleaks só devolve o código de saída, e a recusa
+            # chega ao operador sem dizer o que casou. Com ele vem o RuleID --
+            # e só o RuleID atravessa daqui, por `_regras_do_achado`.
+            "--verbose",
             "--exit-code=23",
             f"--timeout={GITLEAKS_TIMEOUT_SECONDS}",
             stdin=asyncio.subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
+            # A saída passa a ser lida, não descartada. `--redact=100` já
+            # substitui o valor, e a extração aceita exclusivamente linhas
+            # `RuleID:`; nada mais sai desta função.
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
     except OSError as error:
@@ -101,7 +143,7 @@ async def _executar(content: str) -> bool:
         ) from error
 
     try:
-        await asyncio.wait_for(
+        saida, _ = await asyncio.wait_for(
             processo.communicate(content.encode("utf-8")),
             timeout=GITLEAKS_TIMEOUT_SECONDS + 1,
         )
@@ -117,13 +159,13 @@ async def _executar(content: str) -> bool:
         raise
 
     if processo.returncode == 0:
-        return False
+        return False, ()
     if processo.returncode == 23:
-        return True
+        return True, _regras_do_achado(saida)
     raise HTTPException(status_code=503, detail="secret scanner falhou de forma segura")
 
 
-async def scan_content(content: str) -> bool:
+async def scan_content(content: str) -> tuple[bool, tuple[str, ...]]:
     """Executa Gitleaks por stdin e descarta toda saída que possa conter segredo."""
 
     vagas = _limite()
@@ -194,4 +236,5 @@ async def ready() -> dict[str, str]:
 
 @app.post("/scan", response_model=ScanResponse)
 async def scan(payload: ScanRequest) -> ScanResponse:
-    return ScanResponse(detected=await scan_content(payload.content))
+    detectado, regras = await scan_content(payload.content)
+    return ScanResponse(detected=detectado, rules=list(regras))

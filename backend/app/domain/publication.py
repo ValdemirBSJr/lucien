@@ -78,7 +78,7 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
     without_prefix = normalized.lstrip("\ufeff \t\n")
     if without_prefix == "---" or without_prefix.startswith("---\n"):
         raise ValidationError(
-            "frontmatter enviado pelo cliente é proibido; o Hub gera os metadados"
+            "client-sent frontmatter is not allowed; the Hub generates the metadata"
         )
 
     lines = normalized.split("\n")
@@ -97,28 +97,28 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
                 # comando escapa da gramática de passos por este caminho.
                 if index + 1 < len(lines) and lines[index + 1] == "```bash":
                     raise ValidationError(
-                        "bloco bash deve pertencer a um cabeçalho de passo; "
-                        "use '### Step X: Action' ou '### Passo X: Ação'"
+                        "a bash block must belong to a step heading; "
+                        "use '### Step X: Action' or '### Passo X: Ação'"
                     )
                 index += 1
                 continue
             step_number = int(match.group(1))
             if step_number != expected_step:
-                raise ValidationError("os passos devem ser sequenciais e começar em 1")
+                raise ValidationError("steps must be sequential and start at 1")
             if index + 1 >= len(lines) or lines[index + 1] != "```bash":
                 raise ValidationError(
-                    f"Passo {step_number} deve ser seguido imediatamente por ```bash"
+                    f"Step {step_number} must be followed immediately by ```bash"
                 )
 
             closing = index + 2
             while closing < len(lines) and lines[closing] != "```":
                 closing += 1
             if closing >= len(lines):
-                raise ValidationError(f"bloco bash do Passo {step_number} não foi fechado")
+                raise ValidationError(f"the bash block of Step {step_number} was not closed")
 
             command = "\n".join(lines[index + 2 : closing]).strip()
             if not command:
-                raise ValidationError(f"Passo {step_number} não contém comando")
+                raise ValidationError(f"Step {step_number} contains no command")
             command_blocks.append(command)
             expected_step += 1
             index = closing + 1
@@ -128,7 +128,7 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
         if fence is not None:
             if line == "```bash":
                 raise ValidationError(
-                    "bloco bash deve pertencer a um cabeçalho de passo"
+                    "a bash block must belong to a step heading"
                 )
             # Fence genérico (exemplos, YAML, diagramas): conteúdo é literal e
             # não participa da gramática dos passos.
@@ -137,7 +137,7 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
         index += 1
 
     if not command_blocks:
-        raise ValidationError("o playbook deve conter ao menos um passo operacional")
+        raise ValidationError("the playbook must contain at least one operational step")
 
     criticality = _classify_criticality(command_blocks)
     return ValidatedPlaybook(
@@ -162,7 +162,7 @@ def _skip_generic_fence(
         ):
             return index + 1
         index += 1
-    raise ValidationError("bloco de código iniciado não foi fechado")
+    raise ValidationError("an opened code block was not closed")
 
 
 def authorize_publication(
@@ -182,7 +182,7 @@ def authorize_publication(
         and not entry_roles_enabled
     ):
         raise ForbiddenError(
-            "usuário junior não pode publicar operação de criticidade alta"
+            "a junior user cannot publish a high-criticality operation"
         )
 
 

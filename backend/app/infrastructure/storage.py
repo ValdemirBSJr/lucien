@@ -32,7 +32,7 @@ def clean_artifact_name(job_name: str) -> str:
 
     cleaned = _SESSION_SUFFIX.sub("", job_name)
     if _SAFE_ARTIFACT_NAME.fullmatch(cleaned) is None:
-        raise ConflictError("nome do Job inválido para publicação")
+        raise ConflictError("invalid job name for publication")
     return cleaned
 
 
@@ -77,7 +77,7 @@ def playbook_relative_path(
     domain_function: str | None = None,
 ) -> Path:
     if not _SAFE_JOB_ID.fullmatch(job_id):
-        raise ConflictError("identificador de Job inválido para publicação")
+        raise ConflictError("invalid job identifier for publication")
     filename = f"{job_id}.md"
     if artifact_name is not None:
         # O UUID completo preserva a identidade única do Job no caminho.
@@ -87,7 +87,7 @@ def playbook_relative_path(
         # o domínio confiável congelado pelo Hub.
         return Path(f"{created_at.year:04d}") / f"{created_at.month:02d}" / filename
     if _SAFE_DOMAIN_FUNCTION.fullmatch(domain_function) is None:
-        raise ConflictError("domínio inválido para publicação")
+        raise ConflictError("invalid domain for publication")
     return Path(f"{created_at.year:04d}") / domain_function / filename
 
 
@@ -143,7 +143,7 @@ def git_playbook_relative_path(
         or _SAFE_GIT_DOCS_PREFIX.fullmatch(docs_prefix) is None
         or any(part in {"", ".", ".."} for part in prefix.parts)
     ):
-        raise ConflictError("prefixo Git inválido para publicação")
+        raise ConflictError("invalid Git prefix for publication")
     relative = PurePosixPath(
         playbook_relative_path(
             job_id, created_at, artifact_name, domain_function
@@ -192,29 +192,29 @@ class LocalProvider(StorageProvider):
                 return await asyncio.to_thread(self._read_sync, candidato)
             except NotFoundError:
                 continue
-        raise NotFoundError("artefato publicado nao encontrado")
+        raise NotFoundError("published artifact not found")
 
     def _read_sync(self, relative: Path) -> str:
         target = (self._root / relative).resolve()
         # Mesma verificacao da escrita: um caminho derivado nao pode escapar
         # da raiz, ainda que a leitura pareca inofensiva.
         if self._root not in target.parents:
-            raise ConflictError("caminho de leitura escapou da raiz permitida")
+            raise ConflictError("the read path escaped the allowed root")
         try:
             return target.read_text(encoding="utf-8")
         except FileNotFoundError as error:
-            raise NotFoundError("artefato publicado nao encontrado") from error
+            raise NotFoundError("published artifact not found") from error
 
     def _publish_sync(self, relative: Path, markdown: str) -> PublishedArtifact:
         target = (self._root / relative).resolve()
         if self._root not in target.parents:
-            raise ConflictError("caminho de publicação escapou da raiz permitida")
+            raise ConflictError("the publication path escaped the allowed root")
         content = markdown.encode("utf-8")
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
 
         if target.exists():
             if target.read_bytes() != content:
-                raise ConflictError("playbook já existe com conteúdo diferente")
+                raise ConflictError("the playbook already exists with different content")
             return PublishedArtifact(url=f"local://{relative.as_posix()}")
 
         descriptor, temporary_name = tempfile.mkstemp(
@@ -234,7 +234,7 @@ class LocalProvider(StorageProvider):
             except FileExistsError:
                 if target.read_bytes() != content:
                     raise ConflictError(
-                        "playbook já existe com conteúdo diferente"
+                        "the playbook already exists with different content"
                     )
             else:
                 # Persiste a entrada de diretório após o conteúdo já ter passado
@@ -265,7 +265,7 @@ class GitContentProvider(StorageProvider):
         ca_file: Path | None,
     ) -> None:
         if not all((api_base, owner, repository, branch, token)):
-            raise ValueError("configuração Git incompleta")
+            raise ValueError("incomplete Git configuration")
         self._api_base = api_base.rstrip("/")
         self._owner = owner
         self._repository = repository
@@ -282,7 +282,7 @@ class GitContentProvider(StorageProvider):
                 # públicas já carregadas por create_default_context().
                 self._ssl_context.load_verify_locations(cafile=str(ca_file))
             except (OSError, ssl.SSLError) as error:
-                raise ValueError("não foi possível carregar GIT_CA_FILE") from error
+                raise ValueError("could not load GIT_CA_FILE") from error
         self._client: httpx.AsyncClient | None = None
 
     def _cliente(self) -> httpx.AsyncClient:
@@ -319,16 +319,16 @@ class GitContentProvider(StorageProvider):
         try:
             data = response.json()
         except ValueError as error:
-            raise UpstreamError("provedor Git respondeu com corpo inválido") from error
+            raise UpstreamError("the Git provider answered with an invalid body") from error
         if not isinstance(data, dict):
-            raise UpstreamError("provedor Git respondeu com estrutura inesperada")
+            raise UpstreamError("the Git provider answered with an unexpected structure")
         return data
 
     @staticmethod
     def _conteudo(data: dict[str, object]) -> bytes:
         bruto = data.get("content")
         if not isinstance(bruto, str):
-            raise UpstreamError("provedor Git retornou conteúdo inválido")
+            raise UpstreamError("the Git provider returned invalid content")
         # GitHub devolve o base64 quebrado em linhas; Gitea, numa linha só.
         # Remover o espaço em branco antes permite exigir validate=True: sem
         # ele, base64 descarta caractere fora do alfabeto em silêncio e uma
@@ -336,7 +336,7 @@ class GitContentProvider(StorageProvider):
         try:
             return base64.b64decode("".join(bruto.split()), validate=True)
         except ValueError as error:
-            raise UpstreamError("provedor Git retornou conteúdo inválido") from error
+            raise UpstreamError("the Git provider returned invalid content") from error
 
     @staticmethod
     def _inacessivel(error: httpx.HTTPError) -> UpstreamError:
@@ -361,7 +361,7 @@ class GitContentProvider(StorageProvider):
         content, public_url = existing
         if content != expected:
             # Corrida perdida é conflito permanente, não indisponibilidade.
-            raise ConflictError("playbook remoto já existe com conteúdo diferente")
+            raise ConflictError("the remote playbook already exists with different content")
         return PublishedArtifact(url=public_url)
 
     async def publish(
@@ -384,7 +384,7 @@ class GitContentProvider(StorageProvider):
         if existing is not None:
             content, public_url = existing
             if content != expected:
-                raise ConflictError("playbook remoto já existe com conteúdo diferente")
+                raise ConflictError("the remote playbook already exists with different content")
             return PublishedArtifact(url=public_url)
 
         payload = {
@@ -410,7 +410,7 @@ class GitContentProvider(StorageProvider):
                 return confirmado
         if response.status_code not in {200, 201}:
             raise UpstreamError(
-                f"provedor Git recusou publicação (HTTP {response.status_code})"
+                f"the Git provider refused the publication (HTTP {response.status_code})"
             )
         conteudo = self._corpo(response).get("content")
         publicado = url
@@ -448,12 +448,12 @@ class GitContentProvider(StorageProvider):
                 client, self._contents_url_for(legado)
             )
         if existing is None:
-            raise NotFoundError("artefato publicado nao encontrado no provedor Git")
+            raise NotFoundError("published artifact not found on the Git provider")
         content, _ = existing
         try:
             return content.decode("utf-8")
         except UnicodeDecodeError as error:
-            raise UpstreamError("artefato publicado nao e UTF-8 valido") from error
+            raise UpstreamError("the published artifact is not valid UTF-8") from error
 
     def _contents_url(
         self,
@@ -490,7 +490,7 @@ class GitContentProvider(StorageProvider):
             return None
         if response.status_code != 200:
             raise UpstreamError(
-                f"falha ao consultar provedor Git (HTTP {response.status_code})"
+                f"failed to query the Git provider (HTTP {response.status_code})"
             )
         data = self._corpo(response)
         content = self._conteudo(data)
