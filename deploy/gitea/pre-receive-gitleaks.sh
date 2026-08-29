@@ -67,6 +67,13 @@ while read -r antigo novo referencia; do
   # stdin vazio — o que derrubaria um push legitimo.
   [[ -n "$conteudo" ]] || continue
 
+  # `gitleaks:allow` e honrado em qualquer ponto da linha, e o diff bruto que
+  # chega aqui carrega o que o operador escreveu. Sem desarmar, bastaria por o
+  # comentario ao lado do segredo para o push passar -- e nem apareceria recusa,
+  # porque o achado suprimido nao e reportado. A diretiva serve a codigo-fonte
+  # sob revisao, nunca a runbook. So a forma exata em minusculas tem efeito.
+  conteudo="${conteudo//gitleaks:allow/gitleaks-allow}"
+
   # `set +e` e obrigatorio aqui: com errexit ligado, a atribuicao aborta o
   # script assim que o Gitleaks devolve 23, o `case` abaixo nunca roda e a
   # recusa acontece sem nenhuma mensagem para quem tentou o push.

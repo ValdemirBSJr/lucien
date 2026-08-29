@@ -280,3 +280,39 @@ def test_regras_repetidas_e_limitadas() -> None:
 
     repetida = b"RuleID: lucien-snmp-community\n" * 5
     assert _regras_do_achado(repetida) == ("lucien-snmp-community",)
+
+
+def test_diretiva_inline_do_gitleaks_nao_atravessa_o_conteudo() -> None:
+    """`gitleaks:allow` num runbook desligaria a politica inteira.
+
+    A diretiva e honrada em qualquer ponto da linha, inclusive por stdin. Sem
+    desarma-la, bastaria escrever o comentario ao lado do segredo para publicar
+    o segredo -- e a recusa nem apareceria, porque o gitleaks nao reporta o
+    achado suprimido.
+    """
+
+    from app.main import _sem_diretiva_de_fuga
+
+    # A diretiva de fora e para o portao do CI, que varre este arquivo. O
+    # que o teste exercita e a de dentro da string, como um runbook a traria.
+    linha = "enable secret 5 $1$abc$xyz  # gitleaks:allow"  # gitleaks:allow
+    segredo, _, _ = linha.partition("  # ")
+    desarmada = _sem_diretiva_de_fuga(linha)
+
+    assert "gitleaks:allow" not in desarmada
+    assert segredo in desarmada
+    # Mesmo comprimento: o relatorio aponta coluna, e deslocar mentiria.
+    assert len(desarmada) == len(linha)
+
+
+def test_desarme_nao_toca_em_texto_que_nao_e_a_diretiva() -> None:
+    from app.main import _sem_diretiva_de_fuga
+
+    for intacto in (
+        "gitleaks:ignore",
+        "GITLEAKS:ALLOW",
+        "gitleaks : allow",
+        "o portao gitleaks aprovou",
+        "",
+    ):
+        assert _sem_diretiva_de_fuga(intacto) == intacto

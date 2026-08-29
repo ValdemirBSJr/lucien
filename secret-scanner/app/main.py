@@ -88,6 +88,28 @@ GITLEAKS_QUEUE_TIMEOUT_SECONDS = _inteiro("SCANNER_QUEUE_TIMEOUT_SECONDS", 10, 1
 # um scanner mais fraco do que o esperado sem ninguem perceber.
 GITLEAKS_CONFIG = "/etc/lucien/gitleaks.toml"
 
+# O gitleaks honra `gitleaks:allow` em qualquer ponto da linha, e isso vale
+# tambem para o que chega por stdin: um runbook com esse comentario ao lado de
+# um segredo real atravessaria a politica inteira. A diretiva existe para o
+# codigo-fonte de um repositorio, onde a revisao ve o uso; conteudo submetido
+# nao tem essa revisao, entao ela e desfeita antes do scan.
+#
+# So a forma exata em minusculas suprime achado -- medido contra o binario:
+# `gitleaks:ignore`, `GITLEAKS:ALLOW` e `gitleaks : allow` nao suprimem nada.
+# O substituto tem o mesmo comprimento para nao deslocar coluna nenhuma.
+_DIRETIVA_DE_FUGA = "gitleaks:allow"
+_DIRETIVA_DESARMADA = "gitleaks-allow"
+
+
+def _sem_diretiva_de_fuga(content: str) -> str:
+    """Desarma a diretiva inline do gitleaks no conteudo submetido.
+
+    Vale so para a copia enviada ao scanner. O conteudo que o Hub guarda e
+    publica nunca passa por aqui.
+    """
+
+    return content.replace(_DIRETIVA_DE_FUGA, _DIRETIVA_DESARMADA)
+
 _vagas: asyncio.Semaphore | None = None
 
 
@@ -144,7 +166,7 @@ async def _executar(content: str) -> tuple[bool, tuple[str, ...]]:
 
     try:
         saida, _ = await asyncio.wait_for(
-            processo.communicate(content.encode("utf-8")),
+            processo.communicate(_sem_diretiva_de_fuga(content).encode("utf-8")),
             timeout=GITLEAKS_TIMEOUT_SECONDS + 1,
         )
     except TimeoutError as error:
