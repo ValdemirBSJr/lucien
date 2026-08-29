@@ -43,7 +43,9 @@ for arg in "$@"; do
 done
 c="$(cat)"
 [ -n "$c" ] || { echo "Error: entrada vazia" >&2; exit 1; }
-if printf '%s' "$c" | grep -q 'SEGREDO_DE_TESTE'; then
+# O binario real ignora achado na linha que traz `gitleaks:allow`. O stub
+# precisa fazer o mesmo, senao o caso 8 passaria mesmo com o hook furado.
+if printf '%s' "$c" | grep -v 'gitleaks:allow' | grep -q 'SEGREDO_DE_TESTE'; then
   # O detalhe so sai com --verbose, como no binario real. Assim, se o hook
   # perder o flag, a afirmacao do avaliar() falha em vez de seguir passando.
   if [ "$verboso" -eq 1 ]; then
@@ -173,8 +175,18 @@ saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
 avaliar "root commit with a secret (no parent)" 1 $? "$saida"
 
 printf '\n'
+# 8. Segredo acompanhado de `gitleaks:allow` -> deve recusar assim mesmo.
+# A diretiva serve a codigo-fonte sob revisao. Num runbook ela seria um
+# desligador da politica ao alcance de quem envia.
+cd "$RAIZ/clone" || exit 1
+git reset -q --hard origin/main
+printf 'SEGREDO_DE_TESTE <!-- gitleaks:allow -->\n' > f.md
+git add f.md && git commit -q -m "segredo com diretiva"
+saida="$(git push -q origin HEAD:refs/heads/main 2>&1)"
+avaliar "secret carrying gitleaks:allow" 1 $? "$saida"
+
 if [ "$FALHAS" -eq 0 ]; then
-  printf 'pre-receive: all %s cases passed.\n' 7
+  printf 'pre-receive: all %s cases passed.\n' 8
 else
   printf 'pre-receive: %s case(s) failed.\n' "$FALHAS"
   exit 1
