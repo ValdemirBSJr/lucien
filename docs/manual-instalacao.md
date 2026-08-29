@@ -311,15 +311,9 @@ desabilitar a verificação esconderia o problema.
 ## 6. Preparar a máquina do CLI
 
 O CLI é um binário nativo. Docker não é necessário na máquina do operador.
-Os binários oficiais estão em
-[GitHub Releases](https://github.com/ValdemirBSJr/lucien/releases). A release
-`v1.1.7` contém pacotes Linux e macOS para `amd64` e `arm64`, os checksums
-individuais e o arquivo consolidado `lucien_1.1.7_SHA256SUMS`.
+Transfira por canal confiável somente:
 
-Depois de baixar ou clonar a tag correspondente, transfira ou baixe por canal
-confiável somente:
-
-- [`deploy/install-cli.sh`](https://github.com/ValdemirBSJr/lucien/blob/main/deploy/install-cli.sh);
+- `deploy/install-cli.sh`;
 - `deploy/install-jump-user.sh`, somente para o modo manual por conta;
 - `deploy/install-jump-server.sh` e `deploy/jump/`, somente para o modo
   automático do jump server;
@@ -328,28 +322,6 @@ confiável somente:
 - `ca.crt` público copiado do Hub.
 
 Nunca transfira `.env`, `ca.key`, `server.key` ou o token Git.
-
-No Linux, baixe o pacote correto e o `.sha256` correspondente para `dist/`:
-use `linux_amd64` em hosts `x86_64` e `linux_arm64` em hosts
-`aarch64`/`arm64`. O instalador suporta somente Linux; os pacotes Darwin da
-release são destinados à instalação manual no macOS.
-
-Exemplo para Linux `amd64`:
-
-```bash
-VERSION=1.1.7
-ARCH=amd64
-BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
-mkdir -p dist
-curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz" \
-  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz"
-curl --fail --location --output "dist/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256" \
-  "${BASE_URL}/lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256"
-(cd dist && sha256sum -c "lucien_${VERSION}_linux_${ARCH}.tar.gz.sha256")
-```
-
-`deploy/install-cli.sh` não compila `cli/`: ele procura em `dist/` o pacote
-pronto compatível com a arquitetura, valida seu checksum e o instala.
 
 Execute:
 
@@ -582,7 +554,7 @@ sudo ./deploy/install-jump-server.sh
 ```
 
 Informe a URL HTTPS do Hub, a CA pública, a conta local administrativa
-(`operador`), o username correspondente no Hub (`Admin`) e a credencial M2M. O
+(`valdemir`), o username correspondente no Hub (`Admin`) e a credencial M2M. O
 instalador grava a credencial em
 `/etc/lucien/secrets/jump_enrollment_key` (`root:root`, `0600`), instala o helper
 restrito por sudoers, o banner, o hook em `/etc/profile.d` e valida TLS e SSH.
@@ -600,7 +572,7 @@ Identidades existentes `junior`, `pleno` ou `senior` preservam integralmente
 papel e domínio; contas `admin` usam o fluxo administrativo separado. O token
 provisório é trocado pelo CLI via `stdin` e o permanente fica no keyring ou no fallback
 `0600` da própria conta. Em logins seguintes, `/me` é validado silenciosamente.
-A conta local `operador` usa a identidade `Admin` já configurada; se o cofre
+A conta local `valdemir` usa a identidade `Admin` já configurada; se o cofre
 estiver vazio, seu token será solicitado sem eco.
 
 O modo jump não altera instalações comuns do CLI. Fora desse host, não defina
@@ -707,7 +679,7 @@ lucien auth status
 ```
 
 ```
-Authenticated as U000004 (11111111-...); level=senior areas=servidores, acessos.
+Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servidores, acessos.
 ```
 
 ### `lucien stop`
@@ -775,6 +747,32 @@ Baixa os comandos detectados, abre uma seleção interativa e inicia o editor
 configurado em `EDITOR`. Ao fechar o editor, salva um rascunho local com permissão
 restrita. O comando ainda não publica o documento. Um número positivo referencia
 a posição de base 1 mostrada por `lucien reviews`; IDs e nomes continuam aceitos.
+
+### `lucien job cat <id_do_job>`
+
+Imprime o rascunho salvo, sem abrir o editor. Leitura pura: não altera nada.
+
+Serve para diagnosticar uma recusa. Quando o Hub bloqueia a publicação, a
+mensagem nomeia a regra; este comando entrega o texto para você procurar a
+linha. A saída vai para `stdout`, então aceita pipe:
+
+```bash
+lucien job cat f51201f2-388a-4ce5-99ea-5d59f9424ca9 | grep -n -i 'senha\|password'
+```
+
+O conteúdo vem do **rascunho local**, e o comando **nunca fala com o Hub** — um
+rascunho recusado nunca chegou lá, e um diagnóstico que dependesse do Hub
+falharia justamente quando há o que diagnosticar.
+
+Por isso ele exige o ID exato, e não aceita índice nem nome: resolver esses
+precisaria da lista do Hub. `lucien runbook revise` cobra o UUID pelo mesmo tipo
+de razão. Pegue o ID em `lucien reviews` ou na saída do `lucien job`.
+
+O comando **se recusa a rodar dentro de uma sessão gravada**. Ele despeja o
+rascunho no terminal, e ali isso entraria na própria captura — inclusive o
+segredo que motivou a recusa. Rode de outro terminal.
+
+Não usa paginador. Para paginar, use pipe: `lucien job cat <id> | less`.
 
 ### `lucien job sent <id_ou_nome_ou_indice>`
 

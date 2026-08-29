@@ -763,6 +763,34 @@ restricted permission. The command does not publish the document yet. A positive
 number references the 1-based position shown by `lucien reviews`; IDs and names
 are still accepted.
 
+### `lucien job cat <job_id>`
+
+Prints the saved draft, without opening the editor. Read-only: it changes
+nothing.
+
+It exists to diagnose a refusal. When the Hub blocks a publication, the message
+names the rule; this command hands you the text so you can find the line. Output
+goes to `stdout`, so it takes a pipe:
+
+```bash
+lucien job cat f51201f2-388a-4ce5-99ea-5d59f9424ca9 | grep -n -i 'senha\|password'
+```
+
+The content comes from the **local draft**, and the command **never contacts the
+Hub** — a refused draft never reached it, and a diagnostic that depended on the
+Hub would fail exactly when there is something to diagnose.
+
+That is why it requires the exact ID and accepts neither an index nor a name:
+resolving those would need the Hub's list. `lucien runbook revise` requires the
+UUID for the same kind of reason. Take the ID from `lucien reviews` or from the
+output of `lucien job`.
+
+The command **refuses to run inside a recorded session**. It dumps the draft to
+the terminal, and there that would enter the capture itself — including the
+secret that caused the refusal. Run it from another terminal.
+
+It uses no pager. To paginate, pipe it: `lucien job cat <id> | less`.
+
 ### `lucien job sent <id_or_name_or_index>`
 
 Sends the draft to the Hub with an idempotency key derived from the user, the job,

@@ -393,3 +393,25 @@ func (writer *cappedWriter) Write(data []byte) (int, error) {
 	// O stdout continua fluindo mesmo quando o limite persistido foi alcançado.
 	return originalLength, nil
 }
+
+// InsideRecordedSession informa se este processo roda dentro de uma captura em
+// andamento.
+//
+// Existe para `lucien job cat`, que despeja o rascunho no terminal. Dentro de
+// uma captura isso entraria no proprio log -- e o rascunho pode conter
+// exatamente o segredo que fez a publicacao ser recusada, que e quando o
+// operador mais tem motivo para le-lo.
+//
+// Falha para o lado permissivo: sem sessao, sessao corrompida ou fora do
+// Unix, responde falso. Um bloqueio por engano seria pior que a exposicao que
+// evita, porque o comando e de diagnostico.
+func InsideRecordedSession() bool {
+	session, err := loadSession()
+	if err != nil {
+		return false
+	}
+	if session.Status != "RUNNING" || session.PID <= 0 {
+		return false
+	}
+	return insideSession(session.PID)
+}
