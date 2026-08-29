@@ -36,7 +36,7 @@ jobs:
             build: docker build --target test -t alvo secret-scanner
             run: docker run --rm alvo
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Construir imagem de teste (${{ matrix.nome }})
         run: ${{ matrix.build }}
       - name: Executar testes (${{ matrix.nome }})
@@ -45,7 +45,7 @@ jobs:
   cli:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verificar formatação, vet e testes
         # A mesma imagem Go do scripts/build-cli.sh, pelo mesmo digest: o
         # portão precisa reprovar o que o empacotamento reprovaria.
@@ -60,7 +60,7 @@ jobs:
   scripts:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Sintaxe dos scripts
         run: find deploy scripts -name '*.sh' -type f -exec bash -n {} +
       - name: ShellCheck
@@ -74,14 +74,14 @@ jobs:
   composicao:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Compose resolve com o exemplo de ambiente
         run: docker compose --env-file .env.example config --quiet
 
   documentacao:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: MkDocs em modo estrito
         run: |
           docker run --rm \
@@ -93,7 +93,7 @@ jobs:
   lint:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Ruff
         run: |
           docker run --rm \
@@ -105,7 +105,7 @@ jobs:
   tipagem:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Mypy sobre o backend
         # Só o backend: é onde porta e implementação divergem em silêncio, que
         # foi o defeito real. Estender aos demais é trabalho próprio.
@@ -116,7 +116,7 @@ jobs:
   segredos:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Gitleaks sobre o histórico
