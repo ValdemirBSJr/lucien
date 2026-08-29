@@ -7,6 +7,35 @@ release público.
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-08-28
+
+### Added
+
+- `lucien job cat <id>` imprime o rascunho local de um job pendente ou com erro,
+  sem abrir editor e sem consultar o Hub;
+- documentação bilingüe: português na raiz e inglês em `/en`, com URLs próprias
+  em inglês sem renomear arquivo algum;
+- `docs/operacao.md` descreve o que cada regra do scanner de segredos bloqueia.
+
+### Changed
+
+- mensagens de erro do Hub, dos instaladores, do hook `pre-receive` e dos
+  scripts de operação passam a ser exibidas em inglês; identificadores,
+  variáveis e comentários do código permanecem como estavam;
+- os portões de qualidade e os scripts auxiliares ganharam nomes em inglês.
+
+### Fixed
+
+- `lucien stop` e as linhas parciais deixadas pelo autocompletar com Tab não
+  entram mais no runbook como comando ou como saída do comando anterior;
+- a recusa por política de segredos passa a nomear a regra que casou.
+
+### Security
+
+- a recusa por segredo nomeia a regra, nunca o valor bloqueado;
+- as quatro recusas de token provisório voltam a ser indistinguíveis entre si;
+- acesso SSH ao jump server endurecido.
+
 ## [1.1.7] - 2026-08-24
 
 ### Added
