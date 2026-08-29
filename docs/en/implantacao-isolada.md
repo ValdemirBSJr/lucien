@@ -147,8 +147,8 @@ needed to run the Hub and should be moved to an offline vault afterwards.
 
 If you did not use the guided installer, create the file before editing it:
 
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
 Configure the non-sensitive values in `.env`. Credentials must be files without a
@@ -175,7 +175,7 @@ is independent of this documentation's language. It accepts `pt-br` or `en`.
 
 Then generate the TLS material and bring the environment up:
 
-```powershell
+```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile tools build certgen
 docker compose --profile tools run --rm certgen
@@ -281,7 +281,7 @@ bits for the server, explicit SANs, and restrictive permissions.
 
 2. Generate once:
 
-   ```powershell
+```bash
    docker compose --profile tools run --rm certgen
    ```
 
@@ -305,44 +305,44 @@ Use this procedure when you cannot use the `certgen` container. Replace
 `runbook.example.internal` with the FQDN present in `API_HOST`; include every name
 or IP the clients actually use.
 
-```powershell
-New-Item -ItemType Directory -Force certs | Out-Null
+```bash
+mkdir -p certs
 
 # Private CA: keep it off the Hub host after issuing the certificate.
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out certs/ca.key
-openssl req -x509 -new -sha256 -days 3650 `
-  -key certs/ca.key `
-  -subj "/C=BR/O=Lucien/CN=Lucien Internal CA" `
-  -addext "basicConstraints=critical,CA:TRUE,pathlen:0" `
-  -addext "keyUsage=critical,keyCertSign,cRLSign" `
-  -addext "subjectKeyIdentifier=hash" `
+openssl req -x509 -new -sha256 -days 3650 \
+  -key certs/ca.key \
+  -subj "/C=BR/O=Lucien/CN=Lucien Internal CA" \
+  -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" \
+  -addext "subjectKeyIdentifier=hash" \
   -out certs/ca.crt
 
 # Hub key and CSR.
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out certs/server.key
-openssl req -new -sha256 `
-  -key certs/server.key `
-  -subj "/C=BR/O=Lucien/CN=runbook-hub" `
+openssl req -new -sha256 \
+  -key certs/server.key \
+  -subj "/C=BR/O=Lucien/CN=runbook-hub" \
   -out certs/server.csr
 
 # Server certificate extensions and SANs.
-@'
+cat > certs/server.ext <<'EOF'
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
 subjectAltName=DNS:runbook.example.internal,DNS:hub,DNS:localhost,IP:127.0.0.1
-'@ | Set-Content -Encoding ascii certs/server.ext
+EOF
 
-openssl x509 -req -sha256 -days 397 `
-  -in certs/server.csr `
-  -CA certs/ca.crt `
-  -CAkey certs/ca.key `
-  -CAcreateserial `
-  -extfile certs/server.ext `
+openssl x509 -req -sha256 -days 397 \
+  -in certs/server.csr \
+  -CA certs/ca.crt \
+  -CAkey certs/ca.key \
+  -CAcreateserial \
+  -extfile certs/server.ext \
   -out certs/server.crt
 
 openssl verify -CAfile certs/ca.crt certs/server.crt
-Remove-Item certs/server.csr, certs/server.ext, certs/ca.srl
+rm -f certs/server.csr certs/server.ext certs/ca.srl
 ```
 
 On a Linux host, adjust access for the container's unprivileged user before

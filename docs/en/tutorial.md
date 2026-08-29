@@ -71,7 +71,7 @@ docker compose -f docker-compose.local.yml logs -f slm-init
 
 Wait for the model to download and be prepared. Check the Hub:
 
-```powershell
+```bash
 docker compose ps
 ```
 
@@ -227,7 +227,7 @@ After success:
 2. keep `BOOTSTRAP_API_KEY` exclusively in a server-side secret;
 3. recreate only the Hub to apply the closing of the window.
 
-```powershell
+```bash
 docker compose --profile consolidated up -d --force-recreate hub
 ```
 
@@ -281,7 +281,7 @@ docker compose --env-file .env -f docker-compose.local.yml \
 Always use the prompt without echo; the CLI rejects a token passed as an argument,
 to avoid shell history and exposure in the process list:
 
-```powershell
+```bash
 lucien login
 ```
 
@@ -328,7 +328,7 @@ procedure is in
 
 In the first terminal, start the capture:
 
-```powershell
+```bash
 lucien start redis-cache -d "Update Redis and validate replication"
 ```
 
@@ -340,7 +340,7 @@ Run the maintenance commands normally inside the shell that opens. Do not paste
 credentials. In that same recorded shell, end the PTY and preserve the local
 session:
 
-```powershell
+```bash
 lucien stop
 ```
 
@@ -354,14 +354,14 @@ yet, `stop` cannot display a `Job_ID`; its output tells you to run
 `stop` consults neither a token nor the Hub. To sanitize and send the finished
 session:
 
-```powershell
+```bash
 lucien upload
 ```
 
 The `upload` output holds the `Job_ID` and `Status: PROCESSING`; it does not wait
 for the SLM. Check progress with:
 
-```powershell
+```bash
 lucien job status <JOB_ID>
 ```
 
@@ -376,7 +376,7 @@ name before removing the files. While a session is waiting for upload, a new
 
 ## 8. Follow the job queue
 
-```powershell
+```bash
 lucien reviews
 ```
 
@@ -412,7 +412,7 @@ watch -n 5 lucien reviews
 
 ## 9. Review and write the runbook
 
-```powershell
+```bash
 lucien job <id_or_name_or_index>
 ```
 
@@ -471,7 +471,7 @@ hierarchy by trusted domain and year, for example:
 
 ## 10. Publish
 
-```powershell
+```bash
 lucien job sent <id_or_name_or_index>
 ```
 
@@ -496,19 +496,19 @@ substitutions, never the values it found.
 
 ## 11. Purge or cancel a job
 
-```powershell
+```bash
 lucien job del <id_or_name_or_index>
 ```
 
 Use `--yes` only in controlled automation:
 
-```powershell
+```bash
 lucien job del <id_or_name_or_index> --yes
 ```
 
 To abandon a run in progress:
 
-```powershell
+```bash
 lucien job del <id_or_name_or_index> --force
 ```
 
@@ -519,17 +519,17 @@ are deleted. Publications are immutable even with `--force`.
 
 On the server:
 
-```powershell
-Copy-Item .env.server.example .env
+```bash
+cp .env.server.example .env
 docker compose --profile tools run --rm certgen
-docker compose -f docker-compose.yml -f docker-compose.build.yml `
+docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile server build
 docker compose --profile server up -d
 ```
 
 On the client:
 
-```powershell
+```bash
 export API_HOST="https://runbook.example.internal:8443"
 export TLS_CA_FILE="/etc/lucien/ca.crt"
 lucien login
