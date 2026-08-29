@@ -32,6 +32,7 @@ from app.domain.ports import (
     NotFoundError,
     SecretDetectedError,
     SecretScanner,
+    SecretScanResult,
     StorageProvider,
     RunbookEnricher,
     UpstreamError,
@@ -111,9 +112,12 @@ class StaticSecretScanner(SecretScanner):
         self.blocked_contents = blocked_contents or set()
         self.scanned_contents: list[str] = []
 
-    async def detect(self, content: str) -> bool:
+    async def detect(self, content: str) -> SecretScanResult:
         self.scanned_contents.append(content)
-        return content in self.blocked_contents
+        bloqueado = content in self.blocked_contents
+        return SecretScanResult(
+            detected=bloqueado, rules=("regra-de-teste",) if bloqueado else ()
+        )
 
 
 class FlakyStorage(StorageProvider):
@@ -656,7 +660,7 @@ async def test_token_provisorio_expira_e_nao_pode_ser_reutilizado(
             datetime.now(UTC),
         )
 
-    with pytest.raises(AuthenticationError, match="inválido"):
+    with pytest.raises(AuthenticationError, match="invalid provisional token"):
         await repository.exchange_provisional_token(
             provisional_hash,
             digest_api_token("luc_outro", pepper),
@@ -1361,7 +1365,7 @@ async def test_start_r_recusa_dominio_que_nao_existe_no_env(
         )
 
     # A mensagem precisa dizer o que existe; "inválido" sozinho não ajuda.
-    assert "valide a role" in str(erro.value)
+    assert "check the role" in str(erro.value)
     assert "acessos, servidores, roteamento" in str(erro.value)
 
 
@@ -1561,7 +1565,7 @@ def test_subtitulo_livre_nao_pode_carregar_comando() -> None:
             "rm -rf /\n"
             "```\n"
         )
-    assert "cabeçalho de passo" in str(erro.value)
+    assert "step heading" in str(erro.value)
 
 
 def test_passo_com_numeracao_fora_de_ordem_continua_recusado() -> None:

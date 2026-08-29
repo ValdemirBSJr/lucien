@@ -60,7 +60,7 @@ class AESGCMUploadCipher(UploadCipher):
         try:
             encoded = base64.b64decode(ciphertext, altchars=b"-_", validate=True)
             if len(encoded) < 29:
-                raise ValueError("payload cifrado incompleto")
+                raise ValueError("incomplete encrypted payload")
             payload = AESGCM(self._encryption_key).decrypt(
                 encoded[:12], encoded[12:], self._aad(owner_id, name)
             )
@@ -70,7 +70,7 @@ class AESGCMUploadCipher(UploadCipher):
             if not isinstance(log, str) or (
                 description is not None and not isinstance(description, str)
             ):
-                raise TypeError("payload cifrado possui tipos inválidos")
+                raise TypeError("the encrypted payload has invalid types")
             return log, description
         except (binascii.Error, InvalidTag, KeyError, TypeError, ValueError) as error:
-            raise ValidationError("payload assíncrono inválido") from error
+            raise ValidationError("invalid asynchronous payload") from error

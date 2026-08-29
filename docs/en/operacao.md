@@ -59,6 +59,53 @@ every installation and are not translated.
     through; keep human review and a secret scanner as an independent barrier in
     the repository.
 
+### What each scanner rule blocks
+
+When a publication is refused, the message names the rule:
+
+```
+Hub rejected the request: content blocked by the secret policy
+(rule: lucien-vendor-cipher-password)
+```
+
+Use the table to know what to look for in the draft. The **triggers on** column
+lists the words the rule anchors to — they are how you find the line.
+
+| Rule | Blocks | Triggers on |
+| --- | --- | --- |
+| `lucien-tacacs-radius-key` | TACACS+ or RADIUS shared key | `tacacs`, `radius`, `aaa` |
+| `lucien-snmp-community` | Read or write SNMP community | `snmp` |
+| `lucien-snmpv3-auth-priv` | SNMPv3 authentication or privacy password | `authentication`, `privacy`, `snmp` |
+| `lucien-vendor-cipher-password` | Plaintext or ciphered credential in equipment configuration | `password`, `senha`, `cipher`, `irreversible-cipher` |
+| `lucien-huawei-ppp-pap-chap` | PPP PAP/CHAP credential on an OLT or router | `ppp`, `pap`, `chap` |
+| `lucien-gpon-ont-auth` | ONT/ONU authentication password or LOID | `ont`, `loid`, `checkcode` |
+| `lucien-docsis-shared-secret` | CMTS DOCSIS shared secret | `shared-secret` |
+| `lucien-bgp-neighbor-password` | BGP neighbor session password | `neighbor`, `peer` |
+| `lucien-isis-ospf-auth` | Interior routing protocol authentication | `authentication-mode`, `authentication-key` |
+| `lucien-vendor-hash` | Credential hash exported in a configuration | `$1$`, `$5$`, `$6$`, `$2a$`, `$2b$`, `$2y$` |
+| `lucien-huawei-irreversible-hash` | Huawei irreversible hash in an exported configuration | `irreversible-cipher` |
+| `lucien-cisco-type7` | Cisco type 7 credential, trivially reversible | `password 7` |
+| `lucien-enable-secret` | Enable secret on Cisco or compatible equipment | `enable secret`, `enable password` |
+| `lucien-ipsec-psk` | IPsec or IKE pre-shared key | `pre-shared-key`, `preshared-key`, `psk` |
+| `lucien-local-user-password` | Local user creation with a password on equipment | `local-user`, `username` |
+
+The default Gitleaks rules stay active on top of these, and appear under their
+own names — `generic-api-key`, for instance.
+
+!!! warning "The word is enough; the secret need not exist"
+    The rules match an anchor followed by a value. `senha LDAP/TACACS` in a <!-- gitleaks:allow -->
+    prerequisite is blocked by `lucien-vendor-cipher-password` even though there
+    is no secret there: the rule sees `senha` followed by 4 or more non-space
+    characters.
+
+    That is deliberate. A rule that tried to tell prose from configuration would
+    let `A senha é abc123` through, and that is a real leak. Prefer rewriting:
+    `credencial LDAP/TACACS`, or `senha do LDAP` — after `senha` comes `do`, two
+    characters, below the minimum.
+
+    To find the line quickly, search for the anchor of the rule the message
+    named.
+
 ## Approval
 
 Protect the `main` branch on the Git provider, require a Pull Request, and at

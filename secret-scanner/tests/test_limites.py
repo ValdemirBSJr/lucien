@@ -158,11 +158,18 @@ async def test_cancelamento_do_cliente_tambem_encerra_o_processo(
 
 
 async def test_deteccao_e_ausencia_seguem_o_codigo_de_saida(monkeypatch) -> None:
+    """O veredito continua vindo do codigo de saida; a regra e acrescimo.
+
+    `scan_content` passou a devolver (detected, rules) para que a recusa possa
+    dizer o que casou. O primeiro elemento e o mesmo de antes.
+    """
+
     _instala_duble(monkeypatch, demora=0.0, codigo=0)
-    assert await main.scan_content("limpo") is False
+    assert await main.scan_content("limpo") == (False, ())
 
     _instala_duble(monkeypatch, demora=0.0, codigo=23)
-    assert await main.scan_content("com segredo") is True
+    detectado, _ = await main.scan_content("com segredo")
+    assert detectado is True
 
 
 async def test_codigo_desconhecido_falha_fechado(monkeypatch) -> None:
@@ -213,3 +220,63 @@ def test_limite_invalido_impede_o_servico_de_subir(monkeypatch) -> None:
 
 
 assert sys.version_info >= (3, 11), "TimeoutError unificado exige 3.11+"
+
+
+def test_extrai_apenas_o_identificador_da_regra() -> None:
+    """O relatorio do gitleaks traz Finding, Secret e Match. Nada disso sai.
+
+    Percorrer linha a linha e aceitar so o prefixo `RuleID:` e mais seguro do
+    que confiar que --redact=100 cobriu tudo: se o formato mudar, o pior caso
+    e perder o motivo, nunca vazar o valor.
+    """
+
+    from app.main import _regras_do_achado
+
+    relatorio = (
+        b"Finding:     snmp-server community S3cr3tRW RW\n"  # gitleaks:allow
+        b"Secret:      S3cr3tRW\n"
+        b"RuleID:      lucien-snmp-community\n"
+        b"Entropy:     2.750000\n"
+        b"File:        /dev/stdin\n"
+        b"\n"
+        b"Finding:     enable secret 5 $1$abc$xyz\n"  # gitleaks:allow
+        b"Secret:      $1$abc$xyz\n"
+        b"RuleID:      lucien-vendor-cipher-password\n"
+    )
+
+    regras = _regras_do_achado(relatorio)
+
+    assert regras == (
+        "lucien-snmp-community",
+        "lucien-vendor-cipher-password",
+    )
+    for proibido in (b"S3cr3tRW", b"$1$abc$xyz", b"snmp-server community"):
+        assert proibido.decode() not in " ".join(regras)
+
+
+def test_id_de_regra_malformado_nao_atravessa() -> None:
+    """Se o formato mudar e trouxer texto, nada sai -- so o veredito.
+
+    Um `RuleID:` com espaco ou pontuacao nao e identificador: e conteudo. A
+    validacao existe para esse caso, que nenhum teste de formato atual cobre.
+    """
+
+    from app.main import _regras_do_achado
+
+    assert _regras_do_achado(b"RuleID:      senha do cliente: abc123\n") == ()
+    assert _regras_do_achado(b"RuleID:      " + b"x" * 200 + b"\n") == ()
+    assert _regras_do_achado(b"Secret:      lucien-snmp-community\n") == ()
+    assert _regras_do_achado(None) == ()
+    assert _regras_do_achado(b"") == ()
+
+
+def test_regras_repetidas_e_limitadas() -> None:
+    from app.main import _regras_do_achado
+
+    muitas = b"".join(
+        f"RuleID:      regra-{i}\n".encode() for i in range(20)
+    )
+    assert len(_regras_do_achado(muitas)) == 8
+
+    repetida = b"RuleID: lucien-snmp-community\n" * 5
+    assert _regras_do_achado(repetida) == ("lucien-snmp-community",)

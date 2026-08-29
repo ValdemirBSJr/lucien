@@ -91,10 +91,10 @@ autorização ou nível de acesso.
             decoded = json.loads(content)
             candidates = decoded["commands"]
         except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError) as error:
-            raise UpstreamError("SLM indisponível ou retornou formato inválido") from error
+            raise UpstreamError("the SLM is unavailable or returned an invalid format") from error
 
         if not isinstance(candidates, list):
-            raise UpstreamError("SLM retornou lista de comandos inválida")
+            raise UpstreamError("the SLM returned an invalid command list")
 
         commands: list[str] = []
         seen: set[str] = set()
@@ -206,10 +206,10 @@ Responda apenas JSON no formato:
             decoded = json.loads(content)
             candidates = decoded["tags"]
         except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError) as error:
-            raise UpstreamError("SLM não conseguiu inferir tags válidas") from error
+            raise UpstreamError("the SLM could not infer valid tags") from error
 
         if not isinstance(candidates, list):
-            raise UpstreamError("SLM retornou tags em formato inválido")
+            raise UpstreamError("the SLM returned tags in an invalid format")
 
         tags: list[str] = []
         seen: set[str] = set()
@@ -221,7 +221,7 @@ Responda apenas JSON no formato:
                 seen.add(tag)
                 tags.append(tag)
         if not tags:
-            raise UpstreamError("SLM não retornou nenhuma tag utilizável")
+            raise UpstreamError("the SLM returned no usable tag")
         objective = _plain_suggestion(decoded.get("objective"), 800)
         architecture = _suggestion_list(
             decoded.get("architecture_prerequisites"), limit=8, max_length=500

@@ -27,6 +27,7 @@ from app.domain.ports import (
     RunbookEnricher,
     SecretDetectedError,
     SecretScanner,
+    SecretScanResult,
     StorageProvider,
     UploadCipher,
     UpstreamError,
@@ -80,7 +81,7 @@ def _normalize_display_name(value: str | None) -> str | None:
     if not limpo:
         return None
     if len(limpo) > 120:
-        raise ValidationError("display_name excede 120 caracteres")
+        raise ValidationError("display_name exceeds 120 characters")
     return limpo
 
 
@@ -106,8 +107,8 @@ class IdentityService:
         if domain_function not in self._domain_functions:
             disponiveis = ", ".join(self._domain_functions) or "(nenhuma configurada)"
             raise ValidationError(
-                f"área '{domain_function}' não existe; valide a role. "
-                f"Disponíveis: {disponiveis}"
+                f"area '{domain_function}' does not exist; check the role. "
+                f"Available: {disponiveis}"
             )
 
     async def bootstrap_admin(
@@ -140,7 +141,7 @@ class IdentityService:
         self._require_known_domain(domain_function)
         for dominio in extra_domains:
             if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", dominio) is None:
-                raise ValidationError(f"área '{dominio}' inválida")
+                raise ValidationError(f"invalid area '{dominio}'")
             self._require_known_domain(dominio)
         provisional_token, provisional_hash = self._new_provisional_token()
         expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
@@ -191,9 +192,9 @@ class IdentityService:
         """Troca atomicamente uma ativação temporária por token permanente."""
 
         if not provisional_token.startswith("luc_tmp_"):
-            raise ValidationError("formato de token provisório inválido")
+            raise ValidationError("invalid provisional token format")
         if not 8 <= len(idempotency_key) <= 128:
-            raise ValidationError("Idempotency-Key inválida")
+            raise ValidationError("invalid Idempotency-Key")
         provisional_hash = digest_api_token(provisional_token, self._auth_pepper)
         api_token = self._derive_permanent_token(
             provisional_token, idempotency_key
@@ -226,12 +227,12 @@ class IdentityService:
         """Provisiona identidade POSIX sem conceder autoridade administrativa."""
 
         if re.fullmatch(r"[A-Za-z][0-9]+", username) is None:
-            raise ValidationError("username do jump server inválido")
+            raise ValidationError("invalid jump server username")
         display_name = _normalize_display_name(display_name)
         if domain_function is not None:
             self._require_known_domain(domain_function)
         if not 8 <= len(idempotency_key) <= 128:
-            raise ValidationError("Idempotency-Key inválida")
+            raise ValidationError("invalid Idempotency-Key")
 
         expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
 
@@ -240,7 +241,7 @@ class IdentityService:
         except NotFoundError:
             if domain_function is None:
                 raise ValidationError(
-                    "usuário não cadastrado; informe domain_function"
+                    "user not registered; provide domain_function"
                 )
             provisional_token = self._derive_jump_provisional_token(
                 username, domain_function, idempotency_key
@@ -271,14 +272,14 @@ class IdentityService:
                 user = await self._repository.get_user_by_identifier(username)
 
         if not user.is_active:
-            raise ConflictError("usuário revogado não pode ser reativado pelo jump server")
+            raise ConflictError("a revoked user cannot be reactivated by the jump server")
         if user.role_level is RoleLevel.ADMIN:
             raise ConflictError(
-                "administrador deve usar o fluxo de login administrativo"
+                "an administrator must use the administrative login flow"
             )
         if domain_function is not None and user.domain_function != domain_function:
             raise ConflictError(
-                "usuário existente possui domínio diferente; solicite ao admin"
+                "the existing user has a different domain; ask an admin"
             )
         effective_domain = user.domain_function
         provisional_token = self._derive_jump_provisional_token(
@@ -305,7 +306,7 @@ class IdentityService:
 
         target = await self._repository.get_user_by_identifier(id_or_username)
         if target.role_level is not RoleLevel.ADMIN or not target.is_active:
-            raise ForbiddenError("recuperação exige um administrador ativo")
+            raise ForbiddenError("recovery requires an active administrator")
         provisional_token, provisional_hash = self._new_provisional_token()
         expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
         user = await self._repository.issue_provisional_token(
@@ -330,10 +331,10 @@ class IdentityService:
         self._require_admin(actor)
         target = await self._repository.get_user_by_identifier(id_or_username)
         if actor.user_id == target.id:
-            raise ForbiddenError("admin não pode alterar o próprio escopo")
+            raise ForbiddenError("an admin cannot change their own scope")
         if domain_function is not None:
             if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", domain_function) is None:
-                raise ValidationError("domain_function inválida")
+                raise ValidationError("invalid domain_function")
             self._require_known_domain(domain_function)
         if extra_domains is not None:
             # Cada area concedida passa pela mesma checagem da primaria: uma
@@ -341,7 +342,7 @@ class IdentityService:
             # administrador nunca declarou.
             for dominio in extra_domains:
                 if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", dominio) is None:
-                    raise ValidationError(f"área '{dominio}' inválida")
+                    raise ValidationError(f"invalid area '{dominio}'")
                 self._require_known_domain(dominio)
         user = await self._repository.update_user_scopes(
             target.id, role_level, domain_function, extra_domains
@@ -361,7 +362,7 @@ class IdentityService:
         self._require_admin(actor)
         target = await self._repository.get_user_by_identifier(id_or_username)
         if actor.user_id == target.id:
-            raise ForbiddenError("admin não pode revogar o próprio token")
+            raise ForbiddenError("an admin cannot revoke their own token")
         # A recusa do último admin mora no repositório, junto da gravação:
         # contar aqui e gravar depois deixa a janela em que dois admins se
         # revogam ao mesmo tempo e ambos veem dois na contagem.
@@ -378,9 +379,9 @@ class IdentityService:
 
     def _validate_identity(self, username: str, domain_function: str) -> None:
         if re.fullmatch(r"[a-zA-Z0-9_.-]{3,64}", username) is None:
-            raise ValidationError("username inválido")
+            raise ValidationError("invalid username")
         if re.fullmatch(r"[a-z][a-z0-9_]{2,63}", domain_function) is None:
-            raise ValidationError("domain_function inválida")
+            raise ValidationError("invalid domain_function")
 
     def _new_permanent_token(self) -> tuple[str, str]:
         # Token aleatório de alta entropia; somente o HMAC com pepper chega ao banco.
@@ -424,7 +425,7 @@ class IdentityService:
     @staticmethod
     def _require_admin(actor: SecurityContext) -> None:
         if actor.role_level is not RoleLevel.ADMIN:
-            raise ForbiddenError("operação exclusiva de admin")
+            raise ForbiddenError("admin-only operation")
 
 
 class UploadService:
@@ -458,8 +459,8 @@ class UploadService:
         if requested not in self._domain_functions:
             disponiveis = ", ".join(self._domain_functions) or "(nenhuma configurada)"
             raise ValidationError(
-                f"área '{requested}' não existe; valide a role informada em -r. "
-                f"Disponíveis: {disponiveis}"
+                f"area '{requested}' does not exist; check the role given in -r. "
+                f"Available: {disponiveis}"
             )
         # A area continua sendo escopo de autoridade, nao preferencia: publica
         # quem foi autorizado. A autorizacao e que passou a poder cobrir mais
@@ -469,8 +470,8 @@ class UploadService:
                 sorted({context.domain_function, *context.extra_domains})
             )
             raise ForbiddenError(
-                f"área '{requested}' está fora do seu escopo. "
-                f"Autorizadas: {autorizadas}"
+                f"area '{requested}' is outside your scope. "
+                f"Authorized: {autorizadas}"
             )
         return requested
 
@@ -488,11 +489,11 @@ class UploadService:
         # um log que nunca seria publicado.
         resolved_domain = self._resolve_domain_function(context, domain_function)
         if len(raw_log.encode("utf-8")) > self._max_log_bytes:
-            raise ConflictError("log excede o limite configurado")
+            raise ConflictError("the log exceeds the configured limit")
 
         normalized_description = " ".join((description or "").split())
         if len(normalized_description) > 280:
-            raise ValidationError("description deve ter no máximo 280 caracteres")
+            raise ValidationError("description must be at most 280 characters")
 
         await self._reject_detected_secret(raw_log)
         if normalized_description:
@@ -530,8 +531,9 @@ class UploadService:
         return job
 
     async def _reject_detected_secret(self, content: str) -> None:
-        if await self._secret_scanner.detect(content):
-            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+        resultado = await self._secret_scanner.detect(content)
+        if resultado.detected:
+            raise SecretDetectedError(_mensagem_de_segredo(resultado))
 
 
 class UploadProcessor:
@@ -576,7 +578,7 @@ class UploadProcessor:
                 await self._reject_detected_secret("\n".join(extracted))
             commands = tuple(sanitize_secrets(command).text for command in extracted)
             if not commands:
-                raise ConflictError("nenhum comando útil foi detectado")
+                raise ConflictError("no useful command was detected")
             command_outputs = tuple(
                 sanitize_secrets(output).text
                 for output in extract_command_outputs(sanitized_log, commands)
@@ -692,8 +694,9 @@ class UploadProcessor:
         )
 
     async def _reject_detected_secret(self, content: str) -> None:
-        if await self._secret_scanner.detect(content):
-            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+        resultado = await self._secret_scanner.detect(content)
+        if resultado.detected:
+            raise SecretDetectedError(_mensagem_de_segredo(resultado))
 
     async def _sanitize_enrichment(
         self, enrichment: RunbookEnrichment, command_count: int
@@ -791,7 +794,7 @@ class JobService:
             return job, sanitized.replacements
 
         if job.publication_identity is None:
-            raise RuntimeError("reserva de publicação sem identidade confiável")
+            raise RuntimeError("publication reservation without a trusted identity")
         document = build_frontmatter(job, job.publication_identity, validated)
         artifact = await self._storage.publish(
             job.id,
@@ -827,13 +830,13 @@ class JobService:
         """
 
         if not self._revisions_enabled:
-            raise ForbiddenError("revisão indisponível neste provedor")
+            raise ForbiddenError("revision is unavailable on this provider")
         self._require_revision_role(context)
         revision_source = await self._repository.get_published_for_revision(job_id)
         source = revision_source.job
         self._require_revision_domain(context, revision_source)
         if source.content_hash is None:
-            raise ConflictError("publicacao sem hash confiavel de conteudo")
+            raise ConflictError("publication without a trusted content hash")
 
         publicado = await self._storage.read_published(
             source.id,
@@ -848,7 +851,7 @@ class JobService:
         if self._entry_roles_enabled:
             allowed_roles |= {RoleLevel.JUNIOR, RoleLevel.PLENO}
         if context.role_level not in allowed_roles:
-            raise ForbiddenError("operação exclusiva de senior ou admin")
+            raise ForbiddenError("senior or admin only operation")
 
     def _require_revision_domain(
         self, context: SecurityContext, revision_source: RevisionSource
@@ -862,7 +865,7 @@ class JobService:
             # Divergir aqui -- ainda que só por um acento -- deixaria distinguir
             # "não existe" de "existe e não é seu", que é o que esta recusa
             # existe para esconder. A diferença fica na trilha.
-            raise NotFoundError("runbook publicado não encontrado")
+            raise NotFoundError("published runbook not found")
 
     def _registrar_revisao_negada(
         self,
@@ -898,11 +901,11 @@ class JobService:
 
         if not self._revisions_enabled:
             raise ConflictError(
-                "revisões estão desabilitadas nesta instalação"
+                "revisions are disabled in this installation"
             )
         self._require_revision_role(context)
         if re.fullmatch(r"[0-9a-f]{64}", expected_content_hash) is None:
-            raise ValidationError("If-Match contém hash inválido")
+            raise ValidationError("If-Match contains an invalid hash")
 
         try:
             revision_source = await self._repository.get_published_for_revision(
@@ -950,7 +953,7 @@ class JobService:
             or revision.content_hash is None
             or revision.idempotency_key is None
         ):
-            raise RuntimeError("reserva de revisão sem identidade confiável")
+            raise RuntimeError("revision reservation without a trusted identity")
 
         document = build_revision_frontmatter(
             revision, revision.publication_identity, validated
@@ -994,8 +997,27 @@ class JobService:
         )
 
     async def _reject_detected_secret(self, content: str) -> None:
-        if await self._secret_scanner.detect(content):
-            raise SecretDetectedError("conteúdo bloqueado pela política de segredos")
+        resultado = await self._secret_scanner.detect(content)
+        if resultado.detected:
+            raise SecretDetectedError(_mensagem_de_segredo(resultado))
+
+
+def _mensagem_de_segredo(resultado: SecretScanResult) -> str:
+    """Diz o que casou, jamais o que foi encontrado.
+
+    A recusa acontece depois de o operador ter escrito o procedimento inteiro.
+    Sem o nome da regra ele reabre o rascunho e procura às cegas -- e a
+    tentação, nessa hora, é publicar de outro jeito.
+
+    Somente o identificador da regra atravessa: `lucien-snmp-community` diz que
+    houve uma community SNMP, e não qual. O valor fica redigido no scanner, e o
+    adaptador só aceita identificadores.
+    """
+
+    base = "content blocked by the secret policy"
+    if not resultado.rules:
+        return base
+    return f"{base} (rule: {', '.join(resultado.rules)})"
 
 
 def _strip_frontmatter(markdown: str) -> str:

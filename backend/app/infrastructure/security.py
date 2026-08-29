@@ -111,7 +111,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/auth/exchange" and request.method == "POST":
             if not token.startswith("luc_tmp_"):
                 return JSONResponse(
-                    {"detail": "token provisório inválido"}, status_code=401
+                    {"detail": "invalid provisional token"}, status_code=401
                 )
             # A validação HMAC, expiração e consumo único acontecem atomicamente
             # no caso de uso e no repositório; o middleware nunca concede contexto.

@@ -55,7 +55,7 @@ def _validate_idempotency_key(value: str) -> None:
     if not 8 <= len(value) <= 128:
         raise HTTPException(
             status_code=400,
-            detail="Idempotency-Key deve ter entre 8 e 128 caracteres",
+            detail="Idempotency-Key must be between 8 and 128 characters",
         )
 
 
@@ -64,7 +64,7 @@ def _parse_if_match(value: str) -> str:
     if match is None:
         raise HTTPException(
             status_code=400,
-            detail='If-Match deve conter exatamente "<sha256-do-body>"',
+            detail='If-Match must contain exactly "<sha256-of-the-body>"',
         )
     return match.group(1)
 
@@ -128,7 +128,7 @@ async def bootstrap_admin(
     payload: BootstrapAdminRequest, request: Request, response: Response
 ) -> IssuedUserResponse:
     if not getattr(request.state, "bootstrap_authorized", False):
-        raise HTTPException(status_code=401, detail="credencial de bootstrap inválida")
+        raise HTTPException(status_code=401, detail="invalid bootstrap credential")
     user, api_token = await _identity_service(request).bootstrap_admin(
         payload.username, payload.domain_function
     )
@@ -162,7 +162,7 @@ async def exchange_provisional_token(
     _validate_idempotency_key(idempotency_key)
     provisional_token = getattr(request.state, "provisional_token", None)
     if not isinstance(provisional_token, str):
-        raise HTTPException(status_code=401, detail="token provisório inválido")
+        raise HTTPException(status_code=401, detail="invalid provisional token")
     user, api_token = await _identity_service(request).exchange_provisional_token(
         provisional_token, idempotency_key
     )
@@ -179,7 +179,7 @@ async def enroll_jump_user(
 ) -> ProvisionedUserResponse:
     _validate_idempotency_key(idempotency_key)
     if not getattr(request.state, "jump_enrollment_authorized", False):
-        raise HTTPException(status_code=401, detail="credencial técnica inválida")
+        raise HTTPException(status_code=401, detail="invalid service credential")
     user, provisional_token, expires_at = (
         await _identity_service(request).enroll_jump_user(
             payload.username,

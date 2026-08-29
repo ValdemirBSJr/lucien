@@ -57,6 +57,52 @@ EVOLUTION_API_KEY=SUA_KEY_EVOLUTION_AQUI
     escapar; mantenha revisão humana e um scanner de segredos como barreira
     independente no repositório.
 
+### O que cada regra do scanner bloqueia
+
+Quando a publicação é recusada, a mensagem nomeia a regra:
+
+```
+Hub rejected the request: content blocked by the secret policy
+(rule: lucien-vendor-cipher-password)
+```
+
+Use a tabela para saber o que procurar no rascunho. A coluna **dispara em** traz
+as palavras que a regra usa como âncora — é por elas que se acha a linha.
+
+| Regra | Bloqueia | Dispara em |
+| --- | --- | --- |
+| `lucien-tacacs-radius-key` | Chave compartilhada TACACS+ ou RADIUS | `tacacs`, `radius`, `aaa` |
+| `lucien-snmp-community` | Community SNMP de leitura ou escrita | `snmp` |
+| `lucien-snmpv3-auth-priv` | Senha de autenticação ou privacidade SNMPv3 | `authentication`, `privacy`, `snmp` |
+| `lucien-vendor-cipher-password` | Credencial em texto ou cifrada em configuração de equipamento | `password`, `senha`, `cipher`, `irreversible-cipher` |
+| `lucien-huawei-ppp-pap-chap` | Credencial PPP PAP/CHAP em OLT ou roteador | `ppp`, `pap`, `chap` |
+| `lucien-gpon-ont-auth` | Senha ou LOID de autenticação de ONT/ONU | `ont`, `loid`, `checkcode` |
+| `lucien-docsis-shared-secret` | Shared secret DOCSIS de CMTS | `shared-secret` |
+| `lucien-bgp-neighbor-password` | Senha de sessão BGP entre vizinhos | `neighbor`, `peer` |
+| `lucien-isis-ospf-auth` | Autenticação de protocolo de roteamento interno | `authentication-mode`, `authentication-key` |
+| `lucien-vendor-hash` | Hash de credencial exportado em configuração | `$1$`, `$5$`, `$6$`, `$2a$`, `$2b$`, `$2y$` |
+| `lucien-huawei-irreversible-hash` | Hash irreversível Huawei em configuração exportada | `irreversible-cipher` |
+| `lucien-cisco-type7` | Credencial Cisco tipo 7, trivialmente reversível | `password 7` |
+| `lucien-enable-secret` | Enable secret de equipamento Cisco ou compatível | `enable secret`, `enable password` |
+| `lucien-ipsec-psk` | Pre-shared key de IPsec ou IKE | `pre-shared-key`, `preshared-key`, `psk` |
+| `lucien-local-user-password` | Criação de usuário local com senha em equipamento | `local-user`, `username` |
+
+Regras padrão do Gitleaks continuam ativas por cima destas, e aparecem com o
+nome delas — `generic-api-key`, por exemplo.
+
+!!! warning "A palavra basta, o segredo não precisa existir"
+    As regras casam pela âncora seguida de um valor. `senha LDAP/TACACS` num <!-- gitleaks:allow -->
+    pré-requisito é bloqueado por `lucien-vendor-cipher-password`, embora não
+    haja segredo nenhum ali: a regra vê `senha` seguido de 4 ou mais caracteres
+    sem espaço.
+
+    Isso é deliberado. Uma regra que tentasse distinguir prosa de configuração
+    deixaria passar `A senha é abc123`, que é um vazamento real. Prefira
+    reescrever: `credencial LDAP/TACACS`, ou `senha do LDAP` — depois de `senha`
+    vem `do`, com dois caracteres, abaixo do mínimo.
+
+    Para achar a linha depressa, procure a âncora da regra que a mensagem citou.
+
 ## Aprovação
 
 Proteja a branch `main` no provedor Git, exija Pull Request e pelo menos uma
