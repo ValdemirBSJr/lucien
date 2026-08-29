@@ -30,3 +30,10 @@ publisher/
 # disso pertence ao repositório público. Ignorado aqui para que uma cópia de
 # árvore inteira não o traga por acidente.
 HANDOFF-*.md
+
+# Guia de acesso ao jump server: descreve o caminho de entrada da infraestrutura
+# interna. Vale para a operacao, nao para quem baixa o projeto -- e nao tem par
+# em docs/en/, o que faria o mkdocs-static-i18n cair no fallback em silencio.
+# Ignorado aqui pelo mesmo motivo do HANDOFF: uma copia de arvore inteira nao
+# deve traze-lo por acidente.
+docs/acesso-jump-server.md
