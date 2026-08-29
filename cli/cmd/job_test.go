@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"github.com/lucien-runbook/lucien/internal/draft"
 	"strings"
 	"testing"
 
@@ -435,5 +437,92 @@ func TestJobRetomaRascunhoSalvo(t *testing.T) {
 	}
 	if !strings.Contains(flag.Usage, "draft") {
 		t.Fatalf("a ajuda de --reset nao explica o efeito: %q", flag.Usage)
+	}
+}
+
+func TestJobCatImprimeORascunhoLocalSemFalarComOHub(t *testing.T) {
+	// O rascunho recusado nunca chegou ao Hub, e e justamente o que interessa
+	// ler. Com UUID completo o comando nao precisa de rede nenhuma: um
+	// servidor que responda aqui e falha do teste.
+	estado := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", estado)
+
+	const id = "f51201f2-388a-4ce5-99ea-5d59f9424ca9"
+	conteudo := []byte("# rascunho\n\n- Privilegio, senha LDAP/TACACS\n") // gitleaks:allow
+	if err := draft.Save(id, conteudo); err != nil {
+		t.Fatalf("salvar rascunho: %v", err)
+	}
+
+	comando := newJobCatCommand()
+	var saida bytes.Buffer
+	comando.SetOut(&saida)
+	comando.SetArgs([]string{id})
+
+	if err := comando.Execute(); err != nil {
+		t.Fatalf("executar: %v", err)
+	}
+	if saida.String() != string(conteudo) {
+		t.Fatalf("saida divergente:\n%q", saida.String())
+	}
+}
+
+func TestJobCatFalhaQuandoNaoHaRascunho(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	comando := newJobCatCommand()
+	comando.SetOut(&bytes.Buffer{})
+	comando.SetArgs([]string{"11111111-1111-4111-8111-111111111111"})
+
+	err := comando.Execute()
+	if err == nil {
+		t.Fatal("esperava erro para rascunho ausente")
+	}
+	if !strings.Contains(err.Error(), "draft not found") {
+		t.Fatalf("mensagem inesperada: %v", err)
+	}
+}
+
+func TestUUIDCompletoDistingueIndiceENome(t *testing.T) {
+	// So o UUID dispensa o Hub. Indice e nome precisam da lista, entao nao
+	// podem cair no caminho offline.
+	aceitos := []string{
+		"f51201f2-388a-4ce5-99ea-5d59f9424ca9",
+		"F51201F2-388A-4CE5-99EA-5D59F9424CA9",
+	}
+	for _, valor := range aceitos {
+		if !uuidCompleto.MatchString(valor) {
+			t.Fatalf("deveria reconhecer %q", valor)
+		}
+	}
+	recusados := []string{
+		"1", "12", "heavy-user-cisco", "f51201f2", "f51201f2-388a",
+		"f51201f2-388a-4ce5-99ea-5d59f9424ca9-extra",
+	}
+	for _, valor := range recusados {
+		if uuidCompleto.MatchString(valor) {
+			t.Fatalf("nao deveria reconhecer %q", valor)
+		}
+	}
+}
+
+func TestJobCatRecusaIndiceENomeSemConsultarOHub(t *testing.T) {
+	// A recusa tem de vir do proprio comando, nao de uma tentativa de rede.
+	// Sem API_HOST configurado, qualquer caminho que fale com o Hub falharia
+	// com outro erro -- entao a mensagem exata e a prova de que nao foi la.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	for _, entrada := range []string{"1", "heavy-user-cisco", "f51201f2"} {
+		comando := newJobCatCommand()
+		comando.SetOut(&bytes.Buffer{})
+		comando.SetErr(&bytes.Buffer{})
+		comando.SetArgs([]string{entrada})
+
+		err := comando.Execute()
+		if err == nil {
+			t.Fatalf("esperava recusa para %q", entrada)
+		}
+		if !strings.Contains(err.Error(), "exact job ID") {
+			t.Fatalf("para %q, mensagem inesperada: %v", entrada, err)
+		}
 	}
 }

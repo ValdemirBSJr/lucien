@@ -14,6 +14,7 @@ import (
 	"github.com/lucien-runbook/lucien/internal/api"
 	"github.com/lucien-runbook/lucien/internal/draft"
 	"github.com/lucien-runbook/lucien/internal/editor"
+	"github.com/lucien-runbook/lucien/internal/recording"
 	"github.com/spf13/cobra"
 )
 
@@ -121,6 +122,7 @@ func newJobCommand() *cobra.Command {
 		"discards the saved draft and starts again from the template",
 	)
 	jobCommand.AddCommand(
+		newJobCatCommand(),
 		newJobSentCommand(),
 		newJobDeleteCommand(),
 		newJobStatusCommand(),
@@ -515,4 +517,54 @@ func writeCodeBlock(builder *strings.Builder, language string, content string) {
 		strings.TrimRight(content, "\r\n"),
 		fence,
 	)
+}
+
+// uuidCompleto reconhece o identificador que o rascunho usa como chave.
+var uuidCompleto = regexp.MustCompile(
+	`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+)
+
+func newJobCatCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cat <job_id>",
+		Short: "Prints the saved draft without opening the editor",
+		Long: "Prints the saved draft for a job.\n\n" +
+			"Reads the local draft and never contacts the Hub. A draft refused " +
+			"at publish time never reached the Hub, and it is exactly the one " +
+			"worth reading -- a diagnostic command must keep working when the " +
+			"Hub does not.\n\n" +
+			"That is why it takes the exact job ID and not a review index or a " +
+			"name: resolving those requires the Hub's list. Output goes to " +
+			"stdout, so it can be piped.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			// O rascunho vai inteiro para o terminal. Dentro de uma captura
+			// isso entraria no proprio log -- e ele pode conter justamente o
+			// segredo que fez a publicacao ser recusada.
+			if recording.InsideRecordedSession() {
+				return errors.New(
+					"refusing to print a draft inside a recorded session; " +
+						"run lucien job cat from another terminal",
+				)
+			}
+
+			// Somente o ID exato. Indice e nome exigiriam a lista do Hub, e
+			// um comando de diagnostico que depende do Hub falha justamente
+			// quando ha o que diagnosticar. `lucien runbook revise` cobra o
+			// UUID pelo mesmo tipo de razao: precisao acima de conveniencia.
+			identifier := args[0]
+			if !uuidCompleto.MatchString(identifier) {
+				return errors.New(
+					"job cat takes the exact job ID, not a review index or a " +
+						"name; it reads the local draft and never queries the Hub",
+				)
+			}
+			content, err := draft.Load(identifier)
+			if err != nil {
+				return err
+			}
+			_, err = command.OutOrStdout().Write(content)
+			return err
+		},
+	}
 }
