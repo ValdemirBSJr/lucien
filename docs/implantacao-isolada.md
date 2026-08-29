@@ -143,8 +143,8 @@ deve ser removida para um cofre offline após a emissão.
 
 Se não usou o instalador guiado, crie o arquivo antes de editá-lo:
 
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
 Configure os valores não sensíveis no `.env`. As credenciais devem ser arquivos
@@ -168,7 +168,7 @@ GIT_DOCS_PREFIX=docs/runbooks
 
 Depois gere o TLS e suba o ambiente:
 
-```powershell
+```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml \
   --profile tools build certgen
 docker compose --profile tools run --rm certgen
@@ -274,7 +274,7 @@ para o servidor, SANs explícitos e permissões restritivas.
 
 2. Gere uma única vez:
 
-   ```powershell
+```bash
    docker compose --profile tools run --rm certgen
    ```
 
@@ -298,44 +298,44 @@ Use este procedimento quando não puder usar o contêiner `certgen`. Substitua
 `runbook.exemplo.interno` pelo FQDN presente em `API_HOST`; inclua todos os nomes
 ou IPs que os clientes realmente usam.
 
-```powershell
-New-Item -ItemType Directory -Force certs | Out-Null
+```bash
+mkdir -p certs
 
 # CA privada: guarde fora do host do Hub após emitir o certificado.
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out certs/ca.key
-openssl req -x509 -new -sha256 -days 3650 `
-  -key certs/ca.key `
-  -subj "/C=BR/O=Lucien/CN=Lucien Internal CA" `
-  -addext "basicConstraints=critical,CA:TRUE,pathlen:0" `
-  -addext "keyUsage=critical,keyCertSign,cRLSign" `
-  -addext "subjectKeyIdentifier=hash" `
+openssl req -x509 -new -sha256 -days 3650 \
+  -key certs/ca.key \
+  -subj "/C=BR/O=Lucien/CN=Lucien Internal CA" \
+  -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" \
+  -addext "subjectKeyIdentifier=hash" \
   -out certs/ca.crt
 
 # Chave e CSR do Hub.
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out certs/server.key
-openssl req -new -sha256 `
-  -key certs/server.key `
-  -subj "/C=BR/O=Lucien/CN=runbook-hub" `
+openssl req -new -sha256 \
+  -key certs/server.key \
+  -subj "/C=BR/O=Lucien/CN=runbook-hub" \
   -out certs/server.csr
 
 # Extensões e SANs do certificado de servidor.
-@'
+cat > certs/server.ext <<'EOF'
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
 subjectAltName=DNS:runbook.exemplo.interno,DNS:hub,DNS:localhost,IP:127.0.0.1
-'@ | Set-Content -Encoding ascii certs/server.ext
+EOF
 
-openssl x509 -req -sha256 -days 397 `
-  -in certs/server.csr `
-  -CA certs/ca.crt `
-  -CAkey certs/ca.key `
-  -CAcreateserial `
-  -extfile certs/server.ext `
+openssl x509 -req -sha256 -days 397 \
+  -in certs/server.csr \
+  -CA certs/ca.crt \
+  -CAkey certs/ca.key \
+  -CAcreateserial \
+  -extfile certs/server.ext \
   -out certs/server.crt
 
 openssl verify -CAfile certs/ca.crt certs/server.crt
-Remove-Item certs/server.csr, certs/server.ext, certs/ca.srl
+rm -f certs/server.csr certs/server.ext certs/ca.srl
 ```
 
 Em host Linux, ajuste o acesso do usuário não privilegiado do contêiner antes de
