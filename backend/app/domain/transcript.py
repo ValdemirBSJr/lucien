@@ -35,8 +35,16 @@ _PROMPTED_COMMAND_PATTERN = re.compile(
 )
 _PROMPT_ONLY_PATTERN = re.compile(r"^(?:\([^\r\n)]+\)[ \t]+)?\S*[#$>][ \t]*$")
 
-# Os comandos que controlam a própria captura. Nunca são procedimento: quem os
-# lê num runbook não aprende nada e ainda é induzido a executá-los.
+# Os comandos do próprio CLI. Nunca são procedimento: quem os lê num runbook
+# não aprende nada e ainda é induzido a executá-los.
+#
+# Qualquer invocação de `lucien`, não só `start`, `stop` e `upload`. Enumerar
+# subcomandos deixava passar tudo que não estava na lista -- um `lucien job sent`
+# da sessão anterior chegou à seleção como se fosse passo do procedimento. O
+# CLI é quem grava; o que ele faz está fora do que se está gravando, e um
+# subcomando novo passa a ser coberto sem ninguém lembrar de vir aqui.
+#
+# `lucien` seguido de espaço ou fim de linha: `lucienctl` nao casa.
 #
 # Vive no domínio porque a regra é a mesma nos dois lugares que precisam dela --
 # a extração de comandos e o recorte da saída. Enquanto morava só na
@@ -44,7 +52,7 @@ _PROMPT_ONLY_PATTERN = re.compile(r"^(?:\([^\r\n)]+\)[ \t]+)?\S*[#$>][ \t]*$")
 # prompt para `lucien stop` entrar no bloco do comando anterior e chegar ao
 # documento publicado.
 CAPTURE_CONTROL_COMMAND = re.compile(
-    r"^(?:sudo[ \t]+)?(?:\S*/)?lucien[ \t]+(?:start|stop|upload)(?:[ \t]|$)"
+    r"^(?:sudo[ \t]+)?(?:\S*/)?lucien(?:[ \t]|$)"
 )
 
 

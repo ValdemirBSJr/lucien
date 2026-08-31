@@ -350,8 +350,14 @@ def test_controle_de_captura_reconhecido_com_e_sem_prompt() -> None:
     assert is_capture_control("U000001@host:~$ lucien stop")
     assert is_capture_control("  sudo lucien upload  ")
     assert is_capture_control("/usr/local/bin/lucien start nome")
-    # Nao pode engolir comando legitimo que apenas comece com a palavra.
-    assert not is_capture_control("lucien reviews")
+    # Qualquer subcomando, nao so os tres que controlam a gravacao. A lista
+    # enumerada deixava passar o resto: um `lucien job sent` digitado antes de
+    # `lucien start` chegou a selecao como se fosse passo do procedimento.
+    assert is_capture_control("lucien job sent 00000000-0000-4000-8000-000000000000")
+    assert is_capture_control("lucien reviews")
+    assert is_capture_control("lucien")
+    # A fronteira e o espaco. Outro executavel que apenas comece igual continua
+    # sendo procedimento, e um comando de equipamento tambem.
     assert not is_capture_control("lucienctl start")
     assert not is_capture_control("display acl 3102")
 
