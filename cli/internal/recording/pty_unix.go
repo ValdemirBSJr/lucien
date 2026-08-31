@@ -10,11 +10,37 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/creack/pty"
 	"golang.org/x/term"
 )
+
+// recordingEnvironment devolve o ambiente do shell gravado, com histórico
+// próprio.
+//
+// O filho herdava o `HISTFILE` do operador, e isso vazava nos dois sentidos:
+// uma seta para cima trazia um comando de antes da gravação para dentro do
+// runbook, e ao sair o shell escrevia a sessão inteira no histórico em texto
+// puro -- fora do alcance da sanitização do Hub.
+//
+// Nada é apagado. O histórico real do operador fica intacto, e a seta para cima
+// continua funcionando dentro da sessão, porque o histórico corrente vive em
+// memória. Um `.bashrc` que defina `HISTFILE` explicitamente ainda vence esta
+// variável; por isso o Hub também descarta os comandos do próprio CLI.
+func recordingEnvironment(base []string) []string {
+	ambiente := make([]string, 0, len(base)+1)
+	for _, entrada := range base {
+		// Remover antes de acrescentar: duas definições da mesma variável
+		// deixariam a escolha para o shell, que é quem não deveria escolher.
+		if strings.HasPrefix(entrada, "HISTFILE=") {
+			continue
+		}
+		ambiente = append(ambiente, entrada)
+	}
+	return append(ambiente, "HISTFILE=/dev/null")
+}
 
 func Start(provision, description, domainFunction string) (Session, error) {
 	if !validProvision.MatchString(provision) {
@@ -59,6 +85,7 @@ func Start(provision, description, domainFunction string) (Session, error) {
 		shell = "/bin/sh"
 	}
 	child := exec.Command(shell)
+	child.Env = recordingEnvironment(os.Environ())
 	terminal, err := pty.StartWithSize(child, initialWindowSize())
 	if err != nil {
 		return Session{}, fmt.Errorf("start PTY: %w", err)
