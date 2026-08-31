@@ -7,6 +7,30 @@ release público.
 
 ## [Unreleased]
 
+## [1.1.9] - 2026-08-31
+
+### Security
+
+- o shell gravado por `lucien start` recebe histórico próprio. Antes ele
+  compartilhava o `HISTFILE` do operador, e o vazamento era nos dois sentidos:
+  uma seta para cima trazia comando de antes da gravação para dentro do runbook,
+  e ao encerrar o shell escrevia a sessão inteira no `~/.bash_history`, em texto
+  puro, fora do alcance da sanitização do Hub. O histórico do operador não é
+  apagado nem alterado;
+- a diretiva `gitleaks:allow` deixa de desligar a política de segredos: era
+  honrada também no conteúdo submetido, tanto no `lucien job send` quanto no hook
+  `pre-receive`.
+
+### Fixed
+
+- qualquer comando do próprio CLI deixa de virar passo do runbook. O filtro
+  enumerava `start`, `stop` e `upload`, então `lucien job sent` digitado antes da
+  gravação chegava à seleção como se fosse procedimento.
+
+### Changed
+
+- os exemplos da documentação usam shell POSIX, não PowerShell.
+
 ## [1.1.8] - 2026-08-28
 
 ### Added
