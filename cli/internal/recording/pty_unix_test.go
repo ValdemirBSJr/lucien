@@ -4,6 +4,8 @@ package recording
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -37,5 +39,41 @@ func TestTamanhoInicialDoPTYNuncaEhDegenerado(t *testing.T) {
 	if size.Rows == 0 || size.Cols == 0 {
 		t.Fatalf("tamanho degenerado propagaria 0x0 ao remoto: %dx%d",
 			size.Rows, size.Cols)
+	}
+}
+
+func TestRecordingEnvironmentIsolaOHistorico(t *testing.T) {
+	// O historico do operador entrava na gravacao pela seta para cima, e a
+	// gravacao saia para o historico em texto puro ao encerrar o shell.
+	ambiente := recordingEnvironment([]string{
+		"PATH=/usr/bin",
+		"HISTFILE=/home/operador/.bash_history",
+		"SHELL=/bin/bash",
+	})
+
+	var histfile []string
+	for _, entrada := range ambiente {
+		if strings.HasPrefix(entrada, "HISTFILE=") {
+			histfile = append(histfile, entrada)
+		}
+	}
+	if len(histfile) != 1 || histfile[0] != "HISTFILE=/dev/null" {
+		t.Fatalf("HISTFILE do shell gravado: %v", histfile)
+	}
+
+	// O resto do ambiente e o que faz a sessao parecer a do operador: alias,
+	// PATH e prompt. Perder isso mudaria o procedimento que esta sendo gravado.
+	for _, esperado := range []string{"PATH=/usr/bin", "SHELL=/bin/bash"} {
+		if !slices.Contains(ambiente, esperado) {
+			t.Fatalf("%q sumiu do ambiente: %v", esperado, ambiente)
+		}
+	}
+}
+
+func TestRecordingEnvironmentDefineHistfileQuandoNaoHavia(t *testing.T) {
+	ambiente := recordingEnvironment([]string{"PATH=/usr/bin"})
+
+	if !slices.Contains(ambiente, "HISTFILE=/dev/null") {
+		t.Fatalf("HISTFILE ausente: %v", ambiente)
 	}
 }
