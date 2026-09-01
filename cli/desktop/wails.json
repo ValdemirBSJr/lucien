@@ -9,5 +9,12 @@
   "author": {
     "name": "Valdemir Bezerra de Souza Junior",
     "email": "badmoon25@gmail.com"
+  },
+  "info": {
+    "companyName": "Lucien",
+    "productName": "Lucien Desktop",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright © 2026 Valdemir Bezerra de Souza Junior",
+    "comments": "Autoria manual de runbooks, revisados e publicados pelo Hub"
   }
 }
