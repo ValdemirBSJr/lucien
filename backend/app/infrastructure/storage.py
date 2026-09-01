@@ -534,7 +534,27 @@ class GitContentProvider(StorageProvider):
             )
 
         repo = self._repo_path()
-        ref = await self._git_get(client, f"/repos/{repo}/git/ref/heads/{self._branch}")
+        message = f"docs: publica runbook {job_id} com anexos"
+        return await self._commit_multiple_files(
+            client, repo, entries, message, md_url, expected_markdown
+        )
+
+    async def _commit_multiple_files(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        entries: list[tuple[PurePosixPath, bytes]],
+        message: str,
+        md_url: str,
+        expected_markdown: bytes,
+    ) -> PublishedArtifact:
+        """Commit atômico via Git Data API: blobs -> tree -> commit -> ref.
+
+        Caminho padrão (GitHub). O Gitea não implementa criação de blob por essa
+        API (só leitura por sha) e sobrescreve este método com o endpoint de
+        commit multi-arquivo dele -- ver `GiteaProvider._commit_multiple_files`.
+        """
+        ref = await self._git_get_ref_heads(client, repo, self._branch)
         base_commit_sha = self._nested_sha(ref, "object", "sha")
         base_commit = await self._git_get(client, f"/repos/{repo}/git/commits/{base_commit_sha}")
         base_tree_sha = self._nested_sha(base_commit, "tree", "sha")
@@ -567,7 +587,7 @@ class GitContentProvider(StorageProvider):
             client,
             f"/repos/{repo}/git/commits",
             {
-                "message": f"docs: publica runbook {job_id} com anexos",
+                "message": message,
                 "tree": self._nested_sha(tree, "sha"),
                 "parents": [base_commit_sha],
             },
@@ -611,6 +631,41 @@ class GitContentProvider(StorageProvider):
                 f"the Git provider refused a read (HTTP {response.status_code})"
             )
         return self._corpo(response)
+
+    async def _git_get_ref_heads(
+        self, client: httpx.AsyncClient, repo: str, branch: str
+    ) -> dict[str, object]:
+        """SHA do commit na ponta do branch -- grafia não é estável entre provedores.
+
+        O GitHub aceita a forma singular (`git/ref/heads/<branch>`) e devolve um
+        único objeto. O Gitea recusa essa forma com 404 e só responde à plural
+        (`git/refs/heads/<branch>`) -- e mesmo pedindo por um branch específico e
+        existente, devolve uma *lista* (o mesmo formato que o GitHub usa para
+        "referências que casam com um prefixo"). Tenta a forma plural direto e
+        aceita as duas formas de corpo, em vez de arriscar funcionar num
+        provedor e falhar no outro só por causa da forma da resposta.
+        """
+        try:
+            response = await client.get(f"{self._api_base}/repos/{repo}/git/refs/heads/{branch}")
+        except httpx.HTTPError as error:
+            raise self._inacessivel(error) from error
+        if response.status_code != 200:
+            raise UpstreamError(
+                f"the Git provider refused a read (HTTP {response.status_code})"
+            )
+        try:
+            data = response.json()
+        except ValueError as error:
+            raise UpstreamError("the Git provider answered with an invalid body") from error
+        if isinstance(data, list):
+            alvo = f"refs/heads/{branch}"
+            for item in data:
+                if isinstance(item, dict) and item.get("ref") == alvo:
+                    return item
+            raise UpstreamError(f"branch '{branch}' not found in the Git provider")
+        if not isinstance(data, dict):
+            raise UpstreamError("the Git provider answered with an unexpected structure")
+        return data
 
     async def _git_post(
         self, client: httpx.AsyncClient, path: str, payload: dict[str, object]
@@ -745,6 +800,54 @@ class GiteaProvider(GitContentProvider):
             docs_prefix=settings.git_docs_prefix,
             ca_file=settings.git_ca_file,
         )
+
+    async def _commit_multiple_files(
+        self,
+        client: httpx.AsyncClient,
+        repo: str,
+        entries: list[tuple[PurePosixPath, bytes]],
+        message: str,
+        md_url: str,
+        expected_markdown: bytes,
+    ) -> PublishedArtifact:
+        """Commit atômico multi-arquivo pelo endpoint dedicado do Gitea.
+
+        O Gitea não expõe `POST git/blobs` (só GET por sha) nem devolve
+        `git/commits/{sha}` no formato do GitHub (tree fica aninhada em
+        `commit.tree.sha`) -- a sequência blob->tree->commit->ref da classe
+        base não tem como funcionar aqui. `POST .../contents` é o mecanismo
+        que o próprio Gitea documenta para commitar vários arquivos de uma vez
+        de forma atômica: https://docs.gitea.com/api/1.25/operations/repo-change-files/
+        """
+        payload: dict[str, object] = {
+            "branch": self._branch,
+            "message": message,
+            "files": [
+                {
+                    "operation": "create",
+                    "path": path.as_posix(),
+                    "content": base64.b64encode(content).decode("ascii"),
+                }
+                for path, content in entries
+            ],
+        }
+        try:
+            response = await client.post(f"{self._api_base}/repos/{repo}/contents", json=payload)
+        except httpx.HTTPError as error:
+            confirmado = await self._confirmar(client, md_url, expected_markdown)
+            if confirmado is not None:
+                return confirmado
+            raise self._inacessivel(error) from error
+
+        if response.status_code in {409, 422}:
+            confirmado = await self._confirmar(client, md_url, expected_markdown)
+            if confirmado is not None:
+                return confirmado
+        if response.status_code not in {200, 201}:
+            raise UpstreamError(
+                f"the Git provider refused the publication (HTTP {response.status_code})"
+            )
+        return PublishedArtifact(url=md_url)
 
 
 def build_storage_provider(settings: Settings) -> StorageProvider:

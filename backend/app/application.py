@@ -21,6 +21,7 @@ from app.domain.models import (
 )
 from app.domain.images import (
     extract_asset_references,
+    previously_published_asset_paths,
     rewritten_markdown,
     validate_asset_completeness,
 )
@@ -550,7 +551,10 @@ class UploadService:
         if len(normalized_description) > 280:
             raise ValidationError("description must be at most 280 characters")
 
-        await self._reject_detected_secret(raw_log)
+        # Vazio é um runbook puramente visual (ver process_once) -- o scanner
+        # exige conteúdo não vazio e recusaria a chamada, não a ausência dele.
+        if raw_log:
+            await self._reject_detected_secret(raw_log)
         if normalized_description:
             await self._reject_detected_secret(normalized_description)
         sanitized_log = sanitize_secrets(raw_log).text
@@ -861,6 +865,7 @@ class JobService:
         markdown: str,
         known_job_id: str,
         raw_assets: tuple[RawAssetInput, ...],
+        already_existing_paths: frozenset[str] = frozenset(),
     ) -> dict[str, ProcessedAsset]:
         """Roda o gate de imagem inteiro: referencia -> OCR -> segredo.
 
@@ -874,6 +879,10 @@ class JobService:
         nao ser o `job.id` final da reserva (uma revisao sempre cria um id
         novo) -- por isso o caminho e reescrito depois, em
         `_rewrite_asset_paths`, com o id real.
+
+        `already_existing_paths` (so populado por `revise`) sao imagens
+        herdadas sem alteracao da versao publicada anterior: nao precisam
+        vir em `raw_assets` de novo, so continuar referenciadas como texto.
         """
 
         if self._image_scanner is None:
@@ -887,9 +896,9 @@ class JobService:
                 "a publication accepts at most "
                 f"{self._max_assets_per_publication} images"
             )
-        references = extract_asset_references(markdown, known_job_id)
+        references = extract_asset_references(markdown, known_job_id, already_existing_paths)
         submitted_filenames = frozenset(asset.filename for asset in raw_assets)
-        validate_asset_completeness(references, submitted_filenames)
+        validate_asset_completeness(references, submitted_filenames, already_existing_paths)
 
         processed: dict[str, ProcessedAsset] = {}
         for asset in raw_assets:
@@ -1158,8 +1167,22 @@ class JobService:
             # O id conhecido do cliente aqui e o da fonte -- a revisao ainda
             # nao tem id proprio antes de `reserve_revision`. O caminho final
             # em disco usa o id real da revisao, atribuido depois.
+            #
+            # Uma imagem herdada sem alteracao da versao publicada anterior
+            # nao vem em `assets` -- so releio o corpo ja publicado pra saber
+            # quais referencias ja existiam e podem ficar de fora da checagem
+            # de completude, em vez de forcar reenvio de algo que nao mudou.
+            previous_body = _strip_frontmatter(
+                await self._storage.read_published(
+                    revision_source.job.id,
+                    revision_source.job.created_at,
+                    artifact_name=revision_source.job.name,
+                    domain_function=revision_source.root_identity.domain_function,
+                )
+            )
+            already_existing_paths = previously_published_asset_paths(previous_body)
             processed = await self._scan_and_reencode_assets(
-                final_body, source_job_id, assets
+                final_body, source_job_id, assets, already_existing_paths
             )
 
         content_hash = self._content_hash(final_body, assets)

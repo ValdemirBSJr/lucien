@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -329,5 +330,52 @@ func TestTrocaTokenProvisorioRepeteComMesmaChave(t *testing.T) {
 	}
 	if len(idempotencyKeys) != 2 || idempotencyKeys[0] == "" || idempotencyKeys[0] != idempotencyKeys[1] {
 		t.Fatalf("retry não preservou a chave idempotente: %#v", idempotencyKeys)
+	}
+}
+
+func TestParseErrorDetailEntendeErroDeDominio(t *testing.T) {
+	detail := parseErrorDetail(json.RawMessage(`"credencial inválida"`))
+	if detail != "credencial inválida" {
+		t.Fatalf("detalhe inesperado: %q", detail)
+	}
+}
+
+func TestParseErrorDetailEntendeValidacaoDoFastAPI(t *testing.T) {
+	corpo := `[{"loc":["body","markdown"],"msg":"field required","type":"missing"}]`
+	detail := parseErrorDetail(json.RawMessage(corpo))
+	if detail != "body.markdown: field required" {
+		t.Fatalf("detalhe inesperado: %q", detail)
+	}
+}
+
+func TestParseErrorDetailVazioSemCorpo(t *testing.T) {
+	if detail := parseErrorDetail(nil); detail != "" {
+		t.Fatalf("esperava vazio, veio %q", detail)
+	}
+}
+
+func TestDoJSONPropagaDetalheDeValidacaoDoFastAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = writer.Write([]byte(
+			`{"detail":[{"loc":["body","markdown"],"msg":"field required","type":"missing"}]}`,
+		))
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+
+	_, err = client.RetryJob(context.Background(), "job-id", false)
+	var httpError *HTTPError
+	if !errors.As(err, &httpError) {
+		t.Fatalf("esperava *HTTPError, veio %T: %v", err, err)
+	}
+	if httpError.Detail != "body.markdown: field required" {
+		t.Fatalf("detalhe inesperado: %q", httpError.Detail)
 	}
 }

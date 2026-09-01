@@ -4,7 +4,7 @@
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_ADD, ICON_DELETE, ICON_EDIT, ICON_REFRESH } from '../lib/icons';
-  import { openEditor, openEditorWithDraft, openPublished } from '../lib/router';
+  import { openEditor, openLocalDraft, openPublished } from '../lib/router';
   import {
     ListActiveRunbooks,
     ListPublishedMine,
@@ -89,16 +89,13 @@
     }
   }
 
-  function onCreated(event: CustomEvent<{ id: string; draft: string }>): void {
+  function onCreated(
+    event: CustomEvent<{ name: string; description: string; domainFunction: string; draft: string }>,
+  ): void {
     showNewRunbook = false;
-    const { id, draft } = event.detail;
-    // Opcional: só quando o \@ (ou texto solto) gerou algo, pula direto pro
-    // rascunho. Sem isso, comportamento de sempre -- fica PROCESSING na tabela.
-    if (draft) {
-      openEditorWithDraft(id, draft);
-      return;
-    }
-    void loadActive();
+    // "Enviar" nunca criou nada no Hub -- abre direto no editor local; o job
+    // só nasce quando o operador publicar de lá.
+    openLocalDraft(event.detail);
   }
 
   function statusLabelKey(status: string): 'home_status_pending' | 'home_status_processing' | 'home_status_failed' {

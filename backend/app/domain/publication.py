@@ -26,6 +26,11 @@ class ValidatedPlaybook:
 # português. Aceitar ambos preserva retrocompatibilidade sem relaxar a estrutura.
 _STEP_HEADER = re.compile(r"^### (?:Passo|Step) ([1-9][0-9]*): (.{1,120})$")
 _FENCE_OPENING = re.compile(r"^(`{3,})")
+# So detecta presenca de referencia -- o caminho (job_id, nome do arquivo) e
+# validado a parte, em app.domain.images, depois que o playbook inteiro ja
+# passou por aqui. Um passo visual nao tem comando para revisar; a imagem
+# referenciada e a evidencia mínima de que a acao documentada aconteceu.
+_IMAGE_REFERENCE = re.compile(r"!\[[^\]\n]*\]\([^)\s]+\)")
 _HIGH_RISK_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
@@ -105,10 +110,27 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
             step_number = int(match.group(1))
             if step_number != expected_step:
                 raise ValidationError("steps must be sequential and start at 1")
-            if index + 1 >= len(lines) or lines[index + 1] != "```bash":
-                raise ValidationError(
-                    f"Step {step_number} must be followed immediately by ```bash"
-                )
+
+            has_bash = index + 1 < len(lines) and lines[index + 1] == "```bash"
+            if not has_bash:
+                # Sem comando, só é um passo válido se documentar uma ação
+                # visual: precisa de uma imagem referenciada antes do próximo
+                # "### " (outro passo, ou um subtítulo livre) ou do fim do
+                # documento. Texto solto sem imagem nem comando não é um
+                # passo revisável -- não há o que a "REVISÃO OBRIGATÓRIA"
+                # confirmaria.
+                body_end = index + 1
+                while body_end < len(lines) and not lines[body_end].startswith("### "):
+                    body_end += 1
+                body = "\n".join(lines[index + 1 : body_end])
+                if not _IMAGE_REFERENCE.search(body):
+                    raise ValidationError(
+                        f"Step {step_number} must be followed immediately by ```bash, "
+                        "or document a visual action with an image reference"
+                    )
+                expected_step += 1
+                index = body_end
+                continue
 
             closing = index + 2
             while closing < len(lines) and lines[closing] != "```":
@@ -136,7 +158,10 @@ def validate_playbook(markdown: str) -> ValidatedPlaybook:
             continue
         index += 1
 
-    if not command_blocks:
+    if expected_step == 1:
+        # Nenhum passo foi encontrado -- nem de comando, nem visual. Um
+        # runbook sem nenhum comando (so passos visuais, com imagem) é
+        # válido; o que não pode é não ter passo revisável nenhum.
         raise ValidationError("the playbook must contain at least one operational step")
 
     criticality = _classify_criticality(command_blocks)

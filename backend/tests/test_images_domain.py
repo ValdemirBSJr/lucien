@@ -2,6 +2,7 @@ import pytest
 
 from app.domain.images import (
     extract_asset_references,
+    previously_published_asset_paths,
     rewritten_markdown,
     validate_asset_completeness,
 )
@@ -86,6 +87,62 @@ def test_rewritten_markdown_replaces_filename_and_keeps_caption() -> None:
     markdown = f"antes ![print da tela](assets/{_JOB_ID}/shot.png) depois"
     result = rewritten_markdown(markdown, _JOB_ID, {"shot.png": "3f9ac1.png"})
     assert result == f"antes ![print da tela](assets/{_JOB_ID}/3f9ac1.png) depois"
+
+
+def test_reference_to_ancestor_job_is_accepted_when_already_existing() -> None:
+    """Numa revisao-de-revisao, uma imagem herdada aponta pro avo, nao pro pai."""
+    raw_path = f"assets/{_OTHER_JOB_ID}/shot.png"
+    markdown = f"![print](assets/{_OTHER_JOB_ID}/shot.png)"
+    references = extract_asset_references(
+        markdown, _JOB_ID, already_existing_paths=frozenset({raw_path})
+    )
+    assert references[0].filename == "shot.png"
+    assert references[0].path == raw_path
+
+
+def test_reference_to_ancestor_job_still_rejected_when_not_already_existing() -> None:
+    markdown = f"![print](assets/{_OTHER_JOB_ID}/shot.png)"
+    with pytest.raises(ValidationError, match="different job"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_completeness_exempts_already_existing_reference_from_submission() -> None:
+    raw_path = f"assets/{_JOB_ID}/shot.png"
+    references = extract_asset_references(
+        f"![print](assets/{_JOB_ID}/shot.png)",
+        _JOB_ID,
+        already_existing_paths=frozenset({raw_path}),
+    )
+    # Nada foi submetido de novo -- a imagem herdada nao exige reenvio.
+    validate_asset_completeness(references, frozenset(), frozenset({raw_path}))
+
+
+def test_completeness_still_requires_submission_for_a_genuinely_new_reference() -> None:
+    existing_path = f"assets/{_JOB_ID}/old.png"
+    references = extract_asset_references(
+        f"![velho](assets/{_JOB_ID}/old.png)\n![novo](assets/{_JOB_ID}/new.png)",
+        _JOB_ID,
+        already_existing_paths=frozenset({existing_path}),
+    )
+    with pytest.raises(ValidationError, match="not submitted"):
+        validate_asset_completeness(references, frozenset(), frozenset({existing_path}))
+    # Com o novo enviado, passa -- o antigo continua isento.
+    validate_asset_completeness(
+        references, frozenset({"new.png"}), frozenset({existing_path})
+    )
+
+
+def test_previously_published_asset_paths_collects_well_formed_references() -> None:
+    markdown = (
+        f"![um](assets/{_JOB_ID}/a.png) "
+        f"![dois](assets/{_OTHER_JOB_ID}/b.png) "
+        "![externo](https://evil.example/leak.png)"
+    )
+    paths = previously_published_asset_paths(markdown)
+    assert paths == {
+        f"assets/{_JOB_ID}/a.png",
+        f"assets/{_OTHER_JOB_ID}/b.png",
+    }
 
 
 def test_rewritten_markdown_handles_multiple_references() -> None:

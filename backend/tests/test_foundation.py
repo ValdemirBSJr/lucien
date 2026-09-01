@@ -343,6 +343,30 @@ async def test_log_vazio_produz_runbook_visual_sem_chamar_extrator(
     assert job.command_outputs == ()
 
 
+async def test_enqueue_com_log_vazio_nao_manda_string_vazia_ao_scanner(
+    repository: SQLAlchemyJobRepository,
+) -> None:
+    """Regressão: o serviço de secret scanning exige conteúdo não vazio
+    (`min_length=1`) e recusaria a chamada com 422 -- que o Hub converte em
+    "scanner indisponível", uma mensagem enganosa para um bug de chamada."""
+
+    user = await repository.create_user(
+        "visual-scanner", "6" * 64, RoleLevel.SENIOR, "servidores"
+    )
+    scanner = StaticSecretScanner()
+    job = await ready_job(
+        repository,
+        user.id,
+        "job-visual-scanner",
+        "",
+        description="Passos de configuração pelo painel web.",
+        scanner=scanner,
+    )
+    assert "" not in scanner.scanned_contents
+    assert "Passos de configuração pelo painel web." in scanner.scanned_contents
+    assert job.status.value == "PENDING"
+
+
 async def test_log_nao_vazio_sem_comandos_extraidos_ainda_falha(
     repository: SQLAlchemyJobRepository,
 ) -> None:
@@ -1082,6 +1106,53 @@ def test_gramatica_rejeita_fence_sem_fechamento() -> None:
         "### Passo 1: Guia\n```bash\necho ok\n```\n"
         "```yaml\nchave: valor\n"
     )
+
+    with pytest.raises(ValidationError):
+        validate_playbook(markdown)
+
+
+def test_gramatica_aceita_passo_visual_com_imagem() -> None:
+    """Passo sem comando é válido quando documenta a ação com uma imagem --
+    é a evidência mínima, já que não há comando nenhum para revisar."""
+
+    markdown = (
+        "### Passo 1: Rodar o diagnóstico\n"
+        "```bash\necho ok\n```\n"
+        "### Passo 2: Clique em Confirmar\n"
+        "\n"
+        "![Botão Confirmar destacado](assets/11111111-1111-1111-1111-111111111111/img.png)\n"
+    )
+
+    validated = validate_playbook(markdown)
+
+    assert validated.command_blocks == ("echo ok",)
+
+
+def test_gramatica_aceita_runbook_totalmente_visual() -> None:
+    """Zero comandos, só passos visuais -- ainda assim publicável."""
+
+    from app.domain.publication import Criticality
+
+    markdown = (
+        "### Passo 1: Abra o painel\n"
+        "\n"
+        "![Painel inicial](assets/11111111-1111-1111-1111-111111111111/a.png)\n"
+        "### Passo 2: Clique em Salvar\n"
+        "\n"
+        "![Botão Salvar](assets/11111111-1111-1111-1111-111111111111/b.png)\n"
+    )
+
+    validated = validate_playbook(markdown)
+
+    assert validated.command_blocks == ()
+    assert validated.criticality == Criticality.LOW
+
+
+def test_gramatica_rejeita_passo_sem_bash_e_sem_imagem() -> None:
+    """Texto solto sob um "### Passo" não é passo revisável -- nem comando,
+    nem evidência visual do que foi feito."""
+
+    markdown = "### Passo 1: Faça o procedimento manualmente\n\nSem imagem nenhuma aqui.\n"
 
     with pytest.raises(ValidationError):
         validate_playbook(markdown)

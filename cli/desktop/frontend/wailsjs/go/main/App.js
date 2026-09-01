@@ -10,6 +10,10 @@ export function CreateRunbook(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRunbook'](arg1, arg2, arg3, arg4);
 }
 
+export function DeleteLocalDraft(arg1) {
+  return window['go']['main']['App']['DeleteLocalDraft'](arg1);
+}
+
 export function DeleteRunbook(arg1, arg2) {
   return window['go']['main']['App']['DeleteRunbook'](arg1, arg2);
 }
@@ -18,12 +22,12 @@ export function ForgetEverything() {
   return window['go']['main']['App']['ForgetEverything']();
 }
 
-export function GenerateRunbookDraft(arg1, arg2) {
-  return window['go']['main']['App']['GenerateRunbookDraft'](arg1, arg2);
+export function GenerateLocalDraft(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GenerateLocalDraft'](arg1, arg2, arg3);
 }
 
-export function GenerateTypedLogDraft(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GenerateTypedLogDraft'](arg1, arg2, arg3, arg4);
+export function GenerateRunbookDraft(arg1, arg2) {
+  return window['go']['main']['App']['GenerateRunbookDraft'](arg1, arg2);
 }
 
 export function GetAppInfo() {
@@ -42,6 +46,10 @@ export function GetRunbookDetail(arg1) {
   return window['go']['main']['App']['GetRunbookDetail'](arg1);
 }
 
+export function ImportImage() {
+  return window['go']['main']['App']['ImportImage']();
+}
+
 export function IsConnectionConfigured() {
   return window['go']['main']['App']['IsConnectionConfigured']();
 }
@@ -58,6 +66,10 @@ export function ListPublishedMine() {
   return window['go']['main']['App']['ListPublishedMine']();
 }
 
+export function LoadLocalDraft(arg1) {
+  return window['go']['main']['App']['LoadLocalDraft'](arg1);
+}
+
 export function Login(arg1) {
   return window['go']['main']['App']['Login'](arg1);
 }
@@ -70,18 +82,22 @@ export function PickCAFile() {
   return window['go']['main']['App']['PickCAFile']();
 }
 
-export function PublishRunbook(arg1, arg2) {
-  return window['go']['main']['App']['PublishRunbook'](arg1, arg2);
+export function PublishRunbook(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PublishRunbook'](arg1, arg2, arg3);
 }
 
 export function RetryRunbook(arg1) {
   return window['go']['main']['App']['RetryRunbook'](arg1);
 }
 
-export function ReviseRunbook(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ReviseRunbook'](arg1, arg2, arg3);
+export function ReviseRunbook(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReviseRunbook'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveConnectionSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveConnectionSettings'](arg1, arg2);
+}
+
+export function SaveLocalDraft(arg1, arg2) {
+  return window['go']['main']['App']['SaveLocalDraft'](arg1, arg2);
 }

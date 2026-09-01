@@ -5,7 +5,9 @@
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_CLOSE } from '../lib/icons';
+  import MarkdownEditor from '../lib/MarkdownEditor.svelte';
   import { GetPublishedContent, ReviseRunbook } from '../../wailsjs/go/main/App';
+  import { main } from '../../wailsjs/go/models';
 
   export let id: string;
 
@@ -17,6 +19,7 @@
   let original = '';
   let contentHash = '';
   let markdown = '';
+  let assets: main.EditorAsset[] = [];
   let loadError = '';
   let reviseError = '';
   let successMessage = '';
@@ -40,11 +43,13 @@
   function startRevision(): void {
     successMessage = '';
     reviseError = '';
+    assets = [];
     phase = 'editing';
   }
 
   function cancelRevision(): void {
     markdown = original;
+    assets = [];
     reviseError = '';
     phase = 'viewing';
   }
@@ -59,11 +64,21 @@
     const confirmed = await confirmDialog($t('published_revise_confirm'));
     if (!confirmed) return;
     reviseError = '';
+    const invalidos = assets.filter(
+      (asset) => asset.mediaType !== 'image/png' && asset.mediaType !== 'image/jpeg',
+    );
+    if (invalidos.length > 0) {
+      reviseError = `${$t('published_revise_error')} (invalid asset media_type: ${invalidos
+        .map((asset) => `${asset.filename}=${JSON.stringify(asset.mediaType)}`)
+        .join('; ')})`;
+      return;
+    }
     phase = 'publishing';
     try {
-      const revised = await ReviseRunbook(id, markdown, contentHash);
+      const revised = await ReviseRunbook(id, markdown, contentHash, assets);
       successMessage = $t('published_revise_success', { id: revised.id });
       original = markdown;
+      assets = [];
       phase = 'viewing';
       // O Hub recusa revisar de novo por cima desta mesma versão agora que
       // ela foi superada -- recarrega o hash/conteúdo para refletir isso.
@@ -90,13 +105,16 @@
     {#if loadError}<p class="message error">{loadError}</p>{/if}
   {:else}
     {#if successMessage}<p class="message success">{successMessage}</p>{/if}
-    <textarea
-      class="markdown"
-      bind:value={markdown}
-      rows="24"
-      readonly={phase === 'viewing' || phase === 'publishing'}
-      disabled={phase === 'publishing'}
-    ></textarea>
+    {#if phase === 'viewing'}
+      <textarea class="markdown" value={markdown} rows="24" readonly></textarea>
+    {:else}
+      <MarkdownEditor
+        bind:value={markdown}
+        bind:assets
+        jobIdForAssets={id}
+        disabled={phase === 'publishing'}
+      />
+    {/if}
     {#if reviseError}<p class="message error">{reviseError}</p>{/if}
     <div class="actions">
       {#if phase === 'viewing'}
