@@ -787,6 +787,33 @@ preso em `PROCESSING`, use `lucien job del <id_ou_nome_ou_indice> --force`; a re
 fila é transacional. `--yes` pula somente a confirmação interativa. Nenhuma
 combinação de flags apaga um Job `PUBLISHED`.
 
+### `lucien runbook cat <uuid_do_runbook_publicado>`
+
+Imprime um runbook publicado, sem abrir o editor. Leitura pura: não altera nada.
+
+Está para o `revise` como o `job cat` está para o `job` — ler o que há sem o
+risco de editar. Consultar um procedimento durante uma manutenção não deveria
+colocar o operador diante de um editor com uma publicação imutável aberta.
+
+Diferente do `job cat`, este **consulta o Hub**: um runbook publicado só existe
+lá. Não há o dilema do rascunho recusado — o conteúdo já passou pelo secret
+scanning e pela DLP antes de ser publicado.
+
+Exige o UUID exato, pelo mesmo motivo do `revise`: os dois operam sobre a mesma
+publicação, e aceitar formas diferentes de identificador faria conferir um
+runbook e revisar outro.
+
+A saída vai para `stdout`, então aceita pipe:
+
+```bash
+lucien runbook cat 3e381ebe-0284-4d3b-b304-a13655e3dd4c | less
+```
+
+O comando **se recusa a rodar dentro de uma sessão gravada**. Aqui o motivo não
+é segredo — o conteúdo já passou pela política —, e sim que o runbook inteiro
+entraria no log como saída do último comando, e o próximo nasceria com outro
+embutido dentro. Rode de outro terminal.
+
 ### `lucien runbook revise <uuid_do_runbook_publicado>`
 
 Corrige um runbook já publicado. Baixa o corpo do Hub, abre o `EDITOR` e devolve o
