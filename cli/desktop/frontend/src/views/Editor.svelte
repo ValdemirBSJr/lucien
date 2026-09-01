@@ -1,47 +1,67 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '../lib/i18n';
-  import { closeEditor, editingRunbookDraft } from '../lib/router';
+  import { closeEditor, PENDING_ASSET_JOB_TOKEN, type PendingLocalRunbook } from '../lib/router';
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_CLOSE } from '../lib/icons';
+  import MarkdownEditor from '../lib/MarkdownEditor.svelte';
   import {
+    CreateRunbook,
     GetRunbookDetail,
     GenerateRunbookDraft,
     PublishRunbook,
+    SaveLocalDraft,
+    LoadLocalDraft,
+    DeleteLocalDraft,
   } from '../../wailsjs/go/main/App';
   import { main } from '../../wailsjs/go/models';
 
-  export let id: string;
+  // Ou um runbook que já existe no Hub (`id`, aberto pela tabela), ou um
+  // rascunho local que ainda não existe lá (`pending`, aberto pelo modal de
+  // novo runbook) -- nunca os dois.
+  export let id: string | null = null;
+  export let pending: PendingLocalRunbook | null = null;
 
   // Fases da edição: carregando os detalhes -> escolhendo comandos -> texto
   // gerado à mão editável -> enviando. Cada uma esconde a anterior porque
   // regenerar o modelo por cima de uma edição já feita apagaria o trabalho.
-  type Phase = 'loading' | 'select' | 'draft' | 'publishing';
+  // No modo local (`pending`), começa direto em 'draft': não há job, então
+  // não há comando nenhum do Hub para escolher.
+  type Phase = 'loading' | 'select' | 'draft' | 'publishing' | 'published';
 
-  let phase: Phase = 'loading';
+  let phase: Phase = pending ? 'draft' : 'loading';
   let detail: main.RunbookDetail | null = null;
   let selected: Record<string, boolean> = {};
-  let draft = '';
+  let draft = pending ? pending.draft : '';
+  let assets: main.EditorAsset[] = [];
   let loadError = '';
   let generateError = '';
   let publishError = '';
+  let successMessage = '';
 
-  onMount(load);
+  // Enquanto o job não existe (`pending`), as imagens referenciam um UUID
+  // placeholder -- substituído pelo id real logo antes de publicar.
+  $: jobIdForAssets = id ?? PENDING_ASSET_JOB_TOKEN;
+
+  onMount(() => {
+    if (!pending) void load();
+  });
 
   async function load(): Promise<void> {
+    if (!id) return;
     phase = 'loading';
     loadError = '';
     try {
       detail = await GetRunbookDetail(id);
       selected = Object.fromEntries(detail.commands.map((command) => [command, true]));
-      // Opcional: um rascunho já pronto (gerado no modal a partir do \@) pula
-      // a seleção de comandos -- consumido uma vez, para não reaparecer numa
-      // reabertura futura deste mesmo runbook pela tabela.
-      const rascunhoPronto = $editingRunbookDraft;
-      if (rascunhoPronto) {
-        editingRunbookDraft.set(null);
-        draft = rascunhoPronto;
+      // Uma tentativa de publicação anterior pode ter falhado depois do job
+      // já existir -- o rascunho salvo localmente (texto + imagens) é mais
+      // recente que qualquer coisa que o Hub tenha, então prevalece.
+      const saved = await LoadLocalDraft(id);
+      if (saved.markdown) {
+        draft = saved.markdown;
+        assets = saved.assets ?? [];
         phase = 'draft';
       } else {
         phase = 'select';
@@ -56,6 +76,7 @@
   }
 
   async function generate(): Promise<void> {
+    if (!id) return;
     generateError = '';
     const chosen = Object.entries(selected)
       .filter(([, checked]) => checked)
@@ -68,22 +89,141 @@
     }
   }
 
-  async function publish(): Promise<void> {
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // Verificação só do cliente, antes de gastar uma ida ao Hub: se algum
+  // anexo tiver um media_type diferente dos dois que o Hub aceita, mostra
+  // exatamente qual e qual valor -- em vez de descobrir só depois de uma
+  // rejeição genérica, ida e volta pela rede.
+  function invalidAssetsMessage(list: main.EditorAsset[]): string {
+    const invalidos = list.filter(
+      (asset) => asset.mediaType !== 'image/png' && asset.mediaType !== 'image/jpeg',
+    );
+    if (invalidos.length === 0) return '';
+    return invalidos
+      .map((asset) => `${asset.filename}: media_type=${JSON.stringify(asset.mediaType)}`)
+      .join('; ');
+  }
+
+  // O job recém-criado nasce PROCESSING; só aceita publicação quando o
+  // worker assíncrono do Hub o leva a PENDING. Sem raw_log (este fluxo nunca
+  // manda nada pro extrator), essa transição é rápida, mas ainda é uma fila
+  // -- espera em vez de tentar publicar contra um job que o Hub ainda recusa.
+  async function waitUntilReady(runbookId: string): Promise<void> {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const current = await GetRunbookDetail(runbookId);
+      if (current.status === 'PENDING') return;
+      if (current.status === 'FAILED') {
+        // RunbookDetail não traz o motivo (esse campo só existe na listagem
+        // de ativos) -- não deveria acontecer aqui, já que este fluxo nunca
+        // manda raw_log pro Hub extrair nada.
+        throw new Error('the Hub could not prepare the runbook');
+      }
+      await delay(1000);
+    }
+    throw new Error('timed out waiting for the Hub to prepare the runbook');
+  }
+
+  async function publishPending(): Promise<void> {
+    if (!pending) return;
     const confirmed = await confirmDialog($t('editor_publish_confirm'));
     if (!confirmed) return;
     publishError = '';
     phase = 'publishing';
+    // Cada etapa fala com o Hub separadamente -- misturar as três num só
+    // catch escondia justamente qual delas estava falhando de verdade.
+    let created: main.RunbookRow;
     try {
-      await PublishRunbook(id, draft);
-      closeEditor();
+      // Sempre sem raw_log: o rascunho já foi montado localmente, então não
+      // há por que também submeter o texto digitado à extração do Hub -- ela
+      // não entende a sintaxe \@ e poderia falhar o job à toa.
+      created = await CreateRunbook(pending.name, '', pending.description, pending.domainFunction);
+    } catch (error) {
+      publishError = `${$t('editor_create_error')} (${String(error)})`;
+      phase = 'draft';
+      return;
+    }
+    const finalMarkdown = draft.replaceAll(PENDING_ASSET_JOB_TOKEN, created.id);
+    // Salva assim que o job existe de verdade, antes de qualquer outra
+    // chamada -- se a espera ou a publicação falharem daqui pra frente,
+    // reabrir pela tabela recupera exatamente isto, em vez de uma tela em
+    // branco.
+    try {
+      await SaveLocalDraft(created.id, new main.LocalDraft({ markdown: finalMarkdown, assets }));
+    } catch {
+      // Preservação local é um bônus; a publicação não pode depender dela.
+    }
+    try {
+      await waitUntilReady(created.id);
+    } catch (error) {
+      publishError = `${$t('editor_wait_error')} (${String(error)})`;
+      phase = 'draft';
+      return;
+    }
+    const problema = invalidAssetsMessage(assets);
+    if (problema) {
+      publishError = `${$t('editor_publish_error')} (invalid asset media_type: ${problema})`;
+      phase = 'draft';
+      return;
+    }
+    try {
+      await PublishRunbook(created.id, finalMarkdown, assets);
+      await DeleteLocalDraft(created.id).catch(() => {});
+      successMessage = $t('editor_publish_success');
+      phase = 'published';
     } catch (error) {
       publishError = `${$t('editor_publish_error')} (${String(error)})`;
       phase = 'draft';
     }
   }
 
+  async function publishExisting(): Promise<void> {
+    if (!id) return;
+    const confirmed = await confirmDialog($t('editor_publish_confirm'));
+    if (!confirmed) return;
+    publishError = '';
+    phase = 'publishing';
+    try {
+      await SaveLocalDraft(id, new main.LocalDraft({ markdown: draft, assets }));
+    } catch {
+      // Preservação local é um bônus; a publicação não pode depender dela.
+    }
+    const problema = invalidAssetsMessage(assets);
+    if (problema) {
+      publishError = `${$t('editor_publish_error')} (invalid asset media_type: ${problema})`;
+      phase = 'draft';
+      return;
+    }
+    try {
+      await PublishRunbook(id, draft, assets);
+      await DeleteLocalDraft(id).catch(() => {});
+      successMessage = $t('editor_publish_success');
+      phase = 'published';
+    } catch (error) {
+      publishError = `${$t('editor_publish_error')} (${String(error)})`;
+      phase = 'draft';
+    }
+  }
+
+  function publish(): Promise<void> {
+    return pending ? publishPending() : publishExisting();
+  }
+
   async function close(): Promise<void> {
-    if (phase === 'draft' || phase === 'publishing') {
+    if (id && (phase === 'draft' || phase === 'publishing')) {
+      // Já existe job real -- fechar preserva o rascunho local (texto e
+      // imagens), então não há nada de fato para descartar.
+      try {
+        await SaveLocalDraft(id, new main.LocalDraft({ markdown: draft, assets }));
+      } catch {
+        // Preservação local é um bônus; fechar não pode depender dela.
+      }
+      closeEditor();
+      return;
+    }
+    if (pending && (phase === 'draft' || phase === 'publishing')) {
       const confirmed = await confirmDialog($t('editor_discard_confirm'));
       if (!confirmed) return;
     }
@@ -93,7 +233,7 @@
 
 <div class="editor">
   <div class="header">
-    <h1>{detail ? detail.name : $t('editor_title')}</h1>
+    <h1>{pending ? pending.name : detail ? detail.name : $t('editor_title')}</h1>
     <button class="close" aria-label={$t('home_new_cancel')} on:click={close}>
       <Icon path={ICON_CLOSE} size={18} />
     </button>
@@ -125,23 +265,30 @@
     <div class="actions">
       <button class="primary" on:click={generate}>{$t('editor_generate')}</button>
     </div>
-  {:else if (phase === 'draft' || phase === 'publishing') && detail}
+  {:else if phase === 'published'}
+    <p class="message success">{successMessage}</p>
+    <div class="actions">
+      <button class="primary" on:click={closeEditor}>{$t('editor_close')}</button>
+    </div>
+  {:else if phase === 'draft' || phase === 'publishing'}
     <p class="hint">{$t('editor_draft_hint')}</p>
-    <textarea
-      class="markdown"
+    <MarkdownEditor
       bind:value={draft}
-      rows="24"
+      bind:assets
+      {jobIdForAssets}
       disabled={phase === 'publishing'}
-    ></textarea>
+    />
     {#if publishError}<p class="message error">{publishError}</p>{/if}
     <div class="actions">
-      <button
-        class="secondary"
-        disabled={phase === 'publishing'}
-        on:click={() => (phase = 'select')}
-      >
-        {$t('editor_back_to_selection')}
-      </button>
+      {#if id && detail}
+        <button
+          class="secondary"
+          disabled={phase === 'publishing'}
+          on:click={() => (phase = 'select')}
+        >
+          {$t('editor_back_to_selection')}
+        </button>
+      {/if}
       <button class="primary" disabled={phase === 'publishing' || !draft.trim()} on:click={publish}>
         {phase === 'publishing' ? $t('editor_publishing') : $t('editor_publish')}
       </button>
@@ -201,6 +348,12 @@
     color: var(--danger-text);
   }
 
+  .message.success {
+    margin: 0 0 14px;
+    font-size: 12px;
+    color: var(--success);
+  }
+
   .command-list {
     flex: 1;
     min-height: 0;
@@ -245,30 +398,6 @@
     white-space: pre-wrap;
     max-height: 120px;
     overflow-y: auto;
-  }
-
-  .markdown {
-    flex: 1;
-    min-height: 0;
-    margin-bottom: 14px;
-    padding: 14px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--page);
-    color: var(--ink);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    line-height: 1.6;
-    resize: none;
-  }
-
-  .markdown:focus {
-    outline: 2px solid var(--blue);
-    outline-offset: -1px;
-  }
-
-  .markdown:disabled {
-    opacity: 0.6;
   }
 
   .actions {

@@ -30,6 +30,22 @@ export namespace main {
 	        this.caFile = source["caFile"];
 	    }
 	}
+	export class EditorAsset {
+	    filename: string;
+	    contentBase64: string;
+	    mediaType: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EditorAsset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filename = source["filename"];
+	        this.contentBase64 = source["contentBase64"];
+	        this.mediaType = source["mediaType"];
+	    }
+	}
 	export class Identity {
 	    id: string;
 	    username: string;
@@ -49,6 +65,38 @@ export namespace main {
 	        this.domainFunction = source["domainFunction"];
 	        this.extraDomains = source["extraDomains"];
 	    }
+	}
+	export class LocalDraft {
+	    markdown: string;
+	    assets: EditorAsset[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LocalDraft(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.markdown = source["markdown"];
+	        this.assets = this.convertValues(source["assets"], EditorAsset);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PublishedRunbookContent {
 	    markdown: string;

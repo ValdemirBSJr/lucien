@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -43,6 +44,38 @@ func (e *HTTPError) Error() string {
 
 // correlationHeader espelha CABECALHO_CORRELACAO no Hub.
 const correlationHeader = "X-Request-Id"
+
+// parseErrorDetail entende os dois formatos de corpo de erro que o Hub emite:
+// erro de dominio, onde `detail` e uma string pronta para exibir; e erro de
+// validacao do proprio FastAPI (corpo malformado, campo obrigatorio ausente),
+// onde `detail` e uma lista de objetos {loc, msg, type}. Sem isso, o segundo
+// formato falhava em silencio e a mensagem virava so o texto do status HTTP
+// -- "422 Unprocessable Content" sem dizer qual campo doeu.
+func parseErrorDetail(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var texto string
+	if err := json.Unmarshal(raw, &texto); err == nil {
+		return texto
+	}
+	var validacoes []struct {
+		Loc []any  `json:"loc"`
+		Msg string `json:"msg"`
+	}
+	if err := json.Unmarshal(raw, &validacoes); err != nil || len(validacoes) == 0 {
+		return ""
+	}
+	partes := make([]string, 0, len(validacoes))
+	for _, item := range validacoes {
+		caminho := make([]string, 0, len(item.Loc))
+		for _, segmento := range item.Loc {
+			caminho = append(caminho, fmt.Sprintf("%v", segmento))
+		}
+		partes = append(partes, fmt.Sprintf("%s: %s", strings.Join(caminho, "."), item.Msg))
+	}
+	return strings.Join(partes, "; ")
+}
 
 // sanitizeRequestID recusa o que nao couber no formato que o Hub emite.
 //
@@ -462,12 +495,13 @@ func (c *Client) doJSON(
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		var problem struct {
-			Detail    string `json:"detail"`
-			RequestID string `json:"request_id"`
+			Detail    json.RawMessage `json:"detail"`
+			RequestID string          `json:"request_id"`
 		}
 		_ = json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&problem)
-		if problem.Detail == "" {
-			problem.Detail = response.Status
+		detail := parseErrorDetail(problem.Detail)
+		if detail == "" {
+			detail = response.Status
 		}
 		// O corpo so traz request_id nos erros de dominio. Os recusados na
 		// borda -- credencial invalida, TLS ausente -- respondem sem ele, e
@@ -479,7 +513,7 @@ func (c *Client) doJSON(
 		}
 		return &HTTPError{
 			StatusCode: response.StatusCode,
-			Detail:     problem.Detail,
+			Detail:     detail,
 			RequestID:  requestID,
 		}
 	}

@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -72,6 +76,74 @@ func (a *App) IsConnectionConfigured() (bool, error) {
 		return false, err
 	}
 	return settings.APIHost != "" && settings.CAFile != "", nil
+}
+
+// EditorAsset é uma imagem anexada a partir do editor, antes do gate de
+// segurança do Hub (OCR + gitleaks) -- espelha api.Asset, num formato que o
+// binding JS do Wails serializa direto.
+type EditorAsset struct {
+	Filename      string `json:"filename"`
+	ContentBase64 string `json:"contentBase64"`
+	MediaType     string `json:"mediaType"`
+}
+
+func toAPIAssets(assets []EditorAsset) []api.Asset {
+	converted := make([]api.Asset, len(assets))
+	for index, asset := range assets {
+		converted[index] = api.Asset{
+			Filename:      asset.Filename,
+			ContentBase64: asset.ContentBase64,
+			MediaType:     asset.MediaType,
+		}
+	}
+	return converted
+}
+
+// ImportImage abre o seletor nativo de arquivo e devolve uma imagem
+// PNG/JPEG pronta para anexar. O nome aqui só precisa ser único dentro desta
+// publicação -- o Hub decide sozinho o nome final em disco (opaco, UUID),
+// nunca o do arquivo original. Devolve EditorAsset{} sem erro quando o
+// operador cancela o seletor.
+func (a *App) ImportImage() (EditorAsset, error) {
+	path, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "Selecione uma imagem (PNG ou JPEG)",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Imagens (*.png, *.jpg, *.jpeg)", Pattern: "*.png;*.jpg;*.jpeg"},
+		},
+	})
+	if err != nil || path == "" {
+		return EditorAsset{}, err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return EditorAsset{}, err
+	}
+	return encodeImageAsset(content)
+}
+
+func encodeImageAsset(content []byte) (EditorAsset, error) {
+	mediaType := http.DetectContentType(content)
+	var extension string
+	switch mediaType {
+	case "image/png":
+		extension = "png"
+	case "image/jpeg":
+		extension = "jpg"
+	default:
+		return EditorAsset{}, fmt.Errorf(
+			"unsupported image type %q; only PNG and JPEG are accepted", mediaType,
+		)
+	}
+	suffix := make([]byte, 6)
+	if _, err := rand.Read(suffix); err != nil {
+		return EditorAsset{}, err
+	}
+	filename := fmt.Sprintf("img-%s.%s", hex.EncodeToString(suffix), extension)
+	return EditorAsset{
+		Filename:      filename,
+		ContentBase64: base64.StdEncoding.EncodeToString(content),
+		MediaType:     mediaType,
+	}, nil
 }
 
 // PickCAFile abre o seletor nativo do SO -- digitar caminho de arquivo a
@@ -300,35 +372,32 @@ func (a *App) CreateRunbook(
 	return runbookRowFrom(job), nil
 }
 
-// GenerateTypedLogDraft é opcional e nunca substitui o fluxo padrão: só
-// reconhece a sintaxe \@ (ou texto solto sem marcador nenhum) no que o
-// operador digitou à mão no campo "Log bruto ou comandos" e, quando acha
-// algo, monta o rascunho localmente -- sem esperar o enriquecimento do Hub,
-// que é assíncrono e independente disto. Campo vazio ou já processado pelo
-// Hub não passa por aqui; devolve "" quando não há nada para montar, e quem
-// chama decide manter o fluxo de sempre (aguardar o job no Hub).
-func (a *App) GenerateTypedLogDraft(
-	jobID, name, description, rawLog string,
-) (string, error) {
+// GenerateLocalDraft monta o rascunho do "Novo runbook" inteiramente no
+// cliente, sem criar nada no Hub -- o job só nasce quando o operador publica
+// de dentro do editor. Reconhece a sintaxe \@ (comando/saída) e, na
+// ausência de qualquer marcador, inclui o texto como parágrafo comum; campo
+// vazio não acrescenta nada, igual a um runbook puramente visual.
+//
+// A leitura do idioma no Hub é só um recurso a mais: sem conexão, cai em
+// "pt-br" e o rascunho é montado do mesmo jeito -- o Hub só entra em cena de
+// verdade quando a publicação acontece, exatamente o ponto em que ele já
+// precisa estar disponível de qualquer forma.
+func (a *App) GenerateLocalDraft(name, description, rawLog string) (string, error) {
+	language := "pt-br"
+	if client, err := a.authenticatedClient(); err == nil {
+		if configuration, err := client.RunbookConfiguration(a.ctx); err == nil &&
+			configuration.Language != "" {
+			language = configuration.Language
+		}
+	}
 	pairs, plainText := parseTypedLog(rawLog)
-	if len(pairs) == 0 && plainText == "" {
-		return "", nil
-	}
-	client, err := a.authenticatedClient()
-	if err != nil {
-		return "", err
-	}
-	configuration, err := client.RunbookConfiguration(a.ctx)
-	if err != nil {
-		return "", err
-	}
 	steps := make([]runbookdraft.CommandStep, len(pairs))
 	for index, pair := range pairs {
 		steps[index] = runbookdraft.CommandStep{Command: pair.Command, Output: pair.Output}
 	}
 	template, err := runbookdraft.MarkdownTemplate(
-		runbookdraft.DisplayName(name), jobID, steps, api.RunbookSuggestions{},
-		description, configuration.Language,
+		runbookdraft.DisplayName(name), "", steps, api.RunbookSuggestions{},
+		description, language,
 	)
 	if err != nil {
 		return "", err
@@ -411,7 +480,9 @@ func (a *App) GetPublishedContent(id string) (PublishedRunbookContent, error) {
 // ponta atual da linhagem pode ser revisada -- se `id` já tiver uma versão
 // mais nova, a chamada volta com um erro apontando qual é a correta, em vez
 // de aceitar uma revisão sobre uma versão superada.
-func (a *App) ReviseRunbook(id, markdown, contentHash string) (RunbookRow, error) {
+func (a *App) ReviseRunbook(
+	id, markdown, contentHash string, assets []EditorAsset,
+) (RunbookRow, error) {
 	client, err := a.authenticatedClient()
 	if err != nil {
 		return RunbookRow{}, err
@@ -420,7 +491,7 @@ func (a *App) ReviseRunbook(id, markdown, contentHash string) (RunbookRow, error
 	if err != nil {
 		return RunbookRow{}, err
 	}
-	job, err := client.ReviseRunbook(a.ctx, id, markdown, contentHash, key, nil)
+	job, err := client.ReviseRunbook(a.ctx, id, markdown, contentHash, key, toAPIAssets(assets))
 	if err != nil {
 		return RunbookRow{}, err
 	}
@@ -499,7 +570,7 @@ func (a *App) GenerateRunbookDraft(id string, selectedCommands []string) (string
 // PublishRunbook envia o markdown revisado. A idempotency key deriva de
 // usuário+job+conteúdo -- reenviar o mesmo texto depois de uma falha de rede
 // não publica em duplicidade, igual ao `lucien job sent` do terminal.
-func (a *App) PublishRunbook(id, markdown string) (RunbookRow, error) {
+func (a *App) PublishRunbook(id, markdown string, assets []EditorAsset) (RunbookRow, error) {
 	settings, err := loadedConnection()
 	if err != nil {
 		return RunbookRow{}, err
@@ -513,7 +584,9 @@ func (a *App) PublishRunbook(id, markdown string) (RunbookRow, error) {
 		return RunbookRow{}, err
 	}
 	digest := sha256.Sum256([]byte(profile.UserID + "\x00" + id + "\x00" + markdown))
-	job, err := client.Publish(a.ctx, id, markdown, hex.EncodeToString(digest[:]), nil)
+	job, err := client.Publish(
+		a.ctx, id, markdown, hex.EncodeToString(digest[:]), toAPIAssets(assets),
+	)
 	if err != nil {
 		return RunbookRow{}, err
 	}

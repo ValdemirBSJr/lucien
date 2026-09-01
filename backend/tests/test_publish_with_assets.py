@@ -242,3 +242,54 @@ async def test_revise_with_new_asset_uses_revision_job_id_in_stored_path(
     stored_markdown = md_path.read_text()
     assert f"assets/{revised.id}/" in stored_markdown
     assert (md_path.parent / "assets" / revised.id).is_dir()
+
+
+async def test_revise_keeps_inherited_image_as_text_without_resubmitting_it(
+    tmp_path: Path,
+    repository: SQLAlchemyJobRepository,
+) -> None:
+    """Uma imagem ja publicada continua so como texto -- revisar so pra
+    adicionar uma segunda imagem nao deveria exigir reenviar a primeira."""
+    playbooks = tmp_path / "playbooks"
+    image_scanner = _FakeImageScanner()
+    service = _service(repository, LocalProvider(playbooks), image_scanner)
+    user = await _user(repository, "autor-heranca")
+    job = await repository.create_job(user.id, "job-com-imagem-herdada", ("echo ok",), ())
+
+    base_markdown = (
+        "### Step 1: Run\n```bash\necho ok\n```\n"
+        f"![print original](assets/{job.id}/shot.png)\n"
+    )
+    published, _ = await service.publish(
+        _context(user), job.id, base_markdown, "publish-heranca-0001", (_asset(),)
+    )
+    published_md_path = next(playbooks.rglob(f"*--{published.id}.md"))
+    inherited_reference = next(
+        line for line in published_md_path.read_text().splitlines() if line.startswith("![")
+    )
+
+    # A referencia herdada (com o nome opaco atribuido no publish) e mantida
+    # tal como esta; so a segunda imagem e nova e precisa vir em `assets`.
+    revision_markdown = (
+        "### Step 1: Run\n```bash\necho ok\n```\n"
+        f"{inherited_reference}\n"
+        f"![print novo](assets/{published.id}/new.png)\n"
+    )
+    revised, _ = await service.revise(
+        _context(user),
+        published.id,
+        published.content_hash,
+        revision_markdown,
+        "revise-heranca-0001",
+        (_asset("new.png"),),
+    )
+
+    revised_md_path = next(playbooks.rglob(f"*--{revised.id}.md"))
+    stored_markdown = revised_md_path.read_text()
+    # A referencia herdada nao muda de lugar nem de nome -- continua apontando
+    # para o job de origem, onde o arquivo fisico sempre esteve.
+    assert inherited_reference in stored_markdown
+    assert f"assets/{revised.id}/" in stored_markdown
+    assert (revised_md_path.parent / "assets" / revised.id).is_dir()
+    # So a imagem nova foi reprocessada -- a herdada nao precisou de OCR de novo.
+    assert len(image_scanner.calls) == 2

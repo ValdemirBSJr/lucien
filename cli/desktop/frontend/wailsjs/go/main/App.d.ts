@@ -6,13 +6,15 @@ export function AuthStatus():Promise<main.Identity>;
 
 export function CreateRunbook(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.RunbookRow>;
 
+export function DeleteLocalDraft(arg1:string):Promise<void>;
+
 export function DeleteRunbook(arg1:string,arg2:boolean):Promise<void>;
 
 export function ForgetEverything():Promise<void>;
 
-export function GenerateRunbookDraft(arg1:string,arg2:Array<string>):Promise<string>;
+export function GenerateLocalDraft(arg1:string,arg2:string,arg3:string):Promise<string>;
 
-export function GenerateTypedLogDraft(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function GenerateRunbookDraft(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function GetAppInfo():Promise<main.AppInfo>;
 
@@ -22,6 +24,8 @@ export function GetPublishedContent(arg1:string):Promise<main.PublishedRunbookCo
 
 export function GetRunbookDetail(arg1:string):Promise<main.RunbookDetail>;
 
+export function ImportImage():Promise<main.EditorAsset>;
+
 export function IsConnectionConfigured():Promise<boolean>;
 
 export function ListActiveRunbooks():Promise<Array<main.RunbookRow>>;
@@ -30,16 +34,20 @@ export function ListDomainFunctions():Promise<Array<string>>;
 
 export function ListPublishedMine():Promise<Array<main.PublishedRunbookSummary>>;
 
+export function LoadLocalDraft(arg1:string):Promise<main.LocalDraft>;
+
 export function Login(arg1:string):Promise<main.Identity>;
 
 export function Logout():Promise<void>;
 
 export function PickCAFile():Promise<string>;
 
-export function PublishRunbook(arg1:string,arg2:string):Promise<main.RunbookRow>;
+export function PublishRunbook(arg1:string,arg2:string,arg3:Array<main.EditorAsset>):Promise<main.RunbookRow>;
 
 export function RetryRunbook(arg1:string):Promise<main.RunbookRow>;
 
-export function ReviseRunbook(arg1:string,arg2:string,arg3:string):Promise<main.RunbookRow>;
+export function ReviseRunbook(arg1:string,arg2:string,arg3:string,arg4:Array<main.EditorAsset>):Promise<main.RunbookRow>;
 
 export function SaveConnectionSettings(arg1:string,arg2:string):Promise<void>;
+
+export function SaveLocalDraft(arg1:string,arg2:main.LocalDraft):Promise<void>;

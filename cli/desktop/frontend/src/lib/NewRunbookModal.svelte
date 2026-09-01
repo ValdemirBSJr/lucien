@@ -3,14 +3,15 @@
   import { t } from './i18n';
   import Icon from './Icon.svelte';
   import { ICON_CLOSE } from './icons';
-  import {
-    CreateRunbook,
-    GenerateTypedLogDraft,
-    ListDomainFunctions,
-  } from '../../wailsjs/go/main/App';
+  import { GenerateLocalDraft, ListDomainFunctions } from '../../wailsjs/go/main/App';
 
   const dispatch = createEventDispatcher<{
-    created: { id: string; draft: string };
+    created: {
+      name: string;
+      description: string;
+      domainFunction: string;
+      draft: string;
+    };
     close: void;
   }>();
 
@@ -45,18 +46,16 @@
     try {
       const trimmedName = name.trim();
       const trimmedDescription = description.trim();
-      const created = await CreateRunbook(trimmedName, rawLog, trimmedDescription, domainFunction);
-      // Opcional: só monta algo quando o campo tem \@ ou texto solto. Vazio
-      // (ou já enviado sem essa sintaxe) devolve "" e o fluxo de sempre segue
-      // -- o job aparece PROCESSING na tabela, sem abrir o editor sozinho.
-      let draft = '';
-      try {
-        draft = await GenerateTypedLogDraft(created.id, trimmedName, trimmedDescription, rawLog);
-      } catch {
-        // Geração local é um bônus, não pode bloquear o envio que já aconteceu.
-        draft = '';
-      }
-      dispatch('created', { id: created.id, draft });
+      // "Enviar" nunca fala com o Hub -- só monta o rascunho localmente. O
+      // job só é criado quando o operador publicar de dentro do editor, que
+      // é o único momento em que o Hub precisa estar de fato disponível.
+      const draft = await GenerateLocalDraft(trimmedName, trimmedDescription, rawLog);
+      dispatch('created', {
+        name: trimmedName,
+        description: trimmedDescription,
+        domainFunction,
+        draft,
+      });
     } catch (error) {
       errorMessage = `${$t('home_new_error')} (${String(error)})`;
     } finally {

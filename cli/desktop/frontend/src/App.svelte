@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import logo from './assets/logo-lucien.svg';
   import { t } from './lib/i18n';
-  import { view, editingRunbookId, viewingRunbookId } from './lib/router';
+  import { view, editingRunbookId, pendingLocalRunbook, viewingRunbookId } from './lib/router';
   import { sessionPhase, refreshSession } from './lib/session';
   import Settings from './views/Settings.svelte';
   import Home from './views/Home.svelte';
@@ -13,6 +13,7 @@
   import Icon from './lib/Icon.svelte';
   import { ICON_SETTINGS } from './lib/icons';
   import ConfirmModal from './lib/ConfirmModal.svelte';
+  import PromptModal from './lib/PromptModal.svelte';
 
   onMount(() => {
     refreshSession();
@@ -44,6 +45,8 @@
       <Login />
     {:else if $view === 'editor' && $editingRunbookId}
       <Editor id={$editingRunbookId} />
+    {:else if $view === 'editor' && $pendingLocalRunbook}
+      <Editor pending={$pendingLocalRunbook} />
     {:else if $view === 'published' && $viewingRunbookId}
       <PublishedRunbook id={$viewingRunbookId} />
     {:else if $sessionPhase === 'signed_in'}
@@ -53,6 +56,7 @@
 </main>
 
 <ConfirmModal />
+<PromptModal />
 
 <style>
   main {

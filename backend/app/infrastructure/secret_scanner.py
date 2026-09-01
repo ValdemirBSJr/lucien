@@ -1,3 +1,4 @@
+import logging
 import re
 
 import httpx
@@ -9,6 +10,8 @@ from app.domain.ports import SecretScanner, SecretScanResult, UpstreamError
 # -- ou um campo inesperado -- traga trecho de conteudo junto.
 _RULE_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _MAX_RULES = 8
+
+_log = logging.getLogger(__name__)
 
 
 class GitleaksSecretScanner(SecretScanner):
@@ -27,6 +30,15 @@ class GitleaksSecretScanner(SecretScanner):
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, TypeError, ValueError) as error:
+            # O conteudo escaneado nunca aparece aqui -- so o tipo e a mensagem
+            # da excecao do httpx (timeout, conexao recusada, etc.), o
+            # suficiente para distinguir "scanner fora do ar" de "scanner lento
+            # sob carga" na proxima ocorrencia, sem virar caixa-preta de novo.
+            _log.warning(
+                "chamada ao secret scanner falhou tipo=%s detalhe=%s",
+                type(error).__name__,
+                error,
+            )
             raise UpstreamError("secret scanner unavailable; the content was not accepted") from error
 
         detected = payload.get("detected")
