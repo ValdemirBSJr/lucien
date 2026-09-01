@@ -47,6 +47,19 @@ func (a *App) GetConnectionSettings() (ConnectionSettings, error) {
 	return ConnectionSettings{APIHost: settings.APIHost, CAFile: settings.CAFile}, nil
 }
 
+// AppInfo traz os mesmos tres dados que o Windows mostra nas propriedades do
+// arquivo. O app precisa saber dize-los por conta propria: em Linux e macOS nao
+// ha Explorer, e no Windows o recurso de versao nem sempre e gravado.
+type AppInfo struct {
+	ProductName string `json:"productName"`
+	Version     string `json:"version"`
+	Copyright   string `json:"copyright"`
+}
+
+func (a *App) GetAppInfo() AppInfo {
+	return AppInfo{ProductName: productName, Version: version, Copyright: copyright}
+}
+
 func (a *App) SaveConnectionSettings(apiHost, caFile string) error {
 	return connection.Save(connection.Settings{APIHost: apiHost, CAFile: caFile})
 }

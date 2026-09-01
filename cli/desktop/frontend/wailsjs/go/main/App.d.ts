@@ -12,6 +12,8 @@ export function ForgetEverything():Promise<void>;
 
 export function GenerateRunbookDraft(arg1:string,arg2:Array<string>):Promise<string>;
 
+export function GetAppInfo():Promise<main.AppInfo>;
+
 export function GetConnectionSettings():Promise<main.ConnectionSettings>;
 
 export function GetRunbookDetail(arg1:string):Promise<main.RunbookDetail>;
