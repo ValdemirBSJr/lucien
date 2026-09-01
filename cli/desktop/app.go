@@ -300,6 +300,45 @@ func (a *App) CreateRunbook(
 	return runbookRowFrom(job), nil
 }
 
+// GenerateTypedLogDraft é opcional e nunca substitui o fluxo padrão: só
+// reconhece a sintaxe \@ (ou texto solto sem marcador nenhum) no que o
+// operador digitou à mão no campo "Log bruto ou comandos" e, quando acha
+// algo, monta o rascunho localmente -- sem esperar o enriquecimento do Hub,
+// que é assíncrono e independente disto. Campo vazio ou já processado pelo
+// Hub não passa por aqui; devolve "" quando não há nada para montar, e quem
+// chama decide manter o fluxo de sempre (aguardar o job no Hub).
+func (a *App) GenerateTypedLogDraft(
+	jobID, name, description, rawLog string,
+) (string, error) {
+	pairs, plainText := parseTypedLog(rawLog)
+	if len(pairs) == 0 && plainText == "" {
+		return "", nil
+	}
+	client, err := a.authenticatedClient()
+	if err != nil {
+		return "", err
+	}
+	configuration, err := client.RunbookConfiguration(a.ctx)
+	if err != nil {
+		return "", err
+	}
+	steps := make([]runbookdraft.CommandStep, len(pairs))
+	for index, pair := range pairs {
+		steps[index] = runbookdraft.CommandStep{Command: pair.Command, Output: pair.Output}
+	}
+	template, err := runbookdraft.MarkdownTemplate(
+		runbookdraft.DisplayName(name), jobID, steps, api.RunbookSuggestions{},
+		description, configuration.Language,
+	)
+	if err != nil {
+		return "", err
+	}
+	if plainText != "" {
+		template = insertPlainProcedureText(template, plainText)
+	}
+	return string(template), nil
+}
+
 // RetryRunbook reprocessa um runbook FAILED com a mesma entrada original.
 func (a *App) RetryRunbook(id string) (RunbookRow, error) {
 	client, err := a.authenticatedClient()
@@ -345,6 +384,47 @@ func (a *App) ListPublishedMine() ([]PublishedRunbookSummary, error) {
 		rows[index] = PublishedRunbookSummary{ID: summary.ID, Name: summary.Name}
 	}
 	return rows, nil
+}
+
+// PublishedRunbookContent é o corpo revisável de uma publicação, mais o hash
+// que a revisão precisa devolver em If-Match -- o Hub recusa qualquer outro.
+type PublishedRunbookContent struct {
+	Markdown    string `json:"markdown"`
+	ContentHash string `json:"contentHash"`
+}
+
+// GetPublishedContent carrega o markdown de uma versão publicada para
+// visualização ou como ponto de partida de uma revisão.
+func (a *App) GetPublishedContent(id string) (PublishedRunbookContent, error) {
+	client, err := a.authenticatedClient()
+	if err != nil {
+		return PublishedRunbookContent{}, err
+	}
+	content, err := client.PublishedContent(a.ctx, id)
+	if err != nil {
+		return PublishedRunbookContent{}, err
+	}
+	return PublishedRunbookContent{Markdown: content.Markdown, ContentHash: content.ContentHash}, nil
+}
+
+// ReviseRunbook publica um sucessor imutável. O Hub garante sozinho que só a
+// ponta atual da linhagem pode ser revisada -- se `id` já tiver uma versão
+// mais nova, a chamada volta com um erro apontando qual é a correta, em vez
+// de aceitar uma revisão sobre uma versão superada.
+func (a *App) ReviseRunbook(id, markdown, contentHash string) (RunbookRow, error) {
+	client, err := a.authenticatedClient()
+	if err != nil {
+		return RunbookRow{}, err
+	}
+	key, err := api.NewIdempotencyKey()
+	if err != nil {
+		return RunbookRow{}, err
+	}
+	job, err := client.ReviseRunbook(a.ctx, id, markdown, contentHash, key, nil)
+	if err != nil {
+		return RunbookRow{}, err
+	}
+	return runbookRowFrom(job), nil
 }
 
 // RunbookDetail é o que a tela de edição carrega antes de montar o rascunho

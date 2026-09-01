@@ -50,6 +50,20 @@ export namespace main {
 	        this.extraDomains = source["extraDomains"];
 	    }
 	}
+	export class PublishedRunbookContent {
+	    markdown: string;
+	    contentHash: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PublishedRunbookContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.markdown = source["markdown"];
+	        this.contentHash = source["contentHash"];
+	    }
+	}
 	export class PublishedRunbookSummary {
 	    id: string;
 	    name: string;

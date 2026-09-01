@@ -81,5 +81,16 @@
   "editor_publish_confirm": "Publicar este runbook? Ele passa a ficar visível para quem tem acesso à área.",
   "editor_publish_error": "Não foi possível publicar o runbook.",
   "editor_discard_confirm": "Fechar sem publicar? O texto editado não é salvo.",
-  "about_title": "Sobre"
+  "about_title": "Sobre",
+  "published_title": "Runbook publicado",
+  "published_loading": "Carregando conteúdo publicado...",
+  "published_load_error": "Não foi possível carregar o conteúdo publicado.",
+  "published_revise": "Revisar",
+  "published_cancel_revision": "Cancelar revisão",
+  "published_submit_revision": "Publicar revisão",
+  "published_publishing": "Publicando...",
+  "published_no_changes": "Nenhuma mudança detectada; revisão cancelada.",
+  "published_revise_confirm": "Publicar esta revisão? Ela cria uma nova versão imutável e não altera a atual.",
+  "published_revise_error": "Não foi possível publicar a revisão. Se esta versão já foi revisada por outra pessoa, o Hub informa qual é a versão atual da linhagem.",
+  "published_revise_success": "Revisão publicada. Novo ID: {id}"
 }

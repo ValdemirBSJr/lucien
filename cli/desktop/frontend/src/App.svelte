@@ -2,13 +2,14 @@
   import { onMount } from 'svelte';
   import logo from './assets/logo-lucien.svg';
   import { t } from './lib/i18n';
-  import { view, editingRunbookId } from './lib/router';
+  import { view, editingRunbookId, viewingRunbookId } from './lib/router';
   import { sessionPhase, refreshSession } from './lib/session';
   import Settings from './views/Settings.svelte';
   import Home from './views/Home.svelte';
   import Login from './views/Login.svelte';
   import ConnectionSetup from './views/ConnectionSetup.svelte';
   import Editor from './views/Editor.svelte';
+  import PublishedRunbook from './views/PublishedRunbook.svelte';
   import Icon from './lib/Icon.svelte';
   import { ICON_SETTINGS } from './lib/icons';
   import ConfirmModal from './lib/ConfirmModal.svelte';
@@ -43,6 +44,8 @@
       <Login />
     {:else if $view === 'editor' && $editingRunbookId}
       <Editor id={$editingRunbookId} />
+    {:else if $view === 'published' && $viewingRunbookId}
+      <PublishedRunbook id={$viewingRunbookId} />
     {:else if $sessionPhase === 'signed_in'}
       <Home />
     {/if}

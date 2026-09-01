@@ -12,9 +12,13 @@ export function ForgetEverything():Promise<void>;
 
 export function GenerateRunbookDraft(arg1:string,arg2:Array<string>):Promise<string>;
 
+export function GenerateTypedLogDraft(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetConnectionSettings():Promise<main.ConnectionSettings>;
+
+export function GetPublishedContent(arg1:string):Promise<main.PublishedRunbookContent>;
 
 export function GetRunbookDetail(arg1:string):Promise<main.RunbookDetail>;
 
@@ -35,5 +39,7 @@ export function PickCAFile():Promise<string>;
 export function PublishRunbook(arg1:string,arg2:string):Promise<main.RunbookRow>;
 
 export function RetryRunbook(arg1:string):Promise<main.RunbookRow>;
+
+export function ReviseRunbook(arg1:string,arg2:string,arg3:string):Promise<main.RunbookRow>;
 
 export function SaveConnectionSettings(arg1:string,arg2:string):Promise<void>;

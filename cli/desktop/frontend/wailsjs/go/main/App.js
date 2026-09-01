@@ -22,12 +22,20 @@ export function GenerateRunbookDraft(arg1, arg2) {
   return window['go']['main']['App']['GenerateRunbookDraft'](arg1, arg2);
 }
 
+export function GenerateTypedLogDraft(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GenerateTypedLogDraft'](arg1, arg2, arg3, arg4);
+}
+
 export function GetAppInfo() {
   return window['go']['main']['App']['GetAppInfo']();
 }
 
 export function GetConnectionSettings() {
   return window['go']['main']['App']['GetConnectionSettings']();
+}
+
+export function GetPublishedContent(arg1) {
+  return window['go']['main']['App']['GetPublishedContent'](arg1);
 }
 
 export function GetRunbookDetail(arg1) {
@@ -68,6 +76,10 @@ export function PublishRunbook(arg1, arg2) {
 
 export function RetryRunbook(arg1) {
   return window['go']['main']['App']['RetryRunbook'](arg1);
+}
+
+export function ReviseRunbook(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ReviseRunbook'](arg1, arg2, arg3);
 }
 
 export function SaveConnectionSettings(arg1, arg2) {

@@ -3,9 +3,16 @@
   import { t } from './i18n';
   import Icon from './Icon.svelte';
   import { ICON_CLOSE } from './icons';
-  import { CreateRunbook, ListDomainFunctions } from '../../wailsjs/go/main/App';
+  import {
+    CreateRunbook,
+    GenerateTypedLogDraft,
+    ListDomainFunctions,
+  } from '../../wailsjs/go/main/App';
 
-  const dispatch = createEventDispatcher<{ created: void; close: void }>();
+  const dispatch = createEventDispatcher<{
+    created: { id: string; draft: string };
+    close: void;
+  }>();
 
   let name = '';
   let rawLog = '';
@@ -36,8 +43,20 @@
     submitting = true;
     errorMessage = '';
     try {
-      await CreateRunbook(name.trim(), rawLog, description.trim(), domainFunction);
-      dispatch('created');
+      const trimmedName = name.trim();
+      const trimmedDescription = description.trim();
+      const created = await CreateRunbook(trimmedName, rawLog, trimmedDescription, domainFunction);
+      // Opcional: só monta algo quando o campo tem \@ ou texto solto. Vazio
+      // (ou já enviado sem essa sintaxe) devolve "" e o fluxo de sempre segue
+      // -- o job aparece PROCESSING na tabela, sem abrir o editor sozinho.
+      let draft = '';
+      try {
+        draft = await GenerateTypedLogDraft(created.id, trimmedName, trimmedDescription, rawLog);
+      } catch {
+        // Geração local é um bônus, não pode bloquear o envio que já aconteceu.
+        draft = '';
+      }
+      dispatch('created', { id: created.id, draft });
     } catch (error) {
       errorMessage = `${$t('home_new_error')} (${String(error)})`;
     } finally {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '../lib/i18n';
-  import { closeEditor } from '../lib/router';
+  import { closeEditor, editingRunbookDraft } from '../lib/router';
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_CLOSE } from '../lib/icons';
@@ -35,7 +35,17 @@
     try {
       detail = await GetRunbookDetail(id);
       selected = Object.fromEntries(detail.commands.map((command) => [command, true]));
-      phase = 'select';
+      // Opcional: um rascunho já pronto (gerado no modal a partir do \@) pula
+      // a seleção de comandos -- consumido uma vez, para não reaparecer numa
+      // reabertura futura deste mesmo runbook pela tabela.
+      const rascunhoPronto = $editingRunbookDraft;
+      if (rascunhoPronto) {
+        editingRunbookDraft.set(null);
+        draft = rascunhoPronto;
+        phase = 'draft';
+      } else {
+        phase = 'select';
+      }
     } catch (error) {
       loadError = `${$t('editor_load_error')} (${String(error)})`;
     }
