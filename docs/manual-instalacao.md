@@ -814,6 +814,11 @@ O comando **se recusa a rodar dentro de uma sessão gravada**. Aqui o motivo nã
 entraria no log como saída do último comando, e o próximo nasceria com outro
 embutido dentro. Rode de outro terminal.
 
+No app desktop (`lucien-desktop`) o equivalente é clicar num runbook na aba
+"Publicados": abre o conteúdo publicado em modo leitura, com um botão
+"Revisar" que troca para edição quando necessário — a restrição de sessão
+gravada não se aplica ali, já que o app não roda dentro de um PTY.
+
 ### `lucien runbook revise <uuid_do_runbook_publicado>`
 
 Corrige um runbook já publicado. Baixa o corpo do Hub, abre o `EDITOR` e devolve o
