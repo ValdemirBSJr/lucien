@@ -72,6 +72,15 @@ class JumpEnrollRequest(StrictRequest):
     display_name: str | None = Field(default=None, max_length=120)
 
 
+class ProvisionalTokenRequest(StrictRequest):
+    # Ausente/vazio preserva o comportamento de sempre (grava em
+    # api_token_hash). Um nome isola a emissão naquele escopo -- por
+    # exemplo, dar a alguém uma chave "personal" sem mexer na "jump".
+    scope: str | None = Field(
+        default=None, min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9_]*$"
+    )
+
+
 class UserResponse(BaseModel):
     id: str
     username: str
@@ -114,10 +123,18 @@ class IssuedUserResponse(UserResponse):
 class ProvisionedUserResponse(UserResponse):
     provisional_token: str
     expires_at: datetime
+    # Presente só na primeira vez que esta identidade ganha uma credencial
+    # permanente pessoal (fluxo do jump). O aviso de "só aparece uma vez"
+    # é responsabilidade de quem exibe -- o script do jump, não esta API.
+    personal_token: str | None = None
 
     @classmethod
     def from_provisioned(
-        cls, user: User, provisional_token: str, expires_at: datetime
+        cls,
+        user: User,
+        provisional_token: str,
+        expires_at: datetime,
+        personal_token: str | None = None,
     ) -> "ProvisionedUserResponse":
         return cls(
             id=user.id,
@@ -129,12 +146,16 @@ class ProvisionedUserResponse(UserResponse):
             display_name=user.display_name,
             provisional_token=provisional_token,
             expires_at=expires_at,
+            personal_token=personal_token,
         )
 
 
 class UploadRequest(StrictRequest):
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_.-]+$")
-    raw_log: str = Field(min_length=1)
+    # Vazio é válido: um runbook puramente visual (só cliques numa interface)
+    # não tem sessão de terminal para capturar. Nesse caso o worker pula a
+    # extração de comandos em vez de tratar "nada extraído" como falha.
+    raw_log: str = Field(default="")
     description: str | None = Field(default=None, max_length=280)
     skip_enrichment: bool = False
     # `lucien start -r`. Ausente significa "o dominio do autor"; o Hub decide.
@@ -164,16 +185,36 @@ class RetryRequest(StrictRequest):
     skip_enrichment: bool | None = None
 
 
+class RunbookAssetInput(StrictRequest):
+    """Uma imagem anexada, antes do gate de segurança (OCR + gitleaks).
+
+    O teto real de tamanho/dimensão é decidido em runtime por settings, dentro
+    do `TesseractImageScanner` -- o `max_length` abaixo é só uma barreira
+    barata contra payload absurdo antes de qualquer decode.
+    """
+
+    filename: str = Field(
+        min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._-]{1,128}$"
+    )
+    content_base64: str = Field(min_length=1, max_length=28_000_000)
+    media_type: Literal["image/png", "image/jpeg"]
+
+
 class PublishRequest(StrictRequest):
     markdown: str = Field(min_length=1, max_length=1024 * 1024)
+    assets: list[RunbookAssetInput] = Field(default_factory=list)
 
 
 class RevisionRequest(StrictRequest):
     markdown: str = Field(min_length=1, max_length=1024 * 1024)
+    assets: list[RunbookAssetInput] = Field(default_factory=list)
 
 
 class PublishedRunbookCatalogResponse(BaseModel):
     ids: list[str] = Field(max_length=10_000)
+    # Aditivo: id -> nome, so preenchido pelas rotas que ja tem o nome a mao
+    # (hoje, /runbooks/published/mine). Quem so le `ids` nao percebe a mudanca.
+    names: dict[str, str] = Field(default_factory=dict)
 
 
 class RunbookConfigurationResponse(BaseModel):

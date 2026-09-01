@@ -111,6 +111,9 @@ type ProvisionedUser struct {
 	IsActive         bool      `json:"is_active"`
 	ProvisionalToken string    `json:"provisional_token"`
 	ExpiresAt        time.Time `json:"expires_at"`
+	// So preenchido na primeira vez que esta identidade ganha uma credencial
+	// permanente pessoal (fluxo do jump); vazio nas demais chamadas.
+	PersonalToken string `json:"personal_token,omitempty"`
 }
 
 type UserIdentity struct {
@@ -236,14 +239,18 @@ func (c *Client) CreateUser(
 }
 
 func (c *Client) IssueProvisionalToken(
-	ctx context.Context, identifier string,
+	ctx context.Context, identifier string, scope string,
 ) (ProvisionedUser, error) {
+	var body any
+	if scope != "" {
+		body = map[string]string{"scope": scope}
+	}
 	var response ProvisionedUser
 	err := c.doJSON(
 		ctx,
 		http.MethodPost,
 		c.endpoint("admin", "users", identifier, "provisional-token"),
-		nil,
+		body,
 		&response,
 		nil,
 	)
@@ -388,13 +395,27 @@ func (c *Client) RetryJob(
 	return response, err
 }
 
-func (c *Client) Publish(ctx context.Context, identifier, markdown, key string) (Job, error) {
+// Asset é uma imagem anexada a uma publicação ou revisão, antes do gate de
+// segurança do Hub (OCR + gitleaks) -- espelha RunbookAssetInput do backend.
+type Asset struct {
+	Filename      string `json:"filename"`
+	ContentBase64 string `json:"content_base64"`
+	MediaType     string `json:"media_type"`
+}
+
+func (c *Client) Publish(
+	ctx context.Context, identifier, markdown, key string, assets []Asset,
+) (Job, error) {
 	var response Job
+	payload := struct {
+		Markdown string  `json:"markdown"`
+		Assets   []Asset `json:"assets,omitempty"`
+	}{Markdown: markdown, Assets: assets}
 	err := c.doJSON(
 		ctx,
 		http.MethodPost,
 		c.endpoint("jobs", identifier, "publish"),
-		map[string]string{"markdown": markdown},
+		payload,
 		&response,
 		map[string]string{"Idempotency-Key": key},
 	)
@@ -495,14 +516,18 @@ func (c *Client) PublishedContent(
 }
 
 func (c *Client) ReviseRunbook(
-	ctx context.Context, runbookID, markdown, contentHash, key string,
+	ctx context.Context, runbookID, markdown, contentHash, key string, assets []Asset,
 ) (Job, error) {
 	var response Job
+	payload := struct {
+		Markdown string  `json:"markdown"`
+		Assets   []Asset `json:"assets,omitempty"`
+	}{Markdown: markdown, Assets: assets}
 	err := c.doJSON(
 		ctx,
 		http.MethodPost,
 		c.endpoint("runbooks", runbookID, "revisions"),
-		map[string]string{"markdown": markdown},
+		payload,
 		&response,
 		map[string]string{
 			"Idempotency-Key": key,
@@ -511,4 +536,57 @@ func (c *Client) ReviseRunbook(
 		},
 	)
 	return response, err
+}
+
+// PublishedCatalog lista os IDs de runbooks publicados que podem ser
+// revisados. So o UUID -- sem nome ou dominio -- porque essa e a mesma
+// granularidade que o Hub garante hoje (GET /runbooks/published).
+func (c *Client) PublishedCatalog(ctx context.Context) ([]string, error) {
+	var response struct {
+		IDs []string `json:"ids"`
+	}
+	err := c.doJSON(
+		ctx,
+		http.MethodGet,
+		c.endpoint("runbooks", "published"),
+		nil,
+		&response,
+		nil,
+	)
+	return response.IDs, err
+}
+
+// PublishedRunbooksMine lista so os IDs publicados que a identidade atual
+// pode de fato revisar (mesma area, ou qualquer uma se for admin). E o que
+// o app grafico usa para a aba de publicados -- PublishedCatalog devolve o
+// catalogo inteiro, sem filtro de area.
+// PublishedRunbookSummary é um runbook publicado que a identidade autenticada
+// está autorizada a revisar de verdade -- id mais nome, para exibição sem
+// obrigar quem lê a decorar UUIDs.
+type PublishedRunbookSummary struct {
+	ID   string
+	Name string
+}
+
+func (c *Client) PublishedRunbooksMine(ctx context.Context) ([]PublishedRunbookSummary, error) {
+	var response struct {
+		IDs   []string          `json:"ids"`
+		Names map[string]string `json:"names"`
+	}
+	err := c.doJSON(
+		ctx,
+		http.MethodGet,
+		c.endpoint("runbooks", "published", "mine"),
+		nil,
+		&response,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]PublishedRunbookSummary, len(response.IDs))
+	for index, id := range response.IDs {
+		summaries[index] = PublishedRunbookSummary{ID: id, Name: response.Names[id]}
+	}
+	return summaries, nil
 }

@@ -110,6 +110,142 @@ func TestDeleteJobForceEnviaCancelamentoExplicito(t *testing.T) {
 	}
 }
 
+func TestPublishOmiteAssetsQuandoVazio(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body map[string]json.RawMessage
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatalf("decodificar corpo: %v", err)
+		}
+		if _, presente := body["assets"]; presente {
+			t.Fatal("assets nao deveria aparecer no corpo quando vazio")
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(Job{ID: "job-id", Status: "PUBLISHED"})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	if _, err := client.Publish(context.Background(), "job-id", "# runbook", "chave", nil); err != nil {
+		t.Fatalf("publish retornou erro: %v", err)
+	}
+}
+
+func TestPublishEnviaAssetsQuandoPresente(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Markdown string  `json:"markdown"`
+			Assets   []Asset `json:"assets"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatalf("decodificar corpo: %v", err)
+		}
+		if len(body.Assets) != 1 || body.Assets[0].Filename != "shot.png" {
+			t.Fatalf("assets inesperados: %+v", body.Assets)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(Job{ID: "job-id", Status: "PUBLISHED"})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	assets := []Asset{{Filename: "shot.png", ContentBase64: "Zm9v", MediaType: "image/png"}}
+	if _, err := client.Publish(context.Background(), "job-id", "# runbook", "chave", assets); err != nil {
+		t.Fatalf("publish retornou erro: %v", err)
+	}
+}
+
+func TestReviseRunbookEnviaAssetsEIfMatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("If-Match") != `"hash-original"` {
+			t.Fatalf("If-Match inesperado: %q", request.Header.Get("If-Match"))
+		}
+		var body struct {
+			Assets []Asset `json:"assets"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatalf("decodificar corpo: %v", err)
+		}
+		if len(body.Assets) != 1 {
+			t.Fatalf("esperava 1 asset, recebeu %d", len(body.Assets))
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(Job{ID: "revisao-id", Status: "PUBLISHED"})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	assets := []Asset{{Filename: "shot.png", ContentBase64: "Zm9v", MediaType: "image/png"}}
+	_, err = client.ReviseRunbook(
+		context.Background(), "job-origem", "# runbook revisado", "hash-original", "chave", assets,
+	)
+	if err != nil {
+		t.Fatalf("revise retornou erro: %v", err)
+	}
+}
+
+func TestPublishedCatalogListaIDs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.EscapedPath() != "/runbooks/published" {
+			t.Fatalf("requisição inesperada: %s %s", request.Method, request.URL.EscapedPath())
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string][]string{"ids": {"id-um", "id-dois"}})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	ids, err := client.PublishedCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("catalogo retornou erro: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "id-um" {
+		t.Fatalf("ids inesperados: %+v", ids)
+	}
+}
+
+func TestPublishedRunbooksMineUsaEndpointFiltradoPorArea(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.EscapedPath() != "/runbooks/published/mine" {
+			t.Fatalf("requisição inesperada: %s %s", request.Method, request.URL.EscapedPath())
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"ids":   []string{"id-autorizado"},
+			"names": map[string]string{"id-autorizado": "runbook-autorizado"},
+		})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	summaries, err := client.PublishedRunbooksMine(context.Background())
+	if err != nil {
+		t.Fatalf("catalogo retornou erro: %v", err)
+	}
+	if len(summaries) != 1 || summaries[0].ID != "id-autorizado" || summaries[0].Name != "runbook-autorizado" {
+		t.Fatalf("resumo inesperado: %+v", summaries)
+	}
+}
+
 func TestEndpointEscapaIdentificadorSemDuplaCodificacao(t *testing.T) {
 	base, err := url.Parse("https://hub.exemplo.interno:8443")
 	if err != nil {

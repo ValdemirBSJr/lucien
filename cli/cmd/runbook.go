@@ -80,6 +80,7 @@ func newRunbookReviseCommand() *cobra.Command {
 				string(edited),
 				published.ContentHash,
 				key,
+				nil,
 			)
 			if err != nil {
 				return err

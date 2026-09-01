@@ -1,0 +1,143 @@
+@font-face {
+  font-family: 'Geist';
+  src: url('./assets/fonts/geist/Geist-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./assets/fonts/geist/GeistMono-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'Cascadia Code', ui-monospace, monospace;
+
+  /* Paleta identica a website/app/globals.css -- fonte de verdade da marca. */
+  --ink: #0d1734;
+  --ink-soft: #50607d;
+  --line: #dfe5f0;
+  --paper: #f8faff;
+  --page: #fff;
+  --surface: #fff;
+  --surface-soft: #f6f8fc;
+  --blue: #2849c7;
+  --blue-deep: #172e8c;
+  --cyan: #30bfd4;
+
+  /* Tokens semanticos, extraidos de .callout no site -- reusados nos avisos
+     de seguranca do editor (vazamento, erro de OCR, confirmacao). */
+  --danger-border: #f2c8c4;
+  --danger-bg: #fff7f5;
+  --danger-text: #8a3b34;
+  --warning-border: #ead9aa;
+  --warning-bg: #fffaf0;
+  --warning-text: #7a5f1d;
+  --info-border: #c8d8f4;
+  --info-bg: #f5f8ff;
+  --info-text: #31518f;
+  --success: #1f9d63;
+  --success-bg: #eafbf2;
+}
+
+/* Automatico: segue o SO quando o usuario nao escolheu nada explicitamente. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ink: #edf2ff;
+    --ink-soft: #a9b6d0;
+    --line: #273654;
+    --paper: #0f1729;
+    --page: #090f1d;
+    --surface: #111a2e;
+    --surface-soft: #151f35;
+    --blue: #86a5ff;
+    --blue-deep: #9db3ff;
+    --cyan: #58d4e5;
+
+    --danger-border: #6a3a41;
+    --danger-bg: #281a22;
+    --danger-text: #f0a8a1;
+    --warning-border: #67572f;
+    --warning-bg: #272315;
+    --warning-text: #e3c67f;
+    --info-border: #314d79;
+    --info-bg: #16233c;
+    --info-text: #9db8ec;
+    --success: #59d99a;
+    --success-bg: #12291f;
+  }
+}
+
+/* Escolha explicita do usuario vence o automatico nos dois sentidos. */
+:root[data-theme='dark'] {
+  --ink: #edf2ff;
+  --ink-soft: #a9b6d0;
+  --line: #273654;
+  --paper: #0f1729;
+  --page: #090f1d;
+  --surface: #111a2e;
+  --surface-soft: #151f35;
+  --blue: #86a5ff;
+  --blue-deep: #9db3ff;
+  --cyan: #58d4e5;
+
+  --danger-border: #6a3a41;
+  --danger-bg: #281a22;
+  --danger-text: #f0a8a1;
+  --warning-border: #67572f;
+  --warning-bg: #272315;
+  --warning-text: #e3c67f;
+  --info-border: #314d79;
+  --info-bg: #16233c;
+  --info-text: #9db8ec;
+  --success: #59d99a;
+  --success-bg: #12291f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  color: var(--ink);
+  background: var(--page);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+#app {
+  height: 100%;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* O mascote foi desenhado em tinta escura para fundo claro -- mesmo
+   tratamento que website/app/globals.css aplica ao logo no tema escuro. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-logo {
+    filter: brightness(0) invert(1);
+    opacity: 0.92;
+  }
+}
+:root[data-theme='dark'] .brand-logo {
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}

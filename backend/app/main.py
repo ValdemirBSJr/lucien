@@ -25,6 +25,7 @@ from app.infrastructure.security import (
     RequestSizeMiddleware,
     SecurityMiddleware,
 )
+from app.infrastructure.image_scanner import TesseractImageScanner
 from app.infrastructure.secret_scanner import GitleaksSecretScanner
 from app.infrastructure.storage import build_storage_provider
 from app.infrastructure.upload_cipher import AESGCMUploadCipher
@@ -39,6 +40,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     cipher = AESGCMUploadCipher(settings.auth_pepper.get_secret_value())
     storage = build_storage_provider(settings)
+    image_scanner = TesseractImageScanner(
+        secret_scanner,
+        settings.max_asset_bytes,
+        settings.max_asset_dimension_px,
+        settings.ocr_languages,
+    )
     identity_service = IdentityService(
         repository,
         settings.auth_pepper.get_secret_value(),
@@ -48,11 +55,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository,
         secret_scanner,
         storage,
+        image_scanner,
         # O mesmo `lucien runbook revise` vale em local, GitHub e Gitea: o
         # provider sabe ler e escrever o artefato, e o Hub mantem RBAC,
         # sanitizacao e linhagem identicos nos tres.
         revisions_enabled=True,
         entry_roles_enabled=settings.rbac_entry_roles_enabled,
+        max_assets_per_publication=settings.max_assets_per_publication,
     )
     upload_service = UploadService(
         repository,

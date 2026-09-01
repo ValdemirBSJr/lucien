@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lucien-runbook/lucien/internal/api"
+	"github.com/lucien-runbook/lucien/internal/runbookdraft"
 	"github.com/spf13/cobra"
 )
 
@@ -24,10 +25,10 @@ func (fake *fakeActiveJobLister) Active(context.Context) ([]api.Job, error) {
 }
 
 func TestMarkdownTemplateMantemCabecalhoEBlocoBashAdjacentes(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"Revisão",
 		"12345678-1234-1234-1234-123456789abc",
-		[]commandStep{{command: "docker ps"}, {command: "kubectl get pods"}},
+		[]runbookdraft.CommandStep{{Command: "docker ps"}, {Command: "kubectl get pods"}},
 		api.RunbookSuggestions{},
 		"",
 		"en",
@@ -49,10 +50,10 @@ func TestMarkdownTemplateMantemCabecalhoEBlocoBashAdjacentes(t *testing.T) {
 }
 
 func TestMarkdownTemplateEmPortugues(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"Revisão",
 		"12345678-1234-1234-1234-123456789abc",
-		[]commandStep{{command: "docker ps"}},
+		[]runbookdraft.CommandStep{{Command: "docker ps"}},
 		api.RunbookSuggestions{},
 		"",
 		"pt-br",
@@ -73,10 +74,10 @@ func TestMarkdownTemplateEmPortugues(t *testing.T) {
 }
 
 func TestMarkdownTemplateContemSomenteComandosConfirmados(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"Revisão",
 		"12345678-1234-1234-1234-123456789abc",
-		[]commandStep{{command: "date"}, {command: "nproc"}},
+		[]runbookdraft.CommandStep{{Command: "date"}, {Command: "nproc"}},
 		api.RunbookSuggestions{},
 		"",
 		"pt-br",
@@ -97,30 +98,30 @@ func TestMarkdownTemplateContemSomenteComandosConfirmados(t *testing.T) {
 
 func TestDisplayJobNameRemoveSomenteSufixoGeradoPeloLucien(t *testing.T) {
 	name := "teste-uso_1-20260813-001602-7093b5c3e42d"
-	if got := displayJobName(name); got != "teste-uso_1" {
+	if got := runbookdraft.DisplayName(name); got != "teste-uso_1" {
 		t.Fatalf("nome limpo inesperado: %q", got)
 	}
 	custom := "teste-uso_1-manual"
-	if got := displayJobName(custom); got != custom {
+	if got := runbookdraft.DisplayName(custom); got != custom {
 		t.Fatalf("nome não gerado foi alterado: %q", got)
 	}
 }
 
 func TestMarkdownTemplateRejeitaIdiomaDesconhecido(t *testing.T) {
-	_, err := markdownTemplate("job", "job-id", nil, api.RunbookSuggestions{}, "", "es")
+	_, err := runbookdraft.MarkdownTemplate("job", "job-id", nil, api.RunbookSuggestions{}, "", "es")
 	if err == nil {
 		t.Fatal("idioma desconhecido deveria ser rejeitado")
 	}
 }
 
 func TestTemplateIncluiSaidaSomenteDosComandosSelecionados(t *testing.T) {
-	steps := selectedCommandSteps(
+	steps := runbookdraft.SelectedCommandSteps(
 		[]string{"uptime", "date", "nproc"},
 		[]string{"saida uptime", "saida date", "saida nproc"},
 		[]string{"impacto uptime", "impacto date", "impacto nproc"},
 		[]string{"date", "nproc"},
 	)
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"job", "job-id", steps, api.RunbookSuggestions{}, "", "pt-br",
 	)
 	if err != nil {
@@ -141,8 +142,8 @@ func TestTemplateIncluiSaidaSomenteDosComandosSelecionados(t *testing.T) {
 }
 
 func TestTemplateAceitaJobAntigoSemSaidas(t *testing.T) {
-	steps := selectedCommandSteps([]string{"date"}, nil, nil, []string{"date"})
-	template, err := markdownTemplate(
+	steps := runbookdraft.SelectedCommandSteps([]string{"date"}, nil, nil, []string{"date"})
+	template, err := runbookdraft.MarkdownTemplate(
 		"job", "job-id", steps, api.RunbookSuggestions{}, "", "en",
 	)
 	if err != nil {
@@ -154,10 +155,10 @@ func TestTemplateAceitaJobAntigoSemSaidas(t *testing.T) {
 }
 
 func TestOutputFenceNaoEQuebradoPelaSaida(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"job",
 		"job-id",
-		[]commandStep{{command: "printf", output: "```bash\nconteúdo\n```"}},
+		[]runbookdraft.CommandStep{{Command: "printf", Output: "```bash\nconteúdo\n```"}},
 		api.RunbookSuggestions{},
 		"",
 		"en",
@@ -177,13 +178,13 @@ func TestTemplateUsaSugestoesRevisaveisDaSLM(t *testing.T) {
 		CommandImpacts:            []string{"Consulta sem alteração de estado."},
 		RollbackCommands:          []string{"systemctl restart nginx"},
 	}
-	steps := selectedCommandSteps(
+	steps := runbookdraft.SelectedCommandSteps(
 		[]string{"systemctl status nginx"},
 		[]string{"active (running)"},
 		suggestions.CommandImpacts,
 		[]string{"systemctl status nginx"},
 	)
-	template, err := markdownTemplate("nginx", "job-id", steps, suggestions, "", "pt-br")
+	template, err := runbookdraft.MarkdownTemplate("nginx", "job-id", steps, suggestions, "", "pt-br")
 	if err != nil {
 		t.Fatalf("gerar template: %v", err)
 	}
@@ -336,10 +337,10 @@ func TestSubcomandosDeJobDocumentamIndice(t *testing.T) {
 }
 
 func TestTemplateUsaDescricaoQuandoNaoHaEnriquecimento(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"job",
 		"job-id",
-		[]commandStep{{command: "ls"}},
+		[]runbookdraft.CommandStep{{Command: "ls"}},
 		api.RunbookSuggestions{},
 		"Diagnosticar latência no cache Redis",
 		"pt-br",
@@ -366,10 +367,10 @@ func TestTemplateUsaDescricaoQuandoNaoHaEnriquecimento(t *testing.T) {
 }
 
 func TestEnriquecimentoTemPrecedenciaSobreDescricao(t *testing.T) {
-	template, err := markdownTemplate(
+	template, err := runbookdraft.MarkdownTemplate(
 		"job",
 		"job-id",
-		[]commandStep{{command: "ls"}},
+		[]runbookdraft.CommandStep{{Command: "ls"}},
 		api.RunbookSuggestions{Objective: "Objetivo sugerido pela SLM"},
 		"descricao do operador",
 		"pt-br",
@@ -387,10 +388,10 @@ func TestEnriquecimentoTemPrecedenciaSobreDescricao(t *testing.T) {
 }
 
 func TestObjetivoUsaDescricaoComoSubtitulo(t *testing.T) {
-	rascunho, err := markdownTemplate(
+	rascunho, err := runbookdraft.MarkdownTemplate(
 		"zte-olt-rota-down",
 		"3e381ebe-0284-4d3b-b304-a13655e3dd4c",
-		[]commandStep{{command: "show ip route"}},
+		[]runbookdraft.CommandStep{{Command: "show ip route"}},
 		api.RunbookSuggestions{},
 		"Comandos para verificação de rota down nas OLT's ZTE",
 		"pt-br",
@@ -418,7 +419,7 @@ func TestObjetivoUsaDescricaoComoSubtitulo(t *testing.T) {
 
 func TestSingleLineAchataDescricaoMultilinha(t *testing.T) {
 	// Uma quebra de linha partiria o cabeçalho Markdown ao meio.
-	if got := singleLine("linha um\nlinha dois\t e   tres"); got != "linha um linha dois e tres" {
+	if got := runbookdraft.SingleLine("linha um\nlinha dois\t e   tres"); got != "linha um linha dois e tres" {
 		t.Fatalf("descrição não foi achatada: %q", got)
 	}
 }

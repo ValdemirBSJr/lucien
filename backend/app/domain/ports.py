@@ -91,11 +91,33 @@ class IdentityRepository(ABC):
         domain_function: str,
         extra_domains: tuple[str, ...] = (),
         display_name: str | None = None,
+        scope: str | None = None,
     ) -> User:
-        """Cria usuário sem credencial permanente e com ativação temporária."""
+        """Cria usuário sem credencial permanente e com ativação temporária.
+
+        `scope=None` preserva o comportamento de sempre: a troca eventual
+        grava em `api_token_hash`. Um nome grava a troca em credencial
+        isolada por escopo -- é o que o jump server usa (`scope="jump"`),
+        pra nunca disputar a mesma coluna que uma credencial pessoal usa.
+        """
 
     @abstractmethod
-    async def find_user_by_token_hash(self, api_token_hash: str) -> User | None: ...
+    async def find_user_by_token_hash(self, api_token_hash: str) -> User | None:
+        """Procura primeiro em users.api_token_hash, depois em credencial com escopo."""
+
+    @abstractmethod
+    async def has_user_credential(self, user_id: str, scope: str) -> bool:
+        """Diz se ja existe credencial permanente ativa naquele escopo."""
+
+    @abstractmethod
+    async def issue_permanent_credential(
+        self, user_id: str, scope: str, api_token_hash: str
+    ) -> None:
+        """Cria a credencial permanente de um escopo que ainda nao tem uma.
+
+        Chame só depois de `has_user_credential` confirmar que não existe --
+        esta operação não substitui uma credencial já ativa no escopo.
+        """
 
     @abstractmethod
     async def get_user(self, user_id: str) -> User: ...
@@ -111,8 +133,14 @@ class IdentityRepository(ABC):
         provisional_token_hash: str,
         provisional_expires_at: datetime,
         display_name: str | None = None,
+        scope: str | None = None,
     ) -> User:
-        """Invalida a credencial atual e instala uma ativação temporária."""
+        """Invalida a credencial atual e instala uma ativação temporária.
+
+        `scope=None` invalida `api_token_hash` (comportamento de sempre). Um
+        nome invalida só a credencial daquele escopo -- reemitir o token do
+        jump nunca deve apagar uma credencial pessoal de outro escopo.
+        """
 
     @abstractmethod
     async def exchange_provisional_token(
@@ -134,7 +162,8 @@ class IdentityRepository(ABC):
     ) -> User: ...
 
     @abstractmethod
-    async def revoke_user(self, user_id: str) -> None: ...
+    async def revoke_user(self, user_id: str) -> None:
+        """Desativa a identidade e toda credencial permanente, em qualquer escopo."""
 
     @abstractmethod
     async def count_active_admins(self) -> int: ...
@@ -231,6 +260,19 @@ class JobRepository(ABC):
         """Lista IDs publicados que podem integrar o catálogo somente leitura."""
 
     @abstractmethod
+    async def list_published_runbooks_for_domains(
+        self, allowed_domains: tuple[str, ...] | None, max_ids: int
+    ) -> tuple[tuple[str, str], ...]:
+        """Pares (id, nome) publicados que o autor pode revisar de verdade.
+
+        `allowed_domains=None` significa sem filtro (admin); senão, restringe
+        pelo dominio congelado em `publication_identity` no momento da
+        publicacao -- a coluna solta `domain_function` do Job nao e
+        atualizada nesse momento e pode ficar `None`. O nome acompanha o ID
+        porque quem revisa precisa reconhecer o runbook sem decorar UUIDs.
+        """
+
+    @abstractmethod
     async def reserve_publication(
         self,
         owner_id: str,
@@ -321,6 +363,75 @@ class SecretScanner(ABC):
     async def detect(self, content: str) -> SecretScanResult: ...
 
 
+def secret_detection_message(resultado: SecretScanResult) -> str:
+    """Diz o que casou, jamais o que foi encontrado.
+
+    A recusa acontece depois de o operador ter escrito o procedimento inteiro
+    (ou de colar a imagem). Sem o nome da regra ele procura às cegas -- e a
+    tentação, nessa hora, é publicar de outro jeito.
+
+    Somente o identificador da regra atravessa: `lucien-snmp-community` diz que
+    houve uma community SNMP, e não qual. O valor fica redigido no scanner, e o
+    adaptador só aceita identificadores. Compartilhada entre o gate de texto e
+    o de imagem: os dois usam o mesmo SecretScanner por baixo, e a mensagem de
+    recusa não pode divergir entre eles.
+    """
+
+    base = "content blocked by the secret policy"
+    if not resultado.rules:
+        return base
+    return f"{base} (rule: {', '.join(resultado.rules)})"
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessedAsset:
+    """Saida do gate de seguranca de imagem: bytes prontos para publicar.
+
+    Sem nome de arquivo aqui -- quem atribui o nome opaco final e o chamador
+    (JobService), depois que o job_id existe.
+    """
+
+    content: bytes
+    media_type: str
+
+
+class ImageSecurityScanner(ABC):
+    """Porta independente do SecretScanner de texto, mas reutiliza-o por dentro.
+
+    Decodifica de verdade (allowlist PNG/JPEG, nunca confia em extensao ou
+    media_type declarado), remove metadado, reencoda, roda OCR e entrega o
+    texto extraido para o MESMO SecretScanner de texto -- uma politica de
+    segredo so, nao duas.
+    """
+
+    @abstractmethod
+    async def process(self, raw_bytes: bytes, declared_media_type: str) -> ProcessedAsset:
+        """Levanta ValidationError (formato/tamanho/dimensao invalidos) ou
+        SecretDetectedError (OCR encontrou segredo) -- nunca vaza o valor
+        encontrado, so o identificador da regra, igual ao gate de texto."""
+
+
+@dataclass(frozen=True, slots=True)
+class AssetToPublish:
+    """Um anexo ja aprovado pelo gate de seguranca, pronto para o storage."""
+
+    filename: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class RawAssetInput:
+    """Um anexo como o cliente enviou, antes de qualquer decodificacao/gate.
+
+    Tipo de dominio, nao o schema Pydantic da API: a camada de aplicacao nunca
+    deve depender de `app.api.schemas` (a rota e quem converte um pelo outro).
+    """
+
+    filename: str
+    content_base64: str
+    media_type: str
+
+
 class UploadCipher(ABC):
     """Cifra o payload transitório e produz fingerprint não reversível."""
 
@@ -353,6 +464,7 @@ class StorageProvider(ABC):
         markdown: str,
         artifact_name: str | None = None,
         domain_function: str | None = None,
+        assets: tuple[AssetToPublish, ...] = (),
     ) -> PublishedArtifact: ...
 
     @abstractmethod

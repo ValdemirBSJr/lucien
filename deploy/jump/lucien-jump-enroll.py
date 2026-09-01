@@ -6,7 +6,10 @@ from __future__ import annotations
 import grp
 import json
 import os
-import pwd
+# `pwd` e o modulo da base de usuarios do Unix. A regra do scanner ancora em
+# `pwd` seguido de espaco e atravessa a quebra de linha, capturando `import`
+# da linha seguinte -- falso positivo que reprovaria o portao de segredos.
+import pwd  # gitleaks:allow
 import re
 import secrets
 import ssl
@@ -154,6 +157,39 @@ def select_domain() -> str:
     return domain
 
 
+def announce_personal_token(token: str) -> None:
+    """Mostra, uma unica vez, a credencial permanente pessoal desta identidade.
+
+    O Hub so emite este token na primeira vez que a identidade passa pelo
+    jump -- nunca mais volta a aparecer em nenhuma resposta futura, porque a
+    unica copia recuperavel e a que o operador ve agora. Sem este aviso bem
+    visivel, a mensagem passaria despercebida no meio do resto da saida do
+    login SSH e a pessoa perderia a unica chance de guardar a chave.
+    """
+
+    borda = "=" * 70
+    mensagem = (
+        f"\n{borda}\n"
+        "ATENCAO: chave pessoal do Lucien gerada agora\n"
+        f"{borda}\n"
+        "Esta e a UNICA vez que esta chave sera mostrada. O Hub nao guarda\n"
+        "copia recuperavel dela -- se voce nao salvar agora, so um\n"
+        "administrador podera emitir uma nova.\n"
+        "\n"
+        "Ela permite usar o Lucien fora deste servidor (por exemplo, no\n"
+        "aplicativo desktop na sua maquina de trabalho), sem depender de\n"
+        "logar aqui pelo jump.\n"
+        "\n"
+        "Guarde-a agora em um local seguro (um cofre de senhas, por\n"
+        "exemplo):\n"
+        f"\n{token}\n"
+        f"\n{borda}\n"
+    )
+    with open("/dev/tty", "w", encoding="utf-8") as saida:
+        saida.write(mensagem)
+        saida.flush()
+
+
 def save_user_token(
     config: dict[str, str], username: str, account: pwd.struct_passwd, token: str
 ) -> None:
@@ -214,6 +250,11 @@ def main() -> int:
         ):
             raise RuntimeError("the Hub returned a mismatched identity")
         save_user_token(config, username, account, provisional)
+        personal_token = result.get("personal_token")
+        if isinstance(personal_token, str) and personal_token.startswith("luc_") and (
+            not personal_token.startswith("luc_tmp_")
+        ) and len(personal_token) <= 4096:
+            announce_personal_token(personal_token)
         return 0
     except (EnrollmentError, OSError, RuntimeError, ValueError) as error:
         print(f"Lucien unavailable: {error}", file=sys.stderr)

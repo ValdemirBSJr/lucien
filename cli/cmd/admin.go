@@ -104,7 +104,8 @@ func parseRoles(value string) (string, []string, error) {
 }
 
 func newAdminRotateTokenCommand() *cobra.Command {
-	return &cobra.Command{
+	var scope string
+	command := &cobra.Command{
 		Use:     "issue-provisional-token <user-id-or-name>",
 		Aliases: []string{"rotate-token"},
 		Short:   "Invalidates the permanent token and issues a four-hour provisional token",
@@ -114,7 +115,7 @@ func newAdminRotateTokenCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			issued, err := client.IssueProvisionalToken(command.Context(), args[0])
+			issued, err := client.IssueProvisionalToken(command.Context(), args[0], scope)
 			if err != nil {
 				return err
 			}
@@ -122,6 +123,13 @@ func newAdminRotateTokenCommand() *cobra.Command {
 			return nil
 		},
 	}
+	command.Flags().StringVar(
+		&scope, "scope", "",
+		"Isolates the issued credential to a named scope (e.g. \"personal\"), "+
+			"leaving other scopes (like the jump server's) untouched. "+
+			"Omit for the default, unscoped credential.",
+	)
+	return command
 }
 
 func newAdminUpdateUserCommand() *cobra.Command {

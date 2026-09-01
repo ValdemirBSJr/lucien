@@ -16,6 +16,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    update,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
@@ -93,6 +94,9 @@ class UserRow(Base):
     provisional_exchange_key_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )
+    # Para onde a proxima troca deve gravar. NULL preserva o fluxo de hoje
+    # (grava em api_token_hash); um nome grava em UserCredentialRow.
+    provisional_scope: Mapped[str | None] = mapped_column(String(64), nullable=True)
     role_level: Mapped[str] = mapped_column(String(16), nullable=False)
     domain_function: Mapped[str] = mapped_column(String(64), nullable=False)
     # Areas adicionais concedidas pelo admin; a primaria continua acima.
@@ -139,6 +143,35 @@ class ServiceCredentialRow(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
+class UserCredentialRow(Base):
+    """Credencial permanente adicional, isolada por escopo, por usuario.
+
+    Existe para que uma identidade gerida pelo jump server (escopo "jump",
+    reemitido a cada login SSH) nunca derrube uma credencial pessoal usada
+    fora dele (escopo "personal") -- os dois nunca compartilham a mesma linha.
+    """
+
+    __tablename__ = "user_credentials"
+    __table_args__ = (
+        UniqueConstraint("user_id", "scope", name="uq_user_credentials_user_scope"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    scope: Mapped[str] = mapped_column(String(64), nullable=False)
+    api_token_hash: Mapped[str] = mapped_column(
+        String(64), unique=True, index=True, nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
@@ -440,6 +473,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
         domain_function: str,
         extra_domains: tuple[str, ...] = (),
         display_name: str | None = None,
+        scope: str | None = None,
     ) -> User:
         row = UserRow(
             id=str(uuid4()),
@@ -447,6 +481,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
             api_token_hash=None,
             provisional_token_hash=provisional_token_hash,
             provisional_expires_at=provisional_expires_at,
+            provisional_scope=scope,
             role_level=role_level.value,
             domain_function=domain_function,
             extra_domains=[
@@ -468,7 +503,54 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
             row = await session.scalar(
                 select(UserRow).where(UserRow.api_token_hash == api_token_hash)
             )
-        return None if row is None else self._to_user(row)
+            if row is not None:
+                return self._to_user(row)
+            # Nao achou na coluna legada -- tenta credencial com escopo.
+            # UserRow.is_active entra na propria condicao (nao so no filtro
+            # de UserCredentialRow): revogar a identidade tem que invalidar
+            # toda credencial dela, mesmo que o cascade de revoke_user falhe
+            # ou seja esquecido em algum caminho futuro.
+            credencial = await session.scalar(
+                select(UserRow)
+                .join(UserCredentialRow, UserCredentialRow.user_id == UserRow.id)
+                .where(
+                    UserCredentialRow.api_token_hash == api_token_hash,
+                    UserCredentialRow.is_active.is_(True),
+                    UserRow.is_active.is_(True),
+                )
+            )
+        return None if credencial is None else self._to_user(credencial)
+
+    async def has_user_credential(self, user_id: str, scope: str) -> bool:
+        async with self._sessions() as session:
+            existente = await session.scalar(
+                select(UserCredentialRow.id).where(
+                    UserCredentialRow.user_id == user_id,
+                    UserCredentialRow.scope == scope,
+                    UserCredentialRow.is_active.is_(True),
+                )
+            )
+        return existente is not None
+
+    async def issue_permanent_credential(
+        self, user_id: str, scope: str, api_token_hash: str
+    ) -> None:
+        try:
+            async with self._sessions() as session:
+                session.add(
+                    UserCredentialRow(
+                        id=str(uuid4()),
+                        user_id=user_id,
+                        scope=scope,
+                        api_token_hash=api_token_hash,
+                        is_active=True,
+                    )
+                )
+                await session.commit()
+        except IntegrityError as error:
+            raise ConflictError(
+                "credential already exists for this user and scope"
+            ) from error
 
     async def get_user(self, user_id: str) -> User:
         async with self._sessions() as session:
@@ -497,6 +579,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
         provisional_token_hash: str,
         provisional_expires_at: datetime,
         display_name: str | None = None,
+        scope: str | None = None,
     ) -> User:
         try:
             async with self._sessions() as session, session.begin():
@@ -511,11 +594,25 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
                     # O enrollment roda a cada login no jump, entao uma troca de
                     # nome no LDAP chega sozinha. `None` preserva o atual.
                     row.display_name = display_name
-                # A emissão é também uma revogação imediata do token perdido.
-                row.api_token_hash = None
+                if scope is None:
+                    # A emissão é também uma revogação imediata do token perdido --
+                    # só da coluna legada, que é a que este escopo usa.
+                    row.api_token_hash = None
+                else:
+                    # Mesma revogação imediata, mas isolada no escopo pedido: nao
+                    # pode tocar a credencial legada nem a de outro escopo.
+                    await session.execute(
+                        update(UserCredentialRow)
+                        .where(
+                            UserCredentialRow.user_id == user_id,
+                            UserCredentialRow.scope == scope,
+                        )
+                        .values(is_active=False)
+                    )
                 row.provisional_token_hash = provisional_token_hash
                 row.provisional_expires_at = provisional_expires_at
                 row.provisional_exchange_key_hash = None
+                row.provisional_scope = scope
                 await session.flush()
         except IntegrityError as error:
             # Colisão criptográfica é improvável, mas o contrato deve permanecer seguro.
@@ -554,13 +651,49 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
                     row.provisional_exchange_key_hash = None
                     expired = True
                 elif row.provisional_exchange_key_hash is not None:
-                    if (
-                        row.provisional_exchange_key_hash != idempotency_key_hash
-                        or row.api_token_hash != api_token_hash
-                    ):
+                    if row.provisional_exchange_key_hash != idempotency_key_hash:
                         raise AuthenticationError("token provisório já utilizado")
-                else:
+                    if row.provisional_scope is None:
+                        confere = row.api_token_hash == api_token_hash
+                    else:
+                        hash_existente = await session.scalar(
+                            select(UserCredentialRow.api_token_hash).where(
+                                UserCredentialRow.user_id == row.id,
+                                UserCredentialRow.scope == row.provisional_scope,
+                            )
+                        )
+                        confere = hash_existente == api_token_hash
+                    if not confere:
+                        raise AuthenticationError("token provisório já utilizado")
+                elif row.provisional_scope is None:
+                    # Comportamento de sempre: grava na coluna legada.
                     row.api_token_hash = api_token_hash
+                    row.provisional_exchange_key_hash = idempotency_key_hash
+                else:
+                    # Credencial isolada por escopo -- nunca toca a coluna legada
+                    # nem a de outro escopo. Reemissao (issue_provisional_token)
+                    # ja desativou a linha anterior deste escopo, entao ou ela
+                    # existe desativada (reativa e atualiza) ou nunca existiu
+                    # (cria); a UNIQUE(user_id, scope) proibe as duas ao mesmo tempo.
+                    existente = await session.scalar(
+                        select(UserCredentialRow).where(
+                            UserCredentialRow.user_id == row.id,
+                            UserCredentialRow.scope == row.provisional_scope,
+                        )
+                    )
+                    if existente is not None:
+                        existente.api_token_hash = api_token_hash
+                        existente.is_active = True
+                    else:
+                        session.add(
+                            UserCredentialRow(
+                                id=str(uuid4()),
+                                user_id=row.id,
+                                scope=row.provisional_scope,
+                                api_token_hash=api_token_hash,
+                                is_active=True,
+                            )
+                        )
                     row.provisional_exchange_key_hash = idempotency_key_hash
                 await session.flush()
             if expired:
@@ -673,6 +806,15 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
             row.provisional_token_hash = None
             row.provisional_expires_at = None
             row.provisional_exchange_key_hash = None
+            row.provisional_scope = None
+            # A revogacao vale para toda credencial permanente da identidade,
+            # nao so a coluna legada -- um escopo pessoal esquecido nao pode
+            # sobreviver a revogacao do usuario.
+            await session.execute(
+                update(UserCredentialRow)
+                .where(UserCredentialRow.user_id == user_id)
+                .values(is_active=False)
+            )
 
     async def ping(self) -> None:
         """Prova que o banco responde. Erro sobe para quem perguntou."""
@@ -1017,6 +1159,32 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
         if len(identifiers) > max_ids:
             raise ConflictError("catálogo publicado excede o limite de 10000 IDs")
         return tuple(identifiers)
+
+    async def list_published_runbooks_for_domains(
+        self, allowed_domains: tuple[str, ...] | None, max_ids: int
+    ) -> tuple[tuple[str, str], ...]:
+        # O dominio confiavel e o congelado em publication_identity na hora da
+        # publicacao -- a coluna solta JobRow.domain_function nao e
+        # sincronizada nesse momento e frequentemente fica None.
+        conditions = [JobRow.status == JobStatus.PUBLISHED.value]
+        if allowed_domains is not None:
+            conditions.append(
+                JobRow.publication_identity["domain_function"].as_string().in_(
+                    allowed_domains
+                )
+            )
+        async with self._sessions() as session:
+            linhas = (
+                await session.execute(
+                    select(JobRow.id, JobRow.name)
+                    .where(*conditions)
+                    .order_by(JobRow.id.asc())
+                    .limit(max_ids + 1)
+                )
+            ).all()
+        if len(linhas) > max_ids:
+            raise ConflictError("catálogo de revisáveis excede o limite de 10000 IDs")
+        return tuple((linha.id, linha.name) for linha in linhas)
 
     async def reserve_publication(
         self,

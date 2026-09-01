@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     max_log_bytes: int = 2 * 1024 * 1024
     secret_scanner_url: str = "http://secret-scanner:8090"
     secret_scanner_timeout_seconds: float = 5.0
+    # Limites do anexo de imagem: bruto (pre-decode, barreira barata contra
+    # decompression bomb) e dimensao (pos-decode, a barreira real).
+    max_asset_bytes: int = 5 * 1024 * 1024
+    max_asset_dimension_px: int = 8192
+    max_assets_per_publication: int = 20
+    ocr_languages: str = "por+eng"
 
     storage_provider: Literal["local", "github", "gitea"] = "local"
     local_storage_root: Path = Path("/data/playbooks")
@@ -271,6 +277,39 @@ class Settings(BaseSettings):
     def validate_secret_scanner_timeout(cls, value: float) -> float:
         if not 0.1 <= value <= 30:
             raise ValueError("SECRET_SCANNER_TIMEOUT_SECONDS deve ficar entre 0,1 e 30")
+        return value
+
+    @field_validator("max_asset_bytes")
+    @classmethod
+    def validate_max_asset_bytes(cls, value: int) -> int:
+        if value < 1024 or value > 20 * 1024 * 1024:
+            raise ValueError("MAX_ASSET_BYTES deve ficar entre 1 KiB e 20 MiB")
+        return value
+
+    @field_validator("max_asset_dimension_px")
+    @classmethod
+    def validate_max_asset_dimension_px(cls, value: int) -> int:
+        if value < 64 or value > 20_000:
+            raise ValueError("MAX_ASSET_DIMENSION_PX deve ficar entre 64 e 20000")
+        return value
+
+    @field_validator("max_assets_per_publication")
+    @classmethod
+    def validate_max_assets_per_publication(cls, value: int) -> int:
+        if value < 1 or value > 100:
+            raise ValueError("MAX_ASSETS_PER_PUBLICATION deve ficar entre 1 e 100")
+        return value
+
+    @field_validator("ocr_languages")
+    @classmethod
+    def validate_ocr_languages(cls, value: str) -> str:
+        # Gramatica dos pacotes de idioma do Tesseract: codigos de 3 letras
+        # unidos por "+" (ex.: "por+eng"). Falhar aqui evita descobrir um
+        # pacote de idioma ausente so na primeira publicacao com imagem.
+        if re.fullmatch(r"[a-z]{3}(\+[a-z]{3})*", value) is None:
+            raise ValueError(
+                "OCR_LANGUAGES deve seguir o formato do Tesseract, ex.: 'por+eng'"
+            )
         return value
 
     @field_validator("git_api_base")

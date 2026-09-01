@@ -5,6 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /srv/app
+# pytesseract e um wrapper fino: precisa do binario tesseract no PATH em
+# tempo de execucao, nao so da lib Python instalada pelo pip abaixo.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        tesseract-ocr tesseract-ocr-por tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml requirements.lock ./
 COPY app ./app
 # O runner de migracoes le os arquivos .sql em tempo de execucao.

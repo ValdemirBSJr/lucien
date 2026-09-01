@@ -38,6 +38,28 @@ func SaveAuthenticatedProfile(profile Profile, apiHost, token string) error {
 	return nil
 }
 
+// Forget apaga a credencial local para apiHost -- keyring (ou arquivo, no
+// fallback Unix) e profile.json. Sem perfil salvo, e um no-op bem-sucedido:
+// "esquecer" quem ja nao esta logado nao e erro. O CLI de terminal nunca
+// precisou disto (perfil novo sobrescreve o antigo em SaveAuthenticatedProfile);
+// existe para o botao de logout do app grafico.
+func Forget(apiHost string) error {
+	path, err := profilePath()
+	if err != nil {
+		return err
+	}
+	if profile, _, loadErr := loadProfileDisk(); loadErr == nil && profile.CredentialStore != "" {
+		account := credentialAccount(apiHost, profile.UserID)
+		if err := deleteStoredToken(profile.CredentialStore, account); err != nil {
+			return fmt.Errorf("delete stored credential: %w", err)
+		}
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove local profile: %w", err)
+	}
+	return nil
+}
+
 func LoadAuthenticatedProfile(apiHost string) (Profile, string, error) {
 	profile, legacyToken, err := loadProfileDisk()
 	if err != nil {

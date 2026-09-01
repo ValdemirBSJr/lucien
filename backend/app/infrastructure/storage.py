@@ -13,6 +13,7 @@ import httpx
 from app.config import Settings
 from app.domain.models import PublishedArtifact
 from app.domain.ports import (
+    AssetToPublish,
     ConflictError,
     NotFoundError,
     StorageProvider,
@@ -128,6 +129,29 @@ def legacy_playbook_relative_paths(
 
 
 
+def asset_relative_path(job_id: str, playbook_relative: Path, filename: str) -> Path:
+    """Coloca o asset ao lado do `.md` que o referencia.
+
+    O link no Markdown e relativo (`assets/<job_id>/<arquivo>`), e o MkDocs
+    resolve link relativo a partir do diretorio da propria pagina -- entao o
+    asset tem que morar no mesmo diretorio do `.md`, nao numa arvore separada.
+    """
+
+    if _SAFE_ARTIFACT_NAME.fullmatch(filename) is None:
+        raise ConflictError("invalid asset filename for publication")
+    return playbook_relative.parent / "assets" / job_id / filename
+
+
+def git_asset_relative_path(
+    job_id: str, git_playbook_relative: PurePosixPath, filename: str
+) -> PurePosixPath:
+    """Equivalente Git de `asset_relative_path`, mesma razao de posicionamento."""
+
+    if _SAFE_ARTIFACT_NAME.fullmatch(filename) is None:
+        raise ConflictError("invalid asset filename for publication")
+    return git_playbook_relative.parent / "assets" / job_id / filename
+
+
 def git_playbook_relative_path(
     docs_prefix: str,
     job_id: str,
@@ -165,11 +189,20 @@ class LocalProvider(StorageProvider):
         markdown: str,
         artifact_name: str | None = None,
         domain_function: str | None = None,
+        assets: tuple[AssetToPublish, ...] = (),
     ) -> PublishedArtifact:
         relative = playbook_relative_path(
             job_id, created_at, artifact_name, domain_function
         )
-        return await asyncio.to_thread(self._publish_sync, relative, markdown)
+        if not assets:
+            return await asyncio.to_thread(self._publish_sync, relative, markdown)
+        prepared = [
+            (asset_relative_path(job_id, relative, asset.filename), asset.content)
+            for asset in assets
+        ]
+        return await asyncio.to_thread(
+            self._publish_sync_with_assets, relative, markdown, prepared
+        )
 
     async def read_published(
         self,
@@ -206,16 +239,34 @@ class LocalProvider(StorageProvider):
             raise NotFoundError("published artifact not found") from error
 
     def _publish_sync(self, relative: Path, markdown: str) -> PublishedArtifact:
+        self._write_file_atomic(relative, markdown.encode("utf-8"))
+        return PublishedArtifact(url=f"local://{relative.as_posix()}")
+
+    def _publish_sync_with_assets(
+        self,
+        relative: Path,
+        markdown: str,
+        assets: list[tuple[Path, bytes]],
+    ) -> PublishedArtifact:
+        # Assets primeiro, `.md` por ultimo: o markdown e quem "ativa" o
+        # conjunto. Se o processo cair entre dois assets, nenhuma imagem orfa
+        # vira referencia quebrada -- nada ainda aponta para elas. Um retry
+        # depois da queda converge sozinho: `_write_file_atomic` pula qualquer
+        # arquivo ja gravado com o mesmo conteudo.
+        for asset_relative, content in assets:
+            self._write_file_atomic(asset_relative, content)
+        return self._publish_sync(relative, markdown)
+
+    def _write_file_atomic(self, relative: Path, content: bytes) -> None:
         target = (self._root / relative).resolve()
         if self._root not in target.parents:
             raise ConflictError("the publication path escaped the allowed root")
-        content = markdown.encode("utf-8")
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
 
         if target.exists():
             if target.read_bytes() != content:
-                raise ConflictError("the playbook already exists with different content")
-            return PublishedArtifact(url=f"local://{relative.as_posix()}")
+                raise ConflictError("the artifact already exists with different content")
+            return
 
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{target.stem}-", suffix=".tmp", dir=target.parent
@@ -234,7 +285,7 @@ class LocalProvider(StorageProvider):
             except FileExistsError:
                 if target.read_bytes() != content:
                     raise ConflictError(
-                        "the playbook already exists with different content"
+                        "the artifact already exists with different content"
                     )
             else:
                 # Persiste a entrada de diretório após o conteúdo já ter passado
@@ -247,7 +298,6 @@ class LocalProvider(StorageProvider):
         finally:
             if os.path.exists(temporary_name):
                 os.unlink(temporary_name)
-        return PublishedArtifact(url=f"local://{relative.as_posix()}")
 
 
 class GitContentProvider(StorageProvider):
@@ -371,6 +421,23 @@ class GitContentProvider(StorageProvider):
         markdown: str,
         artifact_name: str | None = None,
         domain_function: str | None = None,
+        assets: tuple[AssetToPublish, ...] = (),
+    ) -> PublishedArtifact:
+        if not assets:
+            return await self._publish_single_file(
+                job_id, created_at, markdown, artifact_name, domain_function
+            )
+        return await self._publish_with_assets(
+            job_id, created_at, markdown, artifact_name, domain_function, assets
+        )
+
+    async def _publish_single_file(
+        self,
+        job_id: str,
+        created_at: datetime,
+        markdown: str,
+        artifact_name: str | None = None,
+        domain_function: str | None = None,
     ) -> PublishedArtifact:
         url = self._contents_url(
             job_id, created_at, artifact_name, domain_function
@@ -421,6 +488,155 @@ class GitContentProvider(StorageProvider):
                     publicado = valor
                     break
         return PublishedArtifact(url=publicado)
+
+    async def _publish_with_assets(
+        self,
+        job_id: str,
+        created_at: datetime,
+        markdown: str,
+        artifact_name: str | None,
+        domain_function: str | None,
+        assets: tuple[AssetToPublish, ...],
+    ) -> PublishedArtifact:
+        """Commit atômico via Git Data API: blobs -> tree -> commit -> ref.
+
+        A Contents API só publica um arquivo por commit (ver `_publish_single_file`).
+        Markdown e imagem juntos exigem que um leitor nunca veja um dos dois sem
+        o outro -- só um único `PATCH` de ref, no fim, torna o conjunto visível.
+        """
+
+        markdown_relative = git_playbook_relative_path(
+            self._docs_prefix, job_id, created_at, artifact_name, domain_function
+        )
+        md_url = self._contents_url_for(markdown_relative)
+        expected_markdown = markdown.encode("utf-8")
+
+        client = self._cliente()
+        # Mesma leitura-antes-de-escrever do caminho de arquivo único: se o
+        # conjunto já foi publicado com este conteúdo, não há blob/commit novo
+        # a criar -- é o que torna a repetição idempotente.
+        existing = await self._read_existing(client, md_url)
+        if existing is not None:
+            content, public_url = existing
+            if content != expected_markdown:
+                raise ConflictError(
+                    "the remote playbook already exists with different content"
+                )
+            return PublishedArtifact(url=public_url)
+
+        entries: list[tuple[PurePosixPath, bytes]] = [(markdown_relative, expected_markdown)]
+        for asset in assets:
+            entries.append(
+                (
+                    git_asset_relative_path(job_id, markdown_relative, asset.filename),
+                    asset.content,
+                )
+            )
+
+        repo = self._repo_path()
+        ref = await self._git_get(client, f"/repos/{repo}/git/ref/heads/{self._branch}")
+        base_commit_sha = self._nested_sha(ref, "object", "sha")
+        base_commit = await self._git_get(client, f"/repos/{repo}/git/commits/{base_commit_sha}")
+        base_tree_sha = self._nested_sha(base_commit, "tree", "sha")
+
+        tree_entries: list[dict[str, object]] = []
+        for path, content in entries:
+            blob = await self._git_post(
+                client,
+                f"/repos/{repo}/git/blobs",
+                {
+                    "content": base64.b64encode(content).decode("ascii"),
+                    "encoding": "base64",
+                },
+            )
+            tree_entries.append(
+                {
+                    "path": path.as_posix(),
+                    "mode": "100644",
+                    "type": "blob",
+                    "sha": self._nested_sha(blob, "sha"),
+                }
+            )
+
+        tree = await self._git_post(
+            client,
+            f"/repos/{repo}/git/trees",
+            {"base_tree": base_tree_sha, "tree": tree_entries},
+        )
+        commit = await self._git_post(
+            client,
+            f"/repos/{repo}/git/commits",
+            {
+                "message": f"docs: publica runbook {job_id} com anexos",
+                "tree": self._nested_sha(tree, "sha"),
+                "parents": [base_commit_sha],
+            },
+        )
+        commit_sha = self._nested_sha(commit, "sha")
+
+        try:
+            response = await client.patch(
+                f"{self._api_base}/repos/{repo}/git/refs/heads/{self._branch}",
+                json={"sha": commit_sha, "force": False},
+            )
+        except httpx.HTTPError as error:
+            confirmado = await self._confirmar(client, md_url, expected_markdown)
+            if confirmado is not None:
+                return confirmado
+            raise self._inacessivel(error) from error
+
+        if response.status_code not in {200, 201}:
+            # Non-fast-forward: outra publicação moveu o branch primeiro.
+            # Relê antes de desistir -- pode ter sido a MESMA publicação
+            # chegando por um retry.
+            confirmado = await self._confirmar(client, md_url, expected_markdown)
+            if confirmado is not None:
+                return confirmado
+            raise ConflictError(
+                "the remote branch moved concurrently; retry the publication"
+            )
+
+        return PublishedArtifact(url=md_url)
+
+    def _repo_path(self) -> str:
+        return f"{quote(self._owner, safe='')}/{quote(self._repository, safe='')}"
+
+    async def _git_get(self, client: httpx.AsyncClient, path: str) -> dict[str, object]:
+        try:
+            response = await client.get(f"{self._api_base}{path}")
+        except httpx.HTTPError as error:
+            raise self._inacessivel(error) from error
+        if response.status_code != 200:
+            raise UpstreamError(
+                f"the Git provider refused a read (HTTP {response.status_code})"
+            )
+        return self._corpo(response)
+
+    async def _git_post(
+        self, client: httpx.AsyncClient, path: str, payload: dict[str, object]
+    ) -> dict[str, object]:
+        try:
+            response = await client.post(f"{self._api_base}{path}", json=payload)
+        except httpx.HTTPError as error:
+            raise self._inacessivel(error) from error
+        if response.status_code not in {200, 201}:
+            raise UpstreamError(
+                f"the Git provider refused a write (HTTP {response.status_code})"
+            )
+        return self._corpo(response)
+
+    @staticmethod
+    def _nested_sha(data: dict[str, object], *keys: str) -> str:
+        """Le um campo aninhado sem confiar na forma da resposta do provedor."""
+
+        node: object = data
+        for key in keys:
+            if not isinstance(node, dict):
+                raise UpstreamError("the Git provider answered with an unexpected structure")
+            node = node.get(key)
+        if not isinstance(node, str) or not node:
+            raise UpstreamError("the Git provider answered with an unexpected structure")
+        return node
 
     async def read_published(
         self,

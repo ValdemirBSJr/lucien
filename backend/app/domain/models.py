@@ -68,6 +68,10 @@ class SecurityContext:
             return True
         return domain_function in {self.domain_function, *self.extra_domains}
 
+    @property
+    def authorized_domains(self) -> frozenset[str]:
+        return frozenset({self.domain_function, *self.extra_domains})
+
 
 # Lista historica, usada quando RUNBOOK_DOMAIN_FUNCTIONS nao e declarada.
 # Manter o padrao igual ao que estava fixo no codigo evita que uma

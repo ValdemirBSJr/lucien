@@ -27,6 +27,8 @@ pytestmark = pytest.mark.skipif(
 # obter o banco anterior a todas elas. Derivar o ancestral do modelo em vez de
 # escrevê-lo à mão evita que ele envelheça enquanto o resto do código anda.
 DESFAZER = """
+ALTER TABLE users DROP COLUMN provisional_scope CASCADE;
+DROP TABLE IF EXISTS user_credentials CASCADE;
 ALTER TABLE users DROP COLUMN display_name CASCADE;
 ALTER TABLE users DROP COLUMN extra_domains CASCADE;
 ALTER TABLE jobs DROP COLUMN domain_function CASCADE;
