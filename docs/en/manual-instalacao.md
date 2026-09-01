@@ -833,6 +833,11 @@ a secret — the content already passed the policy — but that the whole runboo
 would enter the log as the last command's output, and the next one would be born
 with another embedded inside it. Run it from another terminal.
 
+In the desktop app (`lucien-desktop`) the equivalent is clicking a runbook in
+the "Published" tab: it opens the published content in read-only mode, with a
+"Revise" button that switches to editing when needed — the recorded-session
+restriction does not apply there, since the app does not run inside a PTY.
+
 ### `lucien runbook revise <published_runbook_uuid>`
 
 Corrects an already published runbook. It downloads the body from the Hub, opens
