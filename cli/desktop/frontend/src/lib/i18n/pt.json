@@ -14,6 +14,8 @@
   "connection_host_placeholder": "https://hub.exemplo.interno:8443",
   "connection_ca_label": "Arquivo de CA (TLS_CA_FILE)",
   "connection_ca_placeholder": "C:\\caminho\\para\\ca.pem",
+  "connection_reveal": "Mostrar endereço e caminho",
+  "connection_hide": "Ocultar endereço e caminho",
   "connection_save": "Salvar conexão",
   "connection_saved": "Conexão salva.",
   "connection_setup_title": "Configure a conexão com o Hub",
@@ -78,5 +80,6 @@
   "editor_publishing": "Publicando...",
   "editor_publish_confirm": "Publicar este runbook? Ele passa a ficar visível para quem tem acesso à área.",
   "editor_publish_error": "Não foi possível publicar o runbook.",
-  "editor_discard_confirm": "Fechar sem publicar? O texto editado não é salvo."
+  "editor_discard_confirm": "Fechar sem publicar? O texto editado não é salvo.",
+  "about_title": "Sobre"
 }

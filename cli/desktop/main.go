@@ -16,6 +16,15 @@ var assets embed.FS
 // versionado, em vez de mentir uma versao.
 var version = "dev"
 
+// Espelham o bloco `info` do wails.json, que alimenta as propriedades do
+// arquivo no Windows. Ficam aqui tambem porque a tela de configuracao mostra
+// os mesmos tres dados, e um app que so os declara no manifesto nao consegue
+// exibi-los.
+const (
+	productName = "Lucien Desktop"
+	copyright   = "Copyright \u00a9 2026 Valdemir Bezerra de Souza Junior"
+)
+
 func main() {
 	// Create an instance of the app structure
 	app := NewApp()

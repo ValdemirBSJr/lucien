@@ -7,7 +7,8 @@
   import ConnectionForm from '../lib/ConnectionForm.svelte';
   import { sessionPhase, identity, refreshSession } from '../lib/session';
   import { confirmDialog } from '../lib/confirm';
-  import { Logout, ForgetEverything } from '../../wailsjs/go/main/App';
+  import { Logout, ForgetEverything, GetAppInfo } from '../../wailsjs/go/main/App';
+  import { onMount } from 'svelte';
 
   async function logout(): Promise<void> {
     if (!(await confirmDialog($t('account_logout_confirm')))) return;
@@ -27,6 +28,12 @@
     { value: 'dark', icon: ICON_DARK_MODE, labelKey: 'theme_dark' },
     { value: 'system', icon: ICON_DESKTOP_WINDOWS, labelKey: 'theme_system' },
   ];
+
+  let appInfo: { productName: string; version: string; copyright: string } | null = null;
+
+  onMount(async () => {
+    appInfo = await GetAppInfo();
+  });
 
   function setLocale(value: Locale): void {
     locale.set(value);
@@ -76,9 +83,24 @@
     {/if}
     <button class="danger" on:click={forgetEverything}>{$t('account_forget_everything')}</button>
   </section>
+
+  {#if appInfo}
+    <section class="about">
+      <h2>{$t('about_title')}</h2>
+      <p class="about-line"><strong>{appInfo.productName}</strong></p>
+      <p class="about-line">{appInfo.version}</p>
+      <p class="about-line">{appInfo.copyright}</p>
+    </section>
+  {/if}
 </div>
 
 <style>
+  .about-line {
+    margin: 0 0 4px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
   .settings {
     max-width: 560px;
     margin: 0 auto;

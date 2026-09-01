@@ -22,6 +22,10 @@ export function GenerateRunbookDraft(arg1, arg2) {
   return window['go']['main']['App']['GenerateRunbookDraft'](arg1, arg2);
 }
 
+export function GetAppInfo() {
+  return window['go']['main']['App']['GetAppInfo']();
+}
+
 export function GetConnectionSettings() {
   return window['go']['main']['App']['GetConnectionSettings']();
 }
