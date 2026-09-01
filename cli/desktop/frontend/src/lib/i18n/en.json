@@ -81,5 +81,16 @@
   "editor_publish_confirm": "Publish this runbook? It becomes visible to anyone with access to the area.",
   "editor_publish_error": "Could not publish the runbook.",
   "editor_discard_confirm": "Close without publishing? The edited text is not saved.",
-  "about_title": "About"
+  "about_title": "About",
+  "published_title": "Published runbook",
+  "published_loading": "Loading published content...",
+  "published_load_error": "Could not load the published content.",
+  "published_revise": "Revise",
+  "published_cancel_revision": "Cancel revision",
+  "published_submit_revision": "Publish revision",
+  "published_publishing": "Publishing...",
+  "published_no_changes": "No changes detected; revision cancelled.",
+  "published_revise_confirm": "Publish this revision? It creates a new immutable version and does not change the current one.",
+  "published_revise_error": "Could not publish the revision. If this version was already revised by someone else, the Hub reports which version is current in the lineage.",
+  "published_revise_success": "Revision published. New ID: {id}"
 }

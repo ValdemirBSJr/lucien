@@ -4,7 +4,7 @@
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_ADD, ICON_DELETE, ICON_EDIT, ICON_REFRESH } from '../lib/icons';
-  import { openEditor } from '../lib/router';
+  import { openEditor, openEditorWithDraft, openPublished } from '../lib/router';
   import {
     ListActiveRunbooks,
     ListPublishedMine,
@@ -89,8 +89,15 @@
     }
   }
 
-  function onCreated(): void {
+  function onCreated(event: CustomEvent<{ id: string; draft: string }>): void {
     showNewRunbook = false;
+    const { id, draft } = event.detail;
+    // Opcional: só quando o \@ (ou texto solto) gerou algo, pula direto pro
+    // rascunho. Sem isso, comportamento de sempre -- fica PROCESSING na tabela.
+    if (draft) {
+      openEditorWithDraft(id, draft);
+      return;
+    }
     void loadActive();
   }
 
@@ -240,7 +247,15 @@
           </thead>
           <tbody>
             {#each filteredPublished as item (item.id)}
-              <tr>
+              <tr
+                class="clickable"
+                role="button"
+                tabindex="0"
+                on:click={() => openPublished(item.id)}
+                on:keydown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') openPublished(item.id);
+                }}
+              >
                 <td class="name">{item.name || '—'}</td>
                 <td class="published-uuid">{item.id}</td>
               </tr>
@@ -392,6 +407,19 @@
 
   tbody tr.processing {
     opacity: 0.6;
+  }
+
+  tbody tr.clickable {
+    cursor: pointer;
+  }
+
+  tbody tr.clickable:hover {
+    background: var(--surface-soft);
+  }
+
+  tbody tr.clickable:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: -2px;
   }
 
   td {
