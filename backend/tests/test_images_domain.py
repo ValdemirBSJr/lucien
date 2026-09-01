@@ -1,0 +1,101 @@
+import pytest
+
+from app.domain.images import (
+    extract_asset_references,
+    rewritten_markdown,
+    validate_asset_completeness,
+)
+from app.domain.ports import ValidationError
+
+_JOB_ID = "1e6a4d1a-9b3e-4c9a-8b0e-2f7a6c9d0e11"
+_OTHER_JOB_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+def test_extracts_valid_reference() -> None:
+    markdown = f"texto\n![print da tela](assets/{_JOB_ID}/shot.png)\nfim"
+    references = extract_asset_references(markdown, _JOB_ID)
+    assert len(references) == 1
+    assert references[0].alt == "print da tela"
+    assert references[0].filename == "shot.png"
+
+
+def test_extracts_multiple_references_in_order() -> None:
+    markdown = (
+        f"![primeiro](assets/{_JOB_ID}/a.png)\n"
+        f"![segundo](assets/{_JOB_ID}/b.jpg)"
+    )
+    references = extract_asset_references(markdown, _JOB_ID)
+    assert [reference.filename for reference in references] == ["a.png", "b.jpg"]
+
+
+def test_empty_caption_is_rejected() -> None:
+    markdown = f"![](assets/{_JOB_ID}/shot.png)"
+    with pytest.raises(ValidationError, match="caption"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_whitespace_only_caption_is_rejected() -> None:
+    markdown = f"![   ](assets/{_JOB_ID}/shot.png)"
+    with pytest.raises(ValidationError, match="caption"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_reference_to_another_job_is_rejected() -> None:
+    markdown = f"![print](assets/{_OTHER_JOB_ID}/shot.png)"
+    with pytest.raises(ValidationError, match="different job"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_external_url_is_rejected() -> None:
+    markdown = "![print](https://evil.example/leak.png)"
+    with pytest.raises(ValidationError, match="assets/<job_id>"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_path_traversal_is_rejected() -> None:
+    markdown = f"![print](assets/{_JOB_ID}/../../etc/passwd)"
+    with pytest.raises(ValidationError, match="assets/<job_id>"):
+        extract_asset_references(markdown, _JOB_ID)
+
+
+def test_no_reference_returns_empty_tuple() -> None:
+    assert extract_asset_references("apenas texto, sem imagem", _JOB_ID) == ()
+
+
+def test_completeness_accepts_matching_sets() -> None:
+    references = extract_asset_references(
+        f"![print](assets/{_JOB_ID}/shot.png)", _JOB_ID
+    )
+    validate_asset_completeness(references, frozenset({"shot.png"}))
+
+
+def test_completeness_rejects_orphan_reference() -> None:
+    references = extract_asset_references(
+        f"![print](assets/{_JOB_ID}/shot.png)", _JOB_ID
+    )
+    with pytest.raises(ValidationError, match="not submitted"):
+        validate_asset_completeness(references, frozenset())
+
+
+def test_completeness_rejects_unreferenced_asset() -> None:
+    with pytest.raises(ValidationError, match="not referenced"):
+        validate_asset_completeness((), frozenset({"shot.png"}))
+
+
+def test_rewritten_markdown_replaces_filename_and_keeps_caption() -> None:
+    markdown = f"antes ![print da tela](assets/{_JOB_ID}/shot.png) depois"
+    result = rewritten_markdown(markdown, _JOB_ID, {"shot.png": "3f9ac1.png"})
+    assert result == f"antes ![print da tela](assets/{_JOB_ID}/3f9ac1.png) depois"
+
+
+def test_rewritten_markdown_handles_multiple_references() -> None:
+    markdown = (
+        f"![um](assets/{_JOB_ID}/a.png) e ![dois](assets/{_JOB_ID}/b.png)"
+    )
+    result = rewritten_markdown(
+        markdown, _JOB_ID, {"a.png": "opaque-a.png", "b.png": "opaque-b.png"}
+    )
+    assert result == (
+        f"![um](assets/{_JOB_ID}/opaque-a.png) e "
+        f"![dois](assets/{_JOB_ID}/opaque-b.png)"
+    )

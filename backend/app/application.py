@@ -1,9 +1,11 @@
 import base64
+import dataclasses
 import hashlib
 import hmac
 import logging
 import re
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.domain.models import (
@@ -17,21 +19,30 @@ from app.domain.models import (
     SecurityContext,
     User,
 )
+from app.domain.images import (
+    extract_asset_references,
+    rewritten_markdown,
+    validate_asset_completeness,
+)
 from app.domain.ports import (
+    AssetToPublish,
     CommandExtractor,
     ConflictError,
     ForbiddenError,
     IdentityRepository,
+    ImageSecurityScanner,
     JobRepository,
     NotFoundError,
+    ProcessedAsset,
+    RawAssetInput,
     RunbookEnricher,
     SecretDetectedError,
     SecretScanner,
-    SecretScanResult,
     StorageProvider,
     UploadCipher,
     UpstreamError,
     ValidationError,
+    secret_detection_message,
 )
 from app.domain.publication import (
     authorize_publication,
@@ -167,16 +178,24 @@ class IdentityService:
         return await self._repository.get_user(actor.user_id)
 
     async def issue_provisional_token(
-        self, actor: SecurityContext, id_or_username: str
+        self,
+        actor: SecurityContext,
+        id_or_username: str,
+        scope: str | None = None,
     ) -> tuple[User, str, datetime]:
-        """Revoga o token perdido e emite ativação de uso único por quatro horas."""
+        """Revoga o token perdido e emite ativação de uso único por quatro horas.
+
+        `scope=None` preserva o comportamento de sempre. Um nome isola a
+        revogação e a próxima troca naquele escopo -- por exemplo, emitir um
+        provisório `scope="personal"` não mexe na credencial `"jump"`.
+        """
 
         self._require_admin(actor)
         target = await self._repository.get_user_by_identifier(id_or_username)
         provisional_token, provisional_hash = self._new_provisional_token()
         expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
         user = await self._repository.issue_provisional_token(
-            target.id, provisional_hash, expires_at
+            target.id, provisional_hash, expires_at, scope=scope
         )
         audit_event(
             "user.issue_provisional_token",
@@ -223,8 +242,15 @@ class IdentityService:
         domain_function: str | None,
         idempotency_key: str,
         display_name: str | None = None,
-    ) -> tuple[User, str, datetime]:
-        """Provisiona identidade POSIX sem conceder autoridade administrativa."""
+    ) -> tuple[User, str, datetime, str | None]:
+        """Provisiona identidade POSIX sem conceder autoridade administrativa.
+
+        O provisório trocado por este fluxo sempre grava em `scope="jump"` --
+        nunca disputa a coluna legada nem uma credencial pessoal de outro
+        escopo. No primeiro acesso desta identidade (jump-criada ou não), uma
+        credencial permanente `scope="personal"` é emitida e devolvida uma
+        única vez no quarto elemento da tupla (`None` quando já existia).
+        """
 
         if re.fullmatch(r"[A-Za-z][0-9]+", username) is None:
             raise ValidationError("invalid jump server username")
@@ -257,6 +283,7 @@ class IdentityService:
                     RoleLevel.PLENO,
                     domain_function,
                     display_name=display_name,
+                    scope="jump",
                 )
                 audit_event(
                     "user.jump_enroll",
@@ -266,7 +293,8 @@ class IdentityService:
                     role_level=RoleLevel.PLENO.value,
                     domain_function=domain_function,
                 )
-                return user, provisional_token, expires_at
+                personal_token = await self._issue_personal_token_if_absent(user)
+                return user, provisional_token, expires_at, personal_token
             except ConflictError:
                 # Outra requisição idempotente pode ter criado a identidade.
                 user = await self._repository.get_user_by_identifier(username)
@@ -287,7 +315,7 @@ class IdentityService:
         )
         provisional_hash = digest_api_token(provisional_token, self._auth_pepper)
         user = await self._repository.issue_provisional_token(
-            user.id, provisional_hash, expires_at, display_name
+            user.id, provisional_hash, expires_at, display_name, scope="jump"
         )
         audit_event(
             "user.jump_reissue",
@@ -297,7 +325,34 @@ class IdentityService:
             role_level=user.role_level.value,
             domain_function=user.domain_function,
         )
-        return user, provisional_token, expires_at
+        personal_token = await self._issue_personal_token_if_absent(user)
+        return user, provisional_token, expires_at, personal_token
+
+    async def _issue_personal_token_if_absent(self, user: User) -> str | None:
+        """Dá à identidade jump uma chave utilizável fora dele, uma única vez.
+
+        `has_user_credential` é o gate, não a criação-vs-reemissão: cobre
+        tanto quem acabou de ser criado pelo jump quanto quem já existia e
+        está logando por ele pela primeira vez.
+        """
+
+        if await self._repository.has_user_credential(user.id, "personal"):
+            return None
+        personal_token, personal_hash = self._new_permanent_token()
+        try:
+            await self._repository.issue_permanent_credential(
+                user.id, "personal", personal_hash
+            )
+        except ConflictError:
+            # Corrida com outra requisição idempotente: a credencial já existe.
+            return None
+        audit_event(
+            "user.personal_credential_issued",
+            actor_id="jump-enrollment",
+            target_id=user.id,
+            target_username=user.username,
+        )
+        return personal_token
 
     async def recover_admin_token(
         self, id_or_username: str
@@ -571,18 +626,27 @@ class UploadProcessor:
             sanitized_log, sanitized_description = self._cipher.open(
                 queued.owner_id, queued.name, queued.ciphertext
             )
-            extracted = await self._extractor.extract(
-                sanitized_log, sanitized_description
-            )
-            if extracted:
-                await self._reject_detected_secret("\n".join(extracted))
-            commands = tuple(sanitize_secrets(command).text for command in extracted)
-            if not commands:
-                raise ConflictError("no useful command was detected")
-            command_outputs = tuple(
-                sanitize_secrets(output).text
-                for output in extract_command_outputs(sanitized_log, commands)
-            )
+            # Log vazio é um runbook puramente visual, sem sessão de terminal --
+            # a extração nem roda, então "nada encontrado" nunca é confundido
+            # com a falha real de extrair de um log que existe.
+            if sanitized_log.strip():
+                extracted = await self._extractor.extract(
+                    sanitized_log, sanitized_description
+                )
+                if extracted:
+                    await self._reject_detected_secret("\n".join(extracted))
+                commands = tuple(
+                    sanitize_secrets(command).text for command in extracted
+                )
+                if not commands:
+                    raise ConflictError("no useful command was detected")
+                command_outputs = tuple(
+                    sanitize_secrets(output).text
+                    for output in extract_command_outputs(sanitized_log, commands)
+                )
+            else:
+                commands = ()
+                command_outputs = ()
             enrichment = await self._enrich_or_fallback(
                 commands,
                 sanitized_description,
@@ -745,14 +809,18 @@ class JobService:
         repository: JobRepository,
         secret_scanner: SecretScanner,
         storage: StorageProvider,
+        image_scanner: ImageSecurityScanner | None = None,
         revisions_enabled: bool = False,
         entry_roles_enabled: bool = False,
+        max_assets_per_publication: int = 20,
     ) -> None:
         self._repository = repository
         self._secret_scanner = secret_scanner
         self._storage = storage
+        self._image_scanner = image_scanner
         self._revisions_enabled = revisions_enabled
         self._entry_roles_enabled = entry_roles_enabled
+        self._max_assets_per_publication = max_assets_per_publication
 
     async def list_pending(self, owner_id: str) -> list[Job]:
         return await self._repository.list_pending(owner_id)
@@ -768,12 +836,126 @@ class JobService:
             self._PUBLISHED_CATALOG_LIMIT
         )
 
+    async def list_published_runbooks_for(
+        self, context: SecurityContext
+    ) -> tuple[tuple[str, str], ...]:
+        """Pares (id, nome) que `context` esta autorizado a revisar de verdade.
+
+        Admin nao tem filtro (ja cruza qualquer area, igual `authorizes`);
+        os demais so veem publicacoes cujo dominio congelado bate com
+        `authorized_domains` -- a mesma checagem que `revise` aplicaria depois,
+        so que antes, pra nao listar algo que o clique seguinte recusaria.
+        """
+
+        allowed_domains = (
+            None
+            if context.role_level is RoleLevel.ADMIN
+            else tuple(context.authorized_domains)
+        )
+        return await self._repository.list_published_runbooks_for_domains(
+            allowed_domains, self._PUBLISHED_CATALOG_LIMIT
+        )
+
+    async def _scan_and_reencode_assets(
+        self,
+        markdown: str,
+        known_job_id: str,
+        raw_assets: tuple[RawAssetInput, ...],
+    ) -> dict[str, ProcessedAsset]:
+        """Roda o gate de imagem inteiro: referencia -> OCR -> segredo.
+
+        Deliberadamente ANTES de qualquer reserva de DB, na mesma posicao dos
+        gates de texto acima -- uma imagem recusada nunca deve tocar o
+        repositorio, igual a um segredo de texto detectado hoje.
+
+        `known_job_id` e o id que o CLIENTE usou ao escrever
+        `assets/<job_id>/...` no corpo -- para `publish` e o job ja existente
+        (resolvido antes desta chamada); para `revise`, o job de origem. Pode
+        nao ser o `job.id` final da reserva (uma revisao sempre cria um id
+        novo) -- por isso o caminho e reescrito depois, em
+        `_rewrite_asset_paths`, com o id real.
+        """
+
+        if self._image_scanner is None:
+            # So dispara se alguem construir o JobService sem scanner de
+            # imagem e ainda assim tentar publicar com anexo -- erro de
+            # configuracao, nao entrada de usuario. Em producao main.py
+            # sempre injeta um TesseractImageScanner real.
+            raise RuntimeError("this JobService instance has no image scanner configured")
+        if len(raw_assets) > self._max_assets_per_publication:
+            raise ValidationError(
+                "a publication accepts at most "
+                f"{self._max_assets_per_publication} images"
+            )
+        references = extract_asset_references(markdown, known_job_id)
+        submitted_filenames = frozenset(asset.filename for asset in raw_assets)
+        validate_asset_completeness(references, submitted_filenames)
+
+        processed: dict[str, ProcessedAsset] = {}
+        for asset in raw_assets:
+            try:
+                raw_bytes = base64.b64decode(asset.content_base64, validate=True)
+            except ValueError as error:
+                raise ValidationError(
+                    f"asset '{asset.filename}' has invalid base64 content"
+                ) from error
+            processed[asset.filename] = await self._image_scanner.process(
+                raw_bytes, asset.media_type
+            )
+        return processed
+
+    @staticmethod
+    def _rewrite_asset_paths(
+        markdown: str, job_id: str, processed: dict[str, ProcessedAsset]
+    ) -> tuple[str, tuple[AssetToPublish, ...]]:
+        """Atribui nome opaco a cada asset e aponta o Markdown para o job real.
+
+        Puro string-replace: nada aqui pode rejeitar a publicacao -- o gate
+        que pode recusar ja rodou em `_scan_and_reencode_assets`.
+        """
+
+        filename_map = {
+            client_filename: f"{uuid.uuid4().hex}.png"
+            for client_filename in sorted(processed)
+        }
+        rewritten = rewritten_markdown(markdown, job_id, filename_map)
+        assets_to_publish = tuple(
+            AssetToPublish(
+                filename=filename_map[client_filename],
+                content=processed[client_filename].content,
+            )
+            for client_filename in sorted(processed)
+        )
+        return rewritten, assets_to_publish
+
+    @staticmethod
+    def _content_hash(markdown: str, assets: tuple[RawAssetInput, ...]) -> str:
+        """Cobre texto e imagem, sobre o conteudo COMO ENVIADO, nunca o reescrito.
+
+        Calculado antes de `_rewrite_asset_paths`, que atribui nome opaco via
+        `uuid.uuid4()` -- um valor novo a cada chamada. Hashear o resultado
+        reescrito faria a MESMA resubmissao bater um hash diferente toda vez,
+        quebrando a idempotencia de `reserve_publication`/`reserve_revision`.
+        Ordem estavel (por nome de arquivo do cliente) garante que o mesmo
+        conjunto logico de anexos bate o mesmo hash em qualquer ordem de envio.
+        """
+
+        hasher = hashlib.sha256()
+        hasher.update(markdown.encode("utf-8"))
+        for asset in sorted(assets, key=lambda item: item.filename):
+            hasher.update(b"\x00")
+            hasher.update(asset.filename.encode("utf-8"))
+            hasher.update(b"\x00")
+            hasher.update(asset.content_base64.encode("ascii"))
+        return hasher.hexdigest()
+
     async def publish(
         self,
         context: SecurityContext,
         id_or_name: str,
         markdown: str,
         idempotency_key: str,
+        assets: tuple[RawAssetInput, ...] = (),
     ) -> tuple[Job, int]:
         # O editor é não confiável: scanner bloqueia e DLP redige defesas residuais.
         await self._reject_detected_secret(markdown)
@@ -782,7 +964,17 @@ class JobService:
         authorize_publication(
             context.role_level, validated.criticality, self._entry_roles_enabled
         )
-        content_hash = hashlib.sha256(validated.body.encode("utf-8")).hexdigest()
+
+        final_body = validated.body
+        processed: dict[str, ProcessedAsset] = {}
+        if assets:
+            known_job = await self._repository.get_job(context.user_id, id_or_name)
+            processed = await self._scan_and_reencode_assets(
+                final_body, known_job.id, assets
+            )
+
+        # Hash sobre o conteudo COMO ENVIADO -- ver docstring de _content_hash.
+        content_hash = self._content_hash(final_body, assets)
         job = await self._repository.reserve_publication(
             context.user_id,
             id_or_name,
@@ -795,14 +987,37 @@ class JobService:
 
         if job.publication_identity is None:
             raise RuntimeError("publication reservation without a trusted identity")
+
+        prepared_assets: tuple[AssetToPublish, ...] = ()
+        if assets:
+            final_body, prepared_assets = self._rewrite_asset_paths(
+                final_body, job.id, processed
+            )
+            validated = dataclasses.replace(validated, body=final_body)
+
         document = build_frontmatter(job, job.publication_identity, validated)
-        artifact = await self._storage.publish(
-            job.id,
-            job.created_at,
-            document,
-            artifact_name=job.name,
-            domain_function=job.publication_identity.domain_function,
-        )
+        # `assets` so entra na chamada quando ha algo a publicar: um
+        # StorageProvider de teste antigo, sem esse parametro na assinatura,
+        # nao pode quebrar so porque o caso sem imagem continua existindo.
+        # (branch explicito em vez de **kwargs: mypy nao valida kwargs de um
+        # dict[str, object] contra a assinatura tipada do port.)
+        if prepared_assets:
+            artifact = await self._storage.publish(
+                job.id,
+                job.created_at,
+                document,
+                artifact_name=job.name,
+                domain_function=job.publication_identity.domain_function,
+                assets=prepared_assets,
+            )
+        else:
+            artifact = await self._storage.publish(
+                job.id,
+                job.created_at,
+                document,
+                artifact_name=job.name,
+                domain_function=job.publication_identity.domain_function,
+            )
         published = await self._repository.mark_published(
             context.user_id,
             job.id,
@@ -896,6 +1111,7 @@ class JobService:
         expected_content_hash: str,
         markdown: str,
         idempotency_key: str,
+        assets: tuple[RawAssetInput, ...] = (),
     ) -> tuple[Job, int]:
         """Publica um sucessor imutável sem alterar a versão fonte."""
 
@@ -935,7 +1151,18 @@ class JobService:
         authorize_publication(
             context.role_level, validated.criticality, self._entry_roles_enabled
         )
-        content_hash = hashlib.sha256(validated.body.encode("utf-8")).hexdigest()
+
+        final_body = validated.body
+        processed: dict[str, ProcessedAsset] = {}
+        if assets:
+            # O id conhecido do cliente aqui e o da fonte -- a revisao ainda
+            # nao tem id proprio antes de `reserve_revision`. O caminho final
+            # em disco usa o id real da revisao, atribuido depois.
+            processed = await self._scan_and_reencode_assets(
+                final_body, source_job_id, assets
+            )
+
+        content_hash = self._content_hash(final_body, assets)
         revision = await self._repository.reserve_revision(
             context.user_id,
             source_job_id,
@@ -955,16 +1182,33 @@ class JobService:
         ):
             raise RuntimeError("revision reservation without a trusted identity")
 
+        prepared_assets: tuple[AssetToPublish, ...] = ()
+        if assets:
+            final_body, prepared_assets = self._rewrite_asset_paths(
+                final_body, revision.id, processed
+            )
+            validated = dataclasses.replace(validated, body=final_body)
+
         document = build_revision_frontmatter(
             revision, revision.publication_identity, validated
         )
-        artifact = await self._storage.publish(
-            revision.id,
-            revision.created_at,
-            document,
-            artifact_name=revision.name,
-            domain_function=revision_source.root_identity.domain_function,
-        )
+        if prepared_assets:
+            artifact = await self._storage.publish(
+                revision.id,
+                revision.created_at,
+                document,
+                artifact_name=revision.name,
+                domain_function=revision_source.root_identity.domain_function,
+                assets=prepared_assets,
+            )
+        else:
+            artifact = await self._storage.publish(
+                revision.id,
+                revision.created_at,
+                document,
+                artifact_name=revision.name,
+                domain_function=revision_source.root_identity.domain_function,
+            )
         published = await self._repository.mark_revision_published(
             revision.owner_id,
             revision.id,
@@ -1002,22 +1246,10 @@ class JobService:
             raise SecretDetectedError(_mensagem_de_segredo(resultado))
 
 
-def _mensagem_de_segredo(resultado: SecretScanResult) -> str:
-    """Diz o que casou, jamais o que foi encontrado.
-
-    A recusa acontece depois de o operador ter escrito o procedimento inteiro.
-    Sem o nome da regra ele reabre o rascunho e procura às cegas -- e a
-    tentação, nessa hora, é publicar de outro jeito.
-
-    Somente o identificador da regra atravessa: `lucien-snmp-community` diz que
-    houve uma community SNMP, e não qual. O valor fica redigido no scanner, e o
-    adaptador só aceita identificadores.
-    """
-
-    base = "content blocked by the secret policy"
-    if not resultado.rules:
-        return base
-    return f"{base} (rule: {', '.join(resultado.rules)})"
+# Movida para o dominio (`secret_detection_message`) porque o gate de imagem
+# tambem precisa dela e nao pode depender da camada de aplicacao. O alias
+# preserva o nome usado nas chamadas internas deste modulo.
+_mensagem_de_segredo = secret_detection_message
 
 
 def _strip_frontmatter(markdown: str) -> str:

@@ -1,0 +1,12 @@
+build/bin
+node_modules
+# O conteudo gerado pelo Vite fica de fora, mas .gitkeep e rastreado --
+# `//go:embed all:frontend/dist` em main.go precisa do diretorio nao-vazio
+# mesmo num clone limpo que nunca rodou `wails build`. Sem isso, `go build
+# ./...`/`go test ./...` falham para o modulo inteiro, nao so o desktop.
+# A regra `dist/` do .gitignore da raiz ignora o diretorio inteiro antes de
+# qualquer negacao por arquivo funcionar -- por isso a primeira linha
+# designora o diretorio em si, e so depois as demais reignoram o conteudo.
+!frontend/dist/
+frontend/dist/*
+!frontend/dist/.gitkeep

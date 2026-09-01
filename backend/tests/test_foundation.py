@@ -314,6 +314,61 @@ async def test_upload_assincrono_e_idempotente(
     assert not await processor.process_once()
 
 
+async def test_log_vazio_produz_runbook_visual_sem_chamar_extrator(
+    repository: SQLAlchemyJobRepository,
+) -> None:
+    """Runbook puramente visual: sem sessão de terminal, sem comandos."""
+
+    class ExtractorNuncaChamado(CommandExtractor):
+        async def extract(
+            self, sanitized_log: str, sanitized_description: str | None = None
+        ) -> tuple[str, ...]:
+            raise AssertionError(
+                "log vazio nao deveria acionar a extracao de comandos"
+            )
+
+    user = await repository.create_user(
+        "visual", "9" * 64, RoleLevel.SENIOR, "servidores"
+    )
+    job = await ready_job(
+        repository,
+        user.id,
+        "job-visual",
+        "",
+        description="Passos de configuração pelo painel web.",
+        extractor=ExtractorNuncaChamado(),
+    )
+    assert job.status.value == "PENDING"
+    assert job.commands == ()
+    assert job.command_outputs == ()
+
+
+async def test_log_nao_vazio_sem_comandos_extraidos_ainda_falha(
+    repository: SQLAlchemyJobRepository,
+) -> None:
+    """Regressão: log de verdade sem nenhum comando reconhecido continua
+    sendo uma falha real, não um runbook visual disfarçado."""
+
+    class ExtractorSemComandos(CommandExtractor):
+        async def extract(
+            self, sanitized_log: str, sanitized_description: str | None = None
+        ) -> tuple[str, ...]:
+            return ()
+
+    user = await repository.create_user(
+        "log-sem-comando", "7" * 64, RoleLevel.SENIOR, "servidores"
+    )
+    job = await ready_job(
+        repository,
+        user.id,
+        "job-sem-comando",
+        "texto qualquer que nao parece comando de terminal",
+        extractor=ExtractorSemComandos(),
+    )
+    assert job.status.value == "FAILED"
+    assert job.processing_error == "NO_COMMANDS"
+
+
 async def test_payload_cifrado_e_vinculado_ao_proprietario() -> None:
     cipher = AESGCMUploadCipher("test-secret-" * 4)
     sealed = cipher.seal("owner-a", "job-a", "PASSWORD=redigida", None)
@@ -1766,7 +1821,7 @@ async def test_nome_do_ldap_chega_ao_frontmatter_publicado(
     identity = IdentityService(repository, "pepper-de-teste" * 4)
 
     # Primeiro login: cria a identidade ja com o nome vindo do GECOS.
-    usuario, _, _ = await identity.enroll_jump_user(
+    usuario, _, _, _ = await identity.enroll_jump_user(
         "U000004",
         "servidores",
         "idem-primeiro-login",
@@ -1802,7 +1857,7 @@ async def test_troca_de_nome_no_ldap_propaga_no_proximo_login(
         "U000004", "servidores", "idem-login-1", "Operador B de Demonstracao"
     )
 
-    atualizado, _, _ = await identity.enroll_jump_user(
+    atualizado, _, _, _ = await identity.enroll_jump_user(
         "U000004", None, "idem-login-2", "Operador Exemplo de Demonstracao Júnior"
     )
 
@@ -1819,7 +1874,7 @@ async def test_enrollment_sem_nome_preserva_o_que_ja_havia(
         "U000004", "servidores", "idem-com-nome", "Operador Exemplo"
     )
 
-    depois, _, _ = await identity.enroll_jump_user(
+    depois, _, _, _ = await identity.enroll_jump_user(
         "U000004", None, "idem-sem-nome", None
     )
 
@@ -1832,7 +1887,7 @@ async def test_nome_sobrevive_ao_redirecionamento_por_area(
     """`lucien start -r` reconstrói a identidade; o nome não pode cair fora."""
 
     identity = IdentityService(repository, "pepper-de-teste" * 4)
-    usuario, _, _ = await identity.enroll_jump_user(
+    usuario, _, _, _ = await identity.enroll_jump_user(
         "U000004", "servidores", "idem-redirect", "Operador Exemplo de Demonstracao"
     )
     admin = await repository.create_user(

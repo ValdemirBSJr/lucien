@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "lucien-desktop",
+  "outputfilename": "lucien-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Valdemir Bezerra de Souza Junior",
+    "email": "badmoon25@gmail.com"
+  }
+}

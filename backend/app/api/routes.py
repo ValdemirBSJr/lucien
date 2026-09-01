@@ -1,7 +1,7 @@
 import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request, Response, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query, Request, Response, status
 
 from app.api.schemas import (
     AdminCreateUserRequest,
@@ -11,6 +11,7 @@ from app.api.schemas import (
     IssuedUserResponse,
     JobResponse,
     JumpEnrollRequest,
+    ProvisionalTokenRequest,
     PublishedRunbookCatalogResponse,
     ProvisionedUserResponse,
     PublishRequest,
@@ -19,13 +20,14 @@ from app.api.schemas import (
     PublishedContentResponse,
     RetryRequest,
     RevisionResponse,
+    RunbookAssetInput,
     RunbookConfigurationResponse,
     UploadRequest,
     UserResponse,
 )
 from app.application import IdentityService, JobService, UploadService
 from app.domain.models import SecurityContext
-from app.domain.ports import JobRepository
+from app.domain.ports import JobRepository, RawAssetInput
 from app.infrastructure.security import require_admin, require_security_context
 
 
@@ -36,6 +38,19 @@ _QUOTED_CONTENT_HASH = re.compile(r'^"([0-9a-f]{64})"$')
 
 def _service(request: Request) -> JobService:
     return request.app.state.job_service
+
+
+def _to_raw_assets(assets: list[RunbookAssetInput]) -> tuple[RawAssetInput, ...]:
+    """Converte o DTO da API para o tipo de dominio; a aplicacao nunca ve Pydantic."""
+
+    return tuple(
+        RawAssetInput(
+            filename=asset.filename,
+            content_base64=asset.content_base64,
+            media_type=asset.media_type,
+        )
+        for asset in assets
+    )
 
 
 def _upload_service(request: Request) -> UploadService:
@@ -180,7 +195,7 @@ async def enroll_jump_user(
     _validate_idempotency_key(idempotency_key)
     if not getattr(request.state, "jump_enrollment_authorized", False):
         raise HTTPException(status_code=401, detail="invalid service credential")
-    user, provisional_token, expires_at = (
+    user, provisional_token, expires_at, personal_token = (
         await _identity_service(request).enroll_jump_user(
             payload.username,
             payload.domain_function,
@@ -190,7 +205,7 @@ async def enroll_jump_user(
     )
     _disable_secret_caching(response)
     return ProvisionedUserResponse.from_provisioned(
-        user, provisional_token, expires_at
+        user, provisional_token, expires_at, personal_token
     )
 
 
@@ -201,6 +216,21 @@ async def list_published_runbooks(
     identifiers = await _service(request).list_published_runbook_ids()
     _disable_secret_caching(response)
     return PublishedRunbookCatalogResponse(ids=list(identifiers))
+
+
+@router.get(
+    "/runbooks/published/mine", response_model=PublishedRunbookCatalogResponse
+)
+async def list_published_runbooks_mine(
+    request: Request, response: Response, context: UserContext
+) -> PublishedRunbookCatalogResponse:
+    """So os IDs que `context` pode de fato revisar -- filtrado por area."""
+
+    pares = await _service(request).list_published_runbooks_for(context)
+    _disable_secret_caching(response)
+    return PublishedRunbookCatalogResponse(
+        ids=[id_ for id_, _ in pares], names={id_: nome for id_, nome in pares}
+    )
 
 
 @router.post(
@@ -253,10 +283,12 @@ async def admin_issue_provisional_token(
     request: Request,
     response: Response,
     context: AdminContext,
+    payload: Annotated[ProvisionalTokenRequest | None, Body()] = None,
 ) -> ProvisionedUserResponse:
+    scope = None if payload is None else payload.scope
     user, provisional_token, expires_at = (
         await _identity_service(request).issue_provisional_token(
-            context, id_or_username
+            context, id_or_username, scope
         )
     )
     _disable_secret_caching(response)
@@ -335,7 +367,11 @@ async def publish_job(
 ) -> PublishResponse:
     _validate_idempotency_key(idempotency_key)
     job, sanitization_count = await _service(request).publish(
-        context, id_or_name, payload.markdown, idempotency_key
+        context,
+        id_or_name,
+        payload.markdown,
+        idempotency_key,
+        _to_raw_assets(payload.assets),
     )
     return PublishResponse.from_publication(job, sanitization_count)
 
@@ -377,6 +413,7 @@ async def revise_runbook(
         _parse_if_match(if_match),
         payload.markdown,
         idempotency_key,
+        _to_raw_assets(payload.assets),
     )
     return RevisionResponse.from_publication(revision, sanitization_count)
 

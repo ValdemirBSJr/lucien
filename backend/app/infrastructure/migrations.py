@@ -109,6 +109,15 @@ MIGRACOES: tuple[Migracao, ...] = (
     Migracao(
         "012", "012_user_display_name_postgresql.sql", _coluna("users", "display_name")
     ),
+    Migracao(
+        "013",
+        "013_user_scoped_credentials_postgresql.sql",
+        # A coluna e o ultimo efeito do script, depois da tabela e dos indices
+        # -- um banco onde so a tabela exista (adocao parcial, ou uma corrida
+        # anterior interrompida) ainda precisa rodar o script de novo. CREATE
+        # TABLE IF NOT EXISTS torna isso seguro de repetir.
+        _coluna("users", "provisional_scope"),
+    ),
 )
 
 _CRIAR_REGISTRO = """

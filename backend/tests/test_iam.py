@@ -190,7 +190,7 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
 
         catalog = client.get("/runbooks/published", headers=admin_headers)
         assert catalog.status_code == 200
-        assert catalog.json() == {"ids": []}
+        assert catalog.json()["ids"] == []
         assert catalog.headers["cache-control"] == "no-store"
         assert catalog.headers["pragma"] == "no-cache"
         assert client.get("/runbooks/published").status_code == 401
