@@ -805,6 +805,34 @@ stuck in `PROCESSING`, use `lucien job del <id_or_name_or_index> --force`; remov
 from the queue is transactional. `--yes` skips only the interactive confirmation.
 No combination of flags deletes a `PUBLISHED` job.
 
+### `lucien runbook cat <published_runbook_uuid>`
+
+Prints a published runbook without opening the editor. Pure reading: it changes
+nothing.
+
+It is to `revise` what `job cat` is to `job` — read what is there without the
+risk of editing it. Consulting a procedure during maintenance should not put the
+operator in front of an editor with an immutable publication open.
+
+Unlike `job cat`, this one **does query the Hub**: a published runbook exists
+only there. There is no refused-draft dilemma — the content already passed
+secret scanning and the DLP before being published.
+
+It requires the exact UUID, for the same reason `revise` does: both operate on
+the same publication, and accepting different identifier forms would let you
+read one runbook and revise another.
+
+Output goes to `stdout`, so it accepts a pipe:
+
+```bash
+lucien runbook cat 3e381ebe-0284-4d3b-b304-a13655e3dd4c | less
+```
+
+The command **refuses to run inside a recorded session**. Here the reason is not
+a secret — the content already passed the policy — but that the whole runbook
+would enter the log as the last command's output, and the next one would be born
+with another embedded inside it. Run it from another terminal.
+
 ### `lucien runbook revise <published_runbook_uuid>`
 
 Corrects an already published runbook. It downloads the body from the Hub, opens
