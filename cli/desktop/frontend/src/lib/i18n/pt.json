@@ -114,5 +114,11 @@
   "offline_title": "Não foi possível conectar ao Hub",
   "offline_body": "O Hub configurado não respondeu. Verifique a rede e se o endereço e o certificado em Configurações estão corretos.",
   "offline_retry": "Tentar novamente",
-  "offline_settings": "Abrir configurações"
+  "offline_settings": "Abrir configurações",
+  "editor_enrich": "Enriquecer com a SLM",
+  "editor_enrich_hint": "Enriquecer envia o texto original ao Hub para extrair os comandos e sugerir objetivo, impactos e rollback. O runbook entra na fila e volta editável pela tela inicial.",
+  "editor_enrich_confirm": "Isso envia o texto original ao Hub e descarta este rascunho local. O runbook entra na fila; você o revisa e publica quando ficar PENDENTE. Continuar?",
+  "editor_enrich_running": "Enviando…",
+  "editor_enrich_error": "Não foi possível enviar para enriquecimento",
+  "editor_enrich_queued": "Enviado. O runbook está PROCESSANDO no Hub — acompanhe na tela inicial. Quando ficar PENDENTE, abra-o pela tabela para revisar e publicar."
 }

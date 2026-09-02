@@ -4,7 +4,12 @@
   import { confirmDialog } from '../lib/confirm';
   import Icon from '../lib/Icon.svelte';
   import { ICON_ADD, ICON_DELETE, ICON_EDIT, ICON_REFRESH } from '../lib/icons';
-  import { openEditor, openLocalDraft, openPublished } from '../lib/router';
+  import {
+    openEditor,
+    openLocalDraft,
+    openPublished,
+    type PendingLocalRunbook,
+  } from '../lib/router';
   import {
     ListActiveRunbooks,
     ListPublishedMine,
@@ -89,9 +94,10 @@
     }
   }
 
-  function onCreated(
-    event: CustomEvent<{ name: string; description: string; domainFunction: string; draft: string }>,
-  ): void {
+  // O tipo vem de PendingLocalRunbook em vez de ser repetido aqui: escrito a
+  // mao, ele saiu de sincronia assim que o modal passou a mandar o texto
+  // original junto.
+  function onCreated(event: CustomEvent<PendingLocalRunbook>): void {
     showNewRunbook = false;
     // "Enviar" nunca criou nada no Hub -- abre direto no editor local; o job
     // só nasce quando o operador publicar de lá.

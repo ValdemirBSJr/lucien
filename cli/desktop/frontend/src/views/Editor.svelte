@@ -28,7 +28,7 @@
   // regenerar o modelo por cima de uma edição já feita apagaria o trabalho.
   // No modo local (`pending`), começa direto em 'draft': não há job, então
   // não há comando nenhum do Hub para escolher.
-  type Phase = 'loading' | 'select' | 'draft' | 'publishing' | 'published';
+  type Phase = 'loading' | 'select' | 'draft' | 'publishing' | 'published' | 'enqueued';
 
   let phase: Phase = pending ? 'draft' : 'loading';
   let detail: main.RunbookDetail | null = null;
@@ -39,6 +39,13 @@
   let generateError = '';
   let publishError = '';
   let successMessage = '';
+
+  let enriching = false;
+  let enrichError = '';
+
+  // Só faz sentido enquanto o runbook é local e há texto original para enviar:
+  // o rascunho já montado perdeu a forma que a SLM sabe ler.
+  $: canEnrich = !!pending && pending.rawLog.trim() !== '';
 
   // Enquanto o job não existe (`pending`), as imagens referenciam um UUID
   // placeholder -- substituído pelo id real logo antes de publicar.
@@ -86,6 +93,32 @@
       phase = 'draft';
     } catch (error) {
       generateError = `${$t('editor_generate_error')} (${String(error)})`;
+    }
+  }
+
+  // Envia o texto original para a extração e o enriquecimento do Hub, em vez
+  // de montar o rascunho aqui. Não espera: o job nasce PROCESSING, o operador
+  // acompanha na tela inicial e reabre pela tabela quando virar PENDENTE --
+  // que é exatamente o fluxo do runbook vindo do `lucien upload`.
+  //
+  // Esperar aqui dentro custaria a composição offline, que é a razão de o
+  // "Criar" nunca falar com o Hub. Assim, quem não clica não perde nada.
+  async function enrich(): Promise<void> {
+    if (!pending) return;
+    const confirmed = await confirmDialog($t('editor_enrich_confirm'));
+    if (!confirmed) return;
+    enrichError = '';
+    enriching = true;
+    try {
+      await CreateRunbook(
+        pending.name, pending.rawLog, pending.description, pending.domainFunction,
+      );
+      successMessage = $t('editor_enrich_queued');
+      phase = 'enqueued';
+    } catch (error) {
+      enrichError = `${$t('editor_enrich_error')} (${String(error)})`;
+    } finally {
+      enriching = false;
     }
   }
 
@@ -265,7 +298,7 @@
     <div class="actions">
       <button class="primary" on:click={generate}>{$t('editor_generate')}</button>
     </div>
-  {:else if phase === 'published'}
+  {:else if phase === 'published' || phase === 'enqueued'}
     <p class="message success">{successMessage}</p>
     <div class="actions">
       <button class="primary" on:click={closeEditor}>{$t('editor_close')}</button>
@@ -279,6 +312,10 @@
       disabled={phase === 'publishing'}
     />
     {#if publishError}<p class="message error">{publishError}</p>{/if}
+    {#if enrichError}<p class="message error">{enrichError}</p>{/if}
+    {#if canEnrich}
+      <p class="hint">{$t('editor_enrich_hint')}</p>
+    {/if}
     <div class="actions">
       {#if id && detail}
         <button
@@ -287,6 +324,15 @@
           on:click={() => (phase = 'select')}
         >
           {$t('editor_back_to_selection')}
+        </button>
+      {/if}
+      {#if canEnrich}
+        <button
+          class="secondary"
+          disabled={phase === 'publishing' || enriching}
+          on:click={enrich}
+        >
+          {enriching ? $t('editor_enrich_running') : $t('editor_enrich')}
         </button>
       {/if}
       <button class="primary" disabled={phase === 'publishing' || !draft.trim()} on:click={publish}>

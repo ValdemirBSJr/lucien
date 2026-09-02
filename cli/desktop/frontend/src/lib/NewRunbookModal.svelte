@@ -11,6 +11,7 @@
       description: string;
       domainFunction: string;
       draft: string;
+      rawLog: string;
     };
     close: void;
   }>();
@@ -55,6 +56,9 @@
         description: trimmedDescription,
         domainFunction,
         draft,
+        // Vai junto porque o rascunho ja montado perdeu a forma original, e e
+        // dela que a SLM do Hub extrai comando, impacto e rollback.
+        rawLog,
       });
     } catch (error) {
       errorMessage = `${$t('home_new_error')} (${String(error)})`;
