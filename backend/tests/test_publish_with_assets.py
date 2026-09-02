@@ -161,6 +161,49 @@ async def test_secret_detected_in_image_is_rejected(
     assert not list(playbooks.rglob("*.md"))
 
 
+async def test_secret_in_image_names_the_file_and_not_the_text(
+    tmp_path: Path,
+    repository: SQLAlchemyJobRepository,
+) -> None:
+    """A recusa precisa dizer de qual imagem veio.
+
+    O texto sai de OCR e nao esta a vista de quem escreveu o runbook: sem o
+    nome do arquivo, a mensagem parece apontar para o markdown -- onde nao ha
+    nada errado -- e o operador procura no lugar errado. Um print de tela de
+    login rende "Senha" seguido do proximo rotulo, o que basta para casar.
+    """
+    playbooks = tmp_path / "playbooks"
+    image_scanner = _FakeImageScanner(
+        reject_with=SecretDetectedError(
+            "content blocked by the secret policy (rule: lucien-vendor-cipher-password)"
+        )
+    )
+    service = _service(repository, LocalProvider(playbooks), image_scanner)
+    user = await _user(repository, "autor-print")
+    job = await repository.create_job(user.id, "job-print", ("echo ok",), ())
+
+    markdown = (
+        "### Step 1: Run\n```bash\necho ok\n```\n"
+        f"![tela de login](assets/{job.id}/tela-de-login.png)\n"
+    )
+    with pytest.raises(SecretDetectedError) as capturado:
+        await service.publish(
+            _context(user),
+            job.id,
+            markdown,
+            "publish-image-secret-01",
+            (_asset("tela-de-login.png"),),
+        )
+
+    mensagem = str(capturado.value)
+    assert "tela-de-login.png" in mensagem
+    assert "lucien-vendor-cipher-password" in mensagem
+    # A regra de sempre: nomear o motivo, nunca o valor. O texto extraido da
+    # imagem nao pode atravessar junto do nome do arquivo.
+    assert "Senha" not in mensagem
+    assert not list(playbooks.rglob("*.md"))
+
+
 async def test_too_many_assets_is_rejected(
     tmp_path: Path,
     repository: SQLAlchemyJobRepository,
