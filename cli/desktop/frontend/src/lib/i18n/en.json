@@ -59,7 +59,7 @@
   "home_new_name_label": "Name",
   "home_new_name_placeholder": "e.g. renew-tls-certificate",
   "home_new_raw_log_label": "Raw log or commands (optional)",
-  "home_new_raw_log_placeholder": "Paste the terminal session or the commands you ran",
+  "home_new_raw_log_placeholder": "Paste the terminal session or the commands you ran\nA line starting with \\@ becomes a command, and the ones after it become its output. With no \\@ anywhere, the whole text becomes a paragraph.",
   "home_new_raw_log_hint": "Leave blank for a purely visual runbook, with no terminal commands (e.g. steps in a graphical interface).",
   "home_new_description_label": "Description (optional)",
   "home_new_domain_label": "Area (optional)",
@@ -110,5 +110,9 @@
   "markdown_image_notice": "Images are reprocessed and scanned before publication.",
   "markdown_image_caption_prompt": "Describe the image (caption required)",
   "markdown_image_error": "Could not import the image.",
-  "markdown_image_unsupported": "Only PNG or JPEG images are accepted."
+  "markdown_image_unsupported": "Only PNG or JPEG images are accepted.",
+  "offline_title": "Could not connect to the Hub",
+  "offline_body": "The configured Hub did not respond. Check the network and whether the address and certificate in Settings are correct.",
+  "offline_retry": "Try again",
+  "offline_settings": "Open settings"
 }

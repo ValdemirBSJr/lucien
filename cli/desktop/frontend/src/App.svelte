@@ -8,6 +8,7 @@
   import Home from './views/Home.svelte';
   import Login from './views/Login.svelte';
   import ConnectionSetup from './views/ConnectionSetup.svelte';
+  import HubUnreachable from './views/HubUnreachable.svelte';
   import Editor from './views/Editor.svelte';
   import PublishedRunbook from './views/PublishedRunbook.svelte';
   import Icon from './lib/Icon.svelte';
@@ -41,6 +42,8 @@
       <Settings />
     {:else if $sessionPhase === 'needs_connection'}
       <ConnectionSetup />
+    {:else if $sessionPhase === 'hub_unreachable'}
+      <HubUnreachable />
     {:else if $sessionPhase === 'signed_out'}
       <Login />
     {:else if $view === 'editor' && $editingRunbookId}
