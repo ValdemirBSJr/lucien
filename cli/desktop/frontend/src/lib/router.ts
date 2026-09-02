@@ -14,6 +14,10 @@ export interface PendingLocalRunbook {
   description: string;
   domainFunction: string;
   draft: string;
+  // O texto original, preservado ao lado do rascunho ja montado: e a unica
+  // entrada que a SLM do Hub sabe enriquecer, e o rascunho local descarta a
+  // estrutura dele. Sem isso, "enriquecer" no editor nao teria o que enviar.
+  rawLog: string;
 }
 
 // UUID-formato-válido usado como job_id nas referências `assets/<id>/...`

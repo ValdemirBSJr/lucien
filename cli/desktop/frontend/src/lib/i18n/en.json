@@ -114,5 +114,11 @@
   "offline_title": "Could not connect to the Hub",
   "offline_body": "The configured Hub did not respond. Check the network and whether the address and certificate in Settings are correct.",
   "offline_retry": "Try again",
-  "offline_settings": "Open settings"
+  "offline_settings": "Open settings",
+  "editor_enrich": "Enrich with the SLM",
+  "editor_enrich_hint": "Enriching sends the original text to the Hub to extract the commands and suggest an objective, impacts, and rollback. The runbook joins the queue and comes back editable from the home screen.",
+  "editor_enrich_confirm": "This sends the original text to the Hub and discards this local draft. The runbook joins the queue; you review and publish it once it turns PENDING. Continue?",
+  "editor_enrich_running": "Sending…",
+  "editor_enrich_error": "Could not send for enrichment",
+  "editor_enrich_queued": "Sent. The runbook is PROCESSING on the Hub — follow it on the home screen. Once it turns PENDING, open it from the table to review and publish."
 }
