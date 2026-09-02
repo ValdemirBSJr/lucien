@@ -205,18 +205,47 @@ func (a *App) authenticatedClient() (*api.Client, error) {
 	return api.NewClient(settings.APIHost, token, settings.CAFile)
 }
 
+// SessionProbe descreve o estado da sessão ao abrir o app.
+//
+// Existe porque "sem credencial" e "Hub inalcançável" caíam no mesmo caminho:
+// qualquer erro virava a tela de token. Quem estava sem rede era mandado
+// digitar um token, que não resolveria nada.
+//
+// Não carrega o texto do erro de propósito. O erro de transporte do Go traz a
+// URL do Hub, e a tela de configuração mascara justamente esse endereço --
+// exibi-lo aqui desfaria a máscara num banner de erro.
+type SessionProbe struct {
+	// Nulo quando não há sessão: o frontend testa a presença, não um campo
+	// vazio que também seria um usuário sem nome.
+	Identity    *Identity `json:"identity"`
+	Unreachable bool      `json:"unreachable"`
+}
+
 // AuthStatus confirma a credencial salva sem pedir nada ao operador -- usado
-// ao abrir o app para decidir entre a tela de Login e a de runbooks.
-func (a *App) AuthStatus() (Identity, error) {
+// ao abrir o app para decidir entre a tela de Login, a de erro de conexão e a
+// de runbooks. Não devolve erro: toda falha é um estado da sessão, e tratá-la
+// como exceção foi o que misturou os dois casos.
+func (a *App) AuthStatus() SessionProbe {
 	client, err := a.authenticatedClient()
 	if err != nil {
-		return Identity{}, err
+		// Sem credencial salva não há o que alcançar, e a tela de token é a
+		// resposta certa mesmo sem rede.
+		return SessionProbe{}
 	}
 	identity, err := client.Me(a.ctx)
-	if err != nil {
-		return Identity{}, err
+	if err == nil {
+		encontrada := identityFrom(identity)
+		return SessionProbe{Identity: &encontrada}
 	}
-	return identityFrom(identity), nil
+	// O Hub respondeu e recusou: credencial inválida, expirada ou revogada. A
+	// tela de token resolve, e é para lá que o operador deve ir.
+	var recusa *api.HTTPError
+	if errors.As(err, &recusa) {
+		return SessionProbe{}
+	}
+	// Não houve resposta: DNS, rota, TLS ou conexão recusada. Digitar um token
+	// não muda nada disso.
+	return SessionProbe{Unreachable: true}
 }
 
 // Login aceita token provisorio ou permanente, exatamente como `lucien
