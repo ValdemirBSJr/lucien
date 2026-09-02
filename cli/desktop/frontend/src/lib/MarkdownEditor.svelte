@@ -108,10 +108,18 @@
     // Três `#`, não dois -- é o único nível que o Hub reconhece como início
     // de passo (## viraria um subtítulo comum, e um ```bash logo abaixo
     // seria recusado por não pertencer a passo nenhum).
-    const heading = `${needsLeadingBreak ? '\n' : ''}### ${$t('markdown_step_word')} ${nextStepNumber()}: \n\n`;
+    // A ação entra preenchida, não vazia. O Hub exige de 1 a 120 caracteres
+    // depois dos dois-pontos, e um título terminado em ": " não é reconhecido
+    // como passo -- o documento inteiro era recusado com "must contain at
+    // least one operational step", sem dizer que o problema estava no título.
+    // Deixá-la escrita garante um passo válido mesmo se ninguém a substituir.
+    const acao = $t('markdown_step_action');
+    const heading = `${needsLeadingBreak ? '\n' : ''}### ${$t('markdown_step_word')} ${nextStepNumber()}: ${acao}\n\n`;
     value = value.slice(0, start) + heading + value.slice(start);
-    const cursorPos = start + heading.length - 1;
-    focusAndSelect(cursorPos, cursorPos);
+    // Seleciona a ação: digitar a substitui de imediato. Antes o cursor caía
+    // na linha em branco abaixo, e o título ficava para trás sem ser notado.
+    const acaoStart = start + heading.length - acao.length - 2;
+    focusAndSelect(acaoStart, acaoStart + acao.length);
   }
 
   function insertTable(): void {

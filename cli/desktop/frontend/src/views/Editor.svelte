@@ -130,6 +130,20 @@
   // anexo tiver um media_type diferente dos dois que o Hub aceita, mostra
   // exatamente qual e qual valor -- em vez de descobrir só depois de uma
   // rejeição genérica, ida e volta pela rede.
+  // Só vai para o Hub o anexo que o texto ainda cita. Trocar uma imagem por
+  // outra deixa a antiga na lista sem referência nenhuma, e o Hub recusa a
+  // publicação inteira com "submitted asset(s) not referenced in markdown" --
+  // uma recusa por contabilidade do editor, que o operador não tem como
+  // corrigir olhando o texto, porque no texto está tudo certo.
+  //
+  // A lista local fica intacta: se o operador desfizer a edição e a
+  // referência voltar, a imagem ainda está aqui para ser enviada.
+  function referencedAssets(
+    markdown: string, list: main.EditorAsset[],
+  ): main.EditorAsset[] {
+    return list.filter((asset) => markdown.includes(`/${asset.filename}`));
+  }
+
   function invalidAssetsMessage(list: main.EditorAsset[]): string {
     const invalidos = list.filter(
       (asset) => asset.mediaType !== 'image/png' && asset.mediaType !== 'image/jpeg',
@@ -195,14 +209,15 @@
       phase = 'draft';
       return;
     }
-    const problema = invalidAssetsMessage(assets);
+    const enviados = referencedAssets(finalMarkdown, assets);
+    const problema = invalidAssetsMessage(enviados);
     if (problema) {
       publishError = `${$t('editor_publish_error')} (invalid asset media_type: ${problema})`;
       phase = 'draft';
       return;
     }
     try {
-      await PublishRunbook(created.id, finalMarkdown, assets);
+      await PublishRunbook(created.id, finalMarkdown, enviados);
       await DeleteLocalDraft(created.id).catch(() => {});
       successMessage = $t('editor_publish_success');
       phase = 'published';
@@ -223,14 +238,15 @@
     } catch {
       // Preservação local é um bônus; a publicação não pode depender dela.
     }
-    const problema = invalidAssetsMessage(assets);
+    const enviados = referencedAssets(draft, assets);
+    const problema = invalidAssetsMessage(enviados);
     if (problema) {
       publishError = `${$t('editor_publish_error')} (invalid asset media_type: ${problema})`;
       phase = 'draft';
       return;
     }
     try {
-      await PublishRunbook(id, draft, assets);
+      await PublishRunbook(id, draft, enviados);
       await DeleteLocalDraft(id).catch(() => {});
       successMessage = $t('editor_publish_success');
       phase = 'published';
@@ -240,7 +256,60 @@
     }
   }
 
+  // Espelha a exigencia do Hub em backend/app/domain/publication.py: pelo
+  // menos um "### Passo N: Acao" seguido de bloco bash, ou documentando uma
+  // acao visual com imagem.
+  //
+  // Existe pelo mesmo motivo de invalidAssetsMessage: gastar uma ida ao Hub
+  // para descobrir isso e caro, e neste caso era pior -- o scanner de segredos
+  // roda antes da validacao, entao um rascunho sem passo e com a palavra
+  // "senha" era recusado duas vezes seguidas, por motivos diferentes, e o
+  // segundo erro so aparecia depois de corrigir o primeiro.
+  //
+  // Advisory: o Hub continua sendo a autoridade. Aqui so evita a viagem.
+  //
+  // A regex e a mesma de _STEP_HEADER no Hub, inclusive o `(.{1,120})$`: um
+  // titulo terminado em ": " nao e passo para ele. Foi exatamente esse o caso
+  // relatado -- seis passos visiveis, todos com imagem, e a recusa dizia que
+  // nao havia passo nenhum.
+  const STEP_HEADING = /^### (?:Passo|Step) ([1-9][0-9]*): (.{1,120})$/;
+  const EMPTY_STEP_HEADING = /^### (?:Passo|Step) [1-9][0-9]*: *$/;
+
+  // Devolve '' quando o rascunho passa. As duas recusas pedem acoes
+  // diferentes, entao dizem coisas diferentes.
+  function stepProblemMessage(markdown: string): string {
+    const lines = markdown.split('\n');
+    const incomplete: string[] = [];
+    let operational = false;
+    for (let i = 0; i < lines.length; i += 1) {
+      if (EMPTY_STEP_HEADING.test(lines[i])) {
+        incomplete.push(lines[i].trim());
+        continue;
+      }
+      if (!STEP_HEADING.test(lines[i])) continue;
+      if (lines[i + 1] === '```bash') {
+        operational = true;
+        continue;
+      }
+      for (let j = i + 1; j < lines.length && !lines[j].startsWith('### '); j += 1) {
+        if (lines[j].includes('![')) {
+          operational = true;
+          break;
+        }
+      }
+    }
+    if (incomplete.length > 0) {
+      return `${$t('editor_step_title_error')} (${incomplete.join('; ')})`;
+    }
+    return operational ? '' : $t('editor_no_step_error');
+  }
+
   function publish(): Promise<void> {
+    const problema = stepProblemMessage(draft);
+    if (problema) {
+      publishError = problema;
+      return Promise.resolve();
+    }
     return pending ? publishPending() : publishExisting();
   }
 

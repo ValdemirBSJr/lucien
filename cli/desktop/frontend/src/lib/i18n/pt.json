@@ -120,5 +120,8 @@
   "editor_enrich_confirm": "Isso envia o texto original ao Hub e descarta este rascunho local. O runbook entra na fila; você o revisa e publica quando ficar PENDENTE. Continuar?",
   "editor_enrich_running": "Enviando…",
   "editor_enrich_error": "Não foi possível enviar para enriquecimento",
-  "editor_enrich_queued": "Enviado. O runbook está PROCESSANDO no Hub — acompanhe na tela inicial. Quando ficar PENDENTE, abra-o pela tabela para revisar e publicar."
+  "editor_enrich_queued": "Enviado. O runbook está PROCESSANDO no Hub — acompanhe na tela inicial. Quando ficar PENDENTE, abra-o pela tabela para revisar e publicar.",
+  "editor_no_step_error": "O runbook precisa de pelo menos um passo. Use o botão de passo na barra de ferramentas para acrescentar um com comando, ou um com imagem como evidência visual. O Hub recusa a publicação sem isso.",
+  "markdown_step_action": "Ação",
+  "editor_step_title_error": "Complete o título do passo depois dos dois-pontos: sem a ação escrita ali, o Hub não reconhece a linha como passo e recusa o runbook inteiro"
 }
