@@ -908,9 +908,22 @@ class JobService:
                 raise ValidationError(
                     f"asset '{asset.filename}' has invalid base64 content"
                 ) from error
-            processed[asset.filename] = await self._image_scanner.process(
-                raw_bytes, asset.media_type
-            )
+            try:
+                processed[asset.filename] = await self._image_scanner.process(
+                    raw_bytes, asset.media_type
+                )
+            except SecretDetectedError as error:
+                # O texto vem de OCR, e nao esta a vista de quem escreveu o
+                # runbook. Sem o nome do arquivo, a recusa parece apontar para
+                # o markdown -- onde nao ha nada errado -- e o operador procura
+                # no lugar errado. Um print de tela de login rende "Senha"
+                # seguido do proximo rotulo, o que basta para a regra casar.
+                #
+                # O nome do arquivo e do proprio operador, nao do conteudo
+                # detectado: dize-lo nao afrouxa a regra de nunca expor o valor.
+                raise SecretDetectedError(
+                    f"image '{asset.filename}': {error}"
+                ) from error
         return processed
 
     @staticmethod
