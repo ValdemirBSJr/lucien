@@ -120,5 +120,8 @@
   "editor_enrich_confirm": "This sends the original text to the Hub and discards this local draft. The runbook joins the queue; you review and publish it once it turns PENDING. Continue?",
   "editor_enrich_running": "Sending…",
   "editor_enrich_error": "Could not send for enrichment",
-  "editor_enrich_queued": "Sent. The runbook is PROCESSING on the Hub — follow it on the home screen. Once it turns PENDING, open it from the table to review and publish."
+  "editor_enrich_queued": "Sent. The runbook is PROCESSING on the Hub — follow it on the home screen. Once it turns PENDING, open it from the table to review and publish.",
+  "editor_no_step_error": "The runbook needs at least one step. Use the step button in the toolbar to add one with a command, or one with an image as visual evidence. The Hub refuses to publish without it.",
+  "markdown_step_action": "Action",
+  "editor_step_title_error": "Complete the step title after the colon: without the action written there, the Hub does not recognize the line as a step and refuses the whole runbook"
 }
