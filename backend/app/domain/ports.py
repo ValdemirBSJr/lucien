@@ -450,6 +450,44 @@ class UploadCipher(ABC):
     ) -> tuple[str, str | None]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class MirroredAsset:
+    """Imagem publicada, com o caminho que ela ocupa na árvore da wiki."""
+
+    filename: str
+    relative_path: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class MirroredDocument:
+    """Uma publicação inteira, como o banco a guarda."""
+
+    job_id: str
+    markdown: str
+    relative_path: str
+    assets: tuple[MirroredAsset, ...]
+
+
+class PublishedMirror(ABC):
+    """Cópia em banco de tudo que foi publicado, imagens inclusive.
+
+    O Git é o destino, não o arquivo. Enquanto o conteúdo existisse só lá,
+    trocar de hospedagem -- sair do Gitea para uma wiki local, por exemplo --
+    dependeria de migrar o repositório, e o Hub não saberia reconstruir nada
+    sozinho. Este espelho existe para que a árvore publicada possa ser
+    regravada a partir do banco, sem clone e sem provedor.
+
+    O caminho guardado é o relativo à raiz dos documentos, sem o prefixo do
+    provedor Git: é o mesmo em `local`, `github` e `gitea`, que é o que
+    permite reproduzir a árvore em qualquer um deles.
+    """
+
+    @abstractmethod
+    async def save_published(self, document: MirroredDocument) -> None:
+        """Idempotente: republicar o mesmo conteúdo reescreve o mesmo estado."""
+
+
 class StorageProvider(ABC):
     """Strategy de destino; publicar o mesmo conteúdo deve ser idempotente."""
 
