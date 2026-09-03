@@ -132,6 +132,23 @@ def legacy_playbook_relative_paths(
 
 
 
+def _caminho_relativo_seguro(relative_path: str) -> str:
+    """Recusa caminho absoluto ou com `..` antes de virar leitura.
+
+    Os caminhos que chegam aqui saem do proprio Hub -- do espelho ou de
+    `playbook_relative_path`. A checagem existe porque `read_bytes` e a unica
+    leitura que aceita um caminho pronto, em vez de derivar um: se algum dia
+    ele vier de outro lugar, a recusa ja esta no caminho.
+    """
+
+    caminho = PurePosixPath(relative_path)
+    if caminho.is_absolute() or any(
+        parte in {"", ".", ".."} for parte in caminho.parts
+    ):
+        raise ConflictError("invalid relative path for reading")
+    return caminho.as_posix()
+
+
 def asset_relative_path(job_id: str, playbook_relative: Path, filename: str) -> Path:
     """Coloca o asset ao lado do `.md` que o referencia.
 
@@ -230,14 +247,22 @@ class LocalProvider(StorageProvider):
                 continue
         raise NotFoundError("published artifact not found")
 
+    async def read_bytes(self, relative_path: str) -> bytes:
+        return await asyncio.to_thread(
+            self._read_bytes_sync, Path(_caminho_relativo_seguro(relative_path))
+        )
+
     def _read_sync(self, relative: Path) -> str:
+        return self._read_bytes_sync(relative).decode("utf-8")
+
+    def _read_bytes_sync(self, relative: Path) -> bytes:
         target = (self._root / relative).resolve()
         # Mesma verificacao da escrita: um caminho derivado nao pode escapar
         # da raiz, ainda que a leitura pareca inofensiva.
         if self._root not in target.parents:
             raise ConflictError("the read path escaped the allowed root")
         try:
-            return target.read_text(encoding="utf-8")
+            return target.read_bytes()
         except FileNotFoundError as error:
             raise NotFoundError("published artifact not found") from error
 
@@ -729,6 +754,17 @@ class GitContentProvider(StorageProvider):
         except UnicodeDecodeError as error:
             raise UpstreamError("the published artifact is not valid UTF-8") from error
 
+    async def read_bytes(self, relative_path: str) -> bytes:
+        url = self._contents_url_for(
+            PurePosixPath(self._docs_prefix)
+            / _caminho_relativo_seguro(relative_path)
+        )
+        existing = await self._read_existing(self._cliente(), url)
+        if existing is None:
+            raise NotFoundError("published artifact not found on the Git provider")
+        content, _ = existing
+        return content
+
     def _contents_url(
         self,
         job_id: str,
@@ -921,6 +957,9 @@ class MirroredStorage(StorageProvider):
         return await self._inner.read_published(
             job_id, created_at, artifact_name, domain_function
         )
+
+    async def read_bytes(self, relative_path: str) -> bytes:
+        return await self._inner.read_bytes(relative_path)
 
     async def aclose(self) -> None:
         await self._inner.aclose()

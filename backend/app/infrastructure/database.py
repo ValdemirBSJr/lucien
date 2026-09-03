@@ -1227,6 +1227,28 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
                     )
                 )
 
+    async def published_ids_without_mirror(self) -> tuple[str, ...]:
+        """Publicações que o espelho ainda não tem, da mais antiga à mais nova.
+
+        A ordem é a de criação porque uma revisão pode herdar a imagem de um
+        ancestral: espelhar o ancestral antes deixa o relatório do backfill
+        legível quando alguma leitura falha no meio.
+        """
+
+        async with self._sessions() as session:
+            espelhados = select(PublishedDocumentRow.job_id)
+            identificadores = (
+                await session.scalars(
+                    select(JobRow.id)
+                    .where(
+                        JobRow.status == JobStatus.PUBLISHED.value,
+                        JobRow.id.not_in(espelhados),
+                    )
+                    .order_by(JobRow.created_at.asc(), JobRow.id.asc())
+                )
+            ).all()
+        return tuple(identificadores)
+
     async def iter_published_mirror(self) -> AsyncIterator[MirroredDocument]:
         """Percorre o espelho inteiro, um documento por vez.
 

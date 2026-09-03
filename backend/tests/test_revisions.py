@@ -80,6 +80,9 @@ class _FlakyStorage(StorageProvider):
             domain_function=domain_function,
         )
 
+    async def read_bytes(self, relative_path: str) -> bytes:
+        return await self._delegate.read_bytes(relative_path)
+
 
 @pytest.fixture
 async def repository(tmp_path: Path):

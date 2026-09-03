@@ -561,6 +561,21 @@ exportação serve para qualquer destino. Uma revisão que herdou uma imagem sem
 alterá-la não a duplica: os bytes ficam sob o job do ancestral, e a exportação da
 árvore inteira os grava de lá, exatamente como o Git faz hoje.
 
+O espelho preenche a cada nova publicação. Numa instalação que já tinha acervo
+antes desta versão, rode o backfill **uma vez** para trazer o que foi publicado
+antes — sem ele, a exportação sai só com o que veio depois:
+
+```bash
+docker compose --env-file .env -f docker-compose.local.yml \
+  exec -T hub python -m app.backfill_mirror
+```
+
+Ele só lê o repositório, é seguro repetir e pula o que já está espelhado.
+Encontra artefatos gravados nos layouts antigos (`<domínio>/<ano>` e
+`<ano>/<mês>`), porque publicação é imutável e continua onde foi gravada. Uma
+publicação que o repositório não tem mais é relatada e pulada, sem interromper
+as demais; o comando termina com status diferente de zero quando isso acontece.
+
 Apagar a linha de um usuário no banco não apaga mais os runbooks dele: a chave
 estrangeira é `RESTRICT`, e o PostgreSQL recusa. Um runbook publicado é
 conhecimento da equipe, não propriedade de quem o escreveu. O caminho de saída

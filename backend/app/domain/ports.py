@@ -520,3 +520,15 @@ class StorageProvider(ABC):
         local, onde o portal alcanca o volume diretamente.
         """
         ...
+
+    @abstractmethod
+    async def read_bytes(self, relative_path: str) -> bytes:
+        """Bytes crus de um arquivo publicado, pelo caminho relativo a raiz
+        dos documentos (sem o prefixo do provedor Git).
+
+        `read_published` nao serve para isto: ela resolve o caminho sozinha,
+        so acha `.md` e devolve texto decodificado. O backfill do espelho
+        precisa das duas coisas que faltam ali -- ler um caminho que ja
+        conhece, e receber bytes, porque anexo e imagem.
+        """
+        ...
