@@ -36,7 +36,7 @@ export function ListPublishedMine():Promise<Array<main.PublishedRunbookSummary>>
 
 export function LoadLocalDraft(arg1:string):Promise<main.LocalDraft>;
 
-export function Login(arg1:string):Promise<main.Identity>;
+export function Login(arg1:string):Promise<main.LoginResult>;
 
 export function Logout():Promise<void>;
 
