@@ -307,6 +307,25 @@ async def admin_revoke_user(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post(
+    "/admin/users/{id_or_username}/reinstate",
+    response_model=ProvisionedUserResponse,
+)
+async def admin_reinstate_user(
+    id_or_username: str,
+    request: Request,
+    response: Response,
+    context: AdminContext,
+) -> ProvisionedUserResponse:
+    user, provisional_token, expires_at = (
+        await _identity_service(request).reinstate_user(context, id_or_username)
+    )
+    _disable_secret_caching(response)
+    return ProvisionedUserResponse.from_provisioned(
+        user, provisional_token, expires_at
+    )
+
+
 @router.post("/upload", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload(
     payload: UploadRequest, request: Request, context: UserContext

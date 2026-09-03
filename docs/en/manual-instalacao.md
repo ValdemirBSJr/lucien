@@ -508,10 +508,24 @@ Additional administrative operations accept a UUID or a username:
 lucien admin user update operador.rede --role pleno --domain redes
 lucien admin user issue-provisional-token operador.rede
 lucien admin user revoke operador.rede --yes
+lucien admin user reinstate operador.rede --yes
 ```
 
 The new provisional credential immediately invalidates the previous ones.
 Revocation requires `--yes` to avoid accidental execution.
+
+Revocation deactivates the identity and erases **every** credential it has, in
+any scope. The user row stays, so the runbooks they published stay in place and
+attributed to them — removing someone from the team is not erasing them.
+
+`reinstate` is the way back, for someone returning from leave or from a reverted
+transfer. It reactivates the identity and issues a fresh provisional credential
+in the same operation: without that, the user would be active with no way to get
+in, because revocation erased the hashes and `issue-provisional-token` refuses an
+inactive user. Role and area are preserved — reinstating is not recreating. The
+credentials revoked earlier **stay invalid**: revoking after a leak is the main
+case, and resurrecting the old token would hand access back to whoever holds it.
+The command requires `--yes` and records `user.reinstate` in the trail.
 
 If user creation ends with an uncertain network result, do not create another
 username. Run `issue-provisional-token` for the same username: if the creation was

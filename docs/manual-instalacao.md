@@ -501,10 +501,24 @@ Operações administrativas adicionais aceitam UUID ou username:
 lucien admin user update operador.rede --role pleno --domain redes
 lucien admin user issue-provisional-token operador.rede
 lucien admin user revoke operador.rede --yes
+lucien admin user reinstate operador.rede --yes
 ```
 
 A nova provisória invalida imediatamente as credenciais anteriores. A revogação
 exige `--yes` para evitar execução acidental.
+
+A revogação desativa a identidade e apaga **todas** as credenciais dela, em
+qualquer escopo. A linha do usuário permanece, então os runbooks que ele
+publicou continuam no lugar e atribuídos a ele — desligar alguém não é apagá-lo.
+
+`reinstate` é o caminho de volta, para quem retorna de licença ou de uma
+transferência revertida. Ele reativa a identidade e emite uma provisória nova na
+mesma operação: sem isso o usuário ficaria ativo e sem forma de entrar, porque a
+revogação apagou os hashes e `issue-provisional-token` recusa quem está inativo.
+Papel e área são preservados — readmitir não é recriar. As credenciais revogadas
+antes **continuam inválidas**: revogar por vazamento é o caso principal, e
+ressuscitar o token antigo devolveria acesso a quem o tivesse. O comando exige
+`--yes` e registra `user.reinstate` na trilha.
 
 Se a criação do usuário terminar com resultado de rede incerto, não crie outro
 username. Execute `issue-provisional-token` para o mesmo username: se a criação

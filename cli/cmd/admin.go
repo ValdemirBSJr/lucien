@@ -28,6 +28,7 @@ func newAdminCommand() *cobra.Command {
 		newAdminRotateTokenCommand(),
 		newAdminUpdateUserCommand(),
 		newAdminRevokeUserCommand(),
+		newAdminReinstateUserCommand(),
 	)
 	admin.AddCommand(user)
 	return admin
@@ -198,7 +199,11 @@ func newAdminRevokeUserCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			if !confirmed {
-				return errors.New("revocation is irreversible; repeat with --yes")
+				return errors.New(
+					"revocation kills every credential of the user, in every scope; " +
+						"the way back is 'reinstate', which issues a new one. " +
+						"Repeat with --yes",
+				)
 			}
 			client, _, err := activeClient()
 			if err != nil {
@@ -211,7 +216,49 @@ func newAdminRevokeUserCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().BoolVar(&confirmed, "yes", false, "Confirm irreversible revocation")
+	command.Flags().BoolVar(
+		&confirmed, "yes", false, "Confirm the revocation of every credential",
+	)
+	return command
+}
+
+// A readmissao existe porque desligar alguem e revogar sao a mesma acao, mas
+// voltar de uma licenca nao e criar um usuario novo: o `create` recusaria o
+// username existente, e o `issue-provisional-token` recusa quem esta inativo.
+// Sem este comando o caminho de volta era UPDATE no banco, fora de qualquer
+// trilha de auditoria.
+func newAdminReinstateUserCommand() *cobra.Command {
+	var confirmed bool
+	command := &cobra.Command{
+		Use:   "reinstate <user-id-or-name>",
+		Short: "Reactivates a revoked user and issues a four-hour provisional token",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			if !confirmed {
+				return errors.New(
+					"reinstating restores access to someone who was revoked; " +
+						"repeat with --yes",
+				)
+			}
+			client, _, err := activeClient()
+			if err != nil {
+				return err
+			}
+			issued, err := client.ReinstateUser(command.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			printProvisionedCredential(command, issued)
+			fmt.Fprintf(
+				command.OutOrStdout(),
+				"The credentials revoked earlier stay invalid; this is a new one.\n",
+			)
+			return nil
+		},
+	}
+	command.Flags().BoolVar(
+		&confirmed, "yes", false, "Confirm the reinstatement",
+	)
 	return command
 }
 

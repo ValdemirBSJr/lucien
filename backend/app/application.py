@@ -427,6 +427,38 @@ class IdentityService:
             "user.revoke", actor_id=actor.user_id, target_id=target.id
         )
 
+    async def reinstate_user(
+        self, actor: SecurityContext, id_or_username: str
+    ) -> tuple[User, str, datetime]:
+        """Readmite quem foi revogado, com uma provisória de quatro horas.
+
+        A revogação apaga todos os hashes e `issue_provisional_token` recusa
+        quem está inativo -- então reativar sem emitir deixaria o usuário
+        ativo e sem nenhuma forma de entrar, e o admin teria que descobrir
+        sozinho que o caminho de volta são dois comandos.
+
+        Devolver a identidade voltar não devolve as credenciais antigas: elas
+        seguem desativadas, porque revogar por vazamento é o caso principal do
+        comando que trouxe o usuário até aqui.
+        """
+
+        self._require_admin(actor)
+        target = await self._repository.get_user_by_identifier(id_or_username)
+        provisional_token, provisional_hash = self._new_provisional_token()
+        expires_at = datetime.now(timezone.utc) + self._PROVISIONAL_TTL
+        user = await self._repository.reinstate_user(
+            target.id, provisional_hash, expires_at
+        )
+        audit_event(
+            "user.reinstate",
+            actor_id=actor.user_id,
+            target_id=user.id,
+            target_username=user.username,
+            role_level=user.role_level.value,
+            domain_function=user.domain_function,
+        )
+        return user, provisional_token, expires_at
+
     def _prepare_permanent_credentials(
         self, username: str, domain_function: str
     ) -> tuple[str, str]:
