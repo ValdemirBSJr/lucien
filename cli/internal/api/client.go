@@ -361,6 +361,26 @@ func (c *Client) UpdateUser(
 	return response, err
 }
 
+// ReinstateUser reativa uma identidade revogada e devolve uma provisoria.
+//
+// A revogacao apaga todos os hashes de token, entao reativar sem emitir
+// deixaria o usuario ativo e sem forma de entrar. As credenciais antigas
+// continuam mortas: o Hub emite uma nova.
+func (c *Client) ReinstateUser(
+	ctx context.Context, identifier string,
+) (ProvisionedUser, error) {
+	var response ProvisionedUser
+	err := c.doJSON(
+		ctx,
+		http.MethodPost,
+		c.endpoint("admin", "users", identifier, "reinstate"),
+		map[string]string{},
+		&response,
+		nil,
+	)
+	return response, err
+}
+
 func (c *Client) RevokeUser(ctx context.Context, identifier string) error {
 	return c.doJSON(
 		ctx,

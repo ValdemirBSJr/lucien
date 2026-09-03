@@ -25,6 +25,7 @@ Only an admin token may use:
 | `POST` | `/admin/users/{id_or_username}/provisional-token` | replace the credential with another provisional one |
 | `PATCH` | `/admin/users/{id_or_username}` | change role and function |
 | `DELETE` | `/admin/users/{id_or_username}` | revoke the user |
+| `POST` | `/admin/users/{id_or_username}/reinstate` | reinstate a revoked user |
 | `POST` | `/auth/exchange` | exchange a provisional credential for a permanent one |
 | `GET` | `/me` | validate the token and read the current identity |
 
@@ -44,6 +45,7 @@ lucien admin user create operador --role junior --domain servidores
 lucien admin user update operador --role pleno --domain servidores
 lucien admin user issue-provisional-token operador
 lucien admin user revoke operador --yes
+lucien admin user reinstate operador --yes
 ```
 
 Creation shows a provisional `luc_tmp_...` credential, valid for four hours and

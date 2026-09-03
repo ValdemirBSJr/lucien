@@ -881,6 +881,39 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
                 .values(is_active=False)
             )
 
+    async def reinstate_user(
+        self, user_id: str, provisional_hash: str, expires_at: datetime
+    ) -> User:
+        """Reativa e emite o provisório na mesma transação.
+
+        Recusa quem já está ativo: seria um comando que parece inofensivo e na
+        verdade rotaciona a credencial de alguém trabalhando, derrubando a
+        sessão dele sem que ninguém tivesse pedido isso.
+
+        As linhas de `user_credentials` continuam inativas. Reativá-las
+        ressuscitaria exatamente os tokens que a revogação matou -- e revogar
+        por vazamento é o caso principal do comando.
+        """
+
+        async with self._sessions() as session, session.begin():
+            row = await session.get(UserRow, user_id, with_for_update=True)
+            if row is None:
+                raise NotFoundError("usuário não encontrado")
+            if row.is_active:
+                raise ConflictError(
+                    "usuário ativo não precisa ser readmitido; "
+                    "use issue-provisional-token para trocar a credencial"
+                )
+            row.is_active = True
+            row.provisional_token_hash = provisional_hash
+            row.provisional_expires_at = expires_at
+            row.provisional_exchange_key_hash = None
+            # Sem escopo: a troca grava na coluna legada, como no primeiro
+            # acesso de qualquer identidade criada pelo admin.
+            row.provisional_scope = None
+            await session.flush()
+            return self._to_user(row)
+
     async def ping(self) -> None:
         """Prova que o banco responde. Erro sobe para quem perguntou."""
         async with self._sessions() as session:

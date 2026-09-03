@@ -166,6 +166,21 @@ class IdentityRepository(ABC):
         """Desativa a identidade e toda credencial permanente, em qualquer escopo."""
 
     @abstractmethod
+    async def reinstate_user(
+        self, user_id: str, provisional_hash: str, expires_at: datetime
+    ) -> "User":
+        """Reativa uma identidade revogada e já lhe dá uma via de volta.
+
+        Reativar sem emitir credencial deixaria o usuário ativo e sem nenhuma
+        forma de entrar -- a revogação apaga todos os hashes, e
+        `issue_provisional_token` recusa quem está inativo. As duas coisas
+        acontecem na mesma transação para não existir esse estado no meio.
+
+        As credenciais permanentes antigas continuam desativadas de propósito:
+        o que foi revogado por vazamento não pode voltar a valer.
+        """
+
+    @abstractmethod
     async def count_active_admins(self) -> int: ...
 
 
