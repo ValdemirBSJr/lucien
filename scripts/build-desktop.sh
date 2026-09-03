@@ -43,6 +43,15 @@ esac
 
 mkdir -p "$OUTPUT_DIR"
 
+# O Vite roda com `emptyOutDir: false` para preservar `frontend/dist/.gitkeep`,
+# que é o único arquivo rastreado ali e o que faz `//go:embed all:frontend/dist`
+# resolver num clone limpo. O efeito colateral é que todo bundle já gerado fica
+# na pasta, e o `go:embed` leva a pasta INTEIRA para dentro do binário: em uma
+# medição, 33 arquivos e 2,5 MB de bundles antigos, incluindo texto de versões
+# que já tinham sido corrigidas. Limpar aqui, e não desligar o `emptyOutDir`,
+# mantém o `.gitkeep` no lugar.
+find "$DESKTOP_DIR/frontend/dist" -mindepth 1 ! -name '.gitkeep' -delete
+
 # -X main.version é o mesmo mecanismo do CLI: uma versão só, decidida aqui, sem
 # um número escrito à mão dentro do código.
 (cd "$DESKTOP_DIR" && wails build -clean -ldflags "-X main.version=$VERSION")
