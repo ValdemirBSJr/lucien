@@ -279,6 +279,16 @@
   <button
     type="button"
     class="tool"
+    title={$t('markdown_code_inline')}
+    aria-label={$t('markdown_code_inline')}
+    disabled={disabled}
+    on:click={insertInlineCode}
+  >
+    <Icon path={ICON_CODE_INLINE} size={16} />
+  </button>
+  <button
+    type="button"
+    class="tool"
     title={$t('markdown_code_bash')}
     aria-label={$t('markdown_code_bash')}
     disabled={disabled}
@@ -315,16 +325,6 @@
     on:click={insertLink}
   >
     <Icon path={ICON_LINK} size={16} />
-  </button>
-  <button
-    type="button"
-    class="tool"
-    title={$t('markdown_code_inline')}
-    aria-label={$t('markdown_code_inline')}
-    disabled={disabled}
-    on:click={insertInlineCode}
-  >
-    <Icon path={ICON_CODE_INLINE} size={16} />
   </button>
   <button
     type="button"

@@ -72,7 +72,7 @@
   "home_new_domain_label": "Area (optional)",
   "home_new_domain_default": "My default area",
   "home_new_cancel": "Cancel",
-  "home_new_submit": "Submit",
+  "home_new_submit": "Start",
   "home_new_error": "Could not submit the runbook.",
   "editor_title": "Runbook editor",
   "editor_loading": "Loading runbook...",
