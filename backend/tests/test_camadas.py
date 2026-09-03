@@ -23,6 +23,8 @@ ADAPTADORES = {
     "worker.py",
     "recover_admin.py",
     "issue_jump_enrollment_key.py",
+    "export_wiki.py",
+    "backfill_mirror.py",
 }
 
 

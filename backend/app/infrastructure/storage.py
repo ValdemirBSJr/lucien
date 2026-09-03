@@ -15,7 +15,10 @@ from app.domain.models import PublishedArtifact
 from app.domain.ports import (
     AssetToPublish,
     ConflictError,
+    MirroredAsset,
+    MirroredDocument,
     NotFoundError,
+    PublishedMirror,
     StorageProvider,
     UpstreamError,
 )
@@ -129,6 +132,23 @@ def legacy_playbook_relative_paths(
 
 
 
+def _caminho_relativo_seguro(relative_path: str) -> str:
+    """Recusa caminho absoluto ou com `..` antes de virar leitura.
+
+    Os caminhos que chegam aqui saem do proprio Hub -- do espelho ou de
+    `playbook_relative_path`. A checagem existe porque `read_bytes` e a unica
+    leitura que aceita um caminho pronto, em vez de derivar um: se algum dia
+    ele vier de outro lugar, a recusa ja esta no caminho.
+    """
+
+    caminho = PurePosixPath(relative_path)
+    if caminho.is_absolute() or any(
+        parte in {"", ".", ".."} for parte in caminho.parts
+    ):
+        raise ConflictError("invalid relative path for reading")
+    return caminho.as_posix()
+
+
 def asset_relative_path(job_id: str, playbook_relative: Path, filename: str) -> Path:
     """Coloca o asset ao lado do `.md` que o referencia.
 
@@ -227,14 +247,22 @@ class LocalProvider(StorageProvider):
                 continue
         raise NotFoundError("published artifact not found")
 
+    async def read_bytes(self, relative_path: str) -> bytes:
+        return await asyncio.to_thread(
+            self._read_bytes_sync, Path(_caminho_relativo_seguro(relative_path))
+        )
+
     def _read_sync(self, relative: Path) -> str:
+        return self._read_bytes_sync(relative).decode("utf-8")
+
+    def _read_bytes_sync(self, relative: Path) -> bytes:
         target = (self._root / relative).resolve()
         # Mesma verificacao da escrita: um caminho derivado nao pode escapar
         # da raiz, ainda que a leitura pareca inofensiva.
         if self._root not in target.parents:
             raise ConflictError("the read path escaped the allowed root")
         try:
-            return target.read_text(encoding="utf-8")
+            return target.read_bytes()
         except FileNotFoundError as error:
             raise NotFoundError("published artifact not found") from error
 
@@ -726,6 +754,17 @@ class GitContentProvider(StorageProvider):
         except UnicodeDecodeError as error:
             raise UpstreamError("the published artifact is not valid UTF-8") from error
 
+    async def read_bytes(self, relative_path: str) -> bytes:
+        url = self._contents_url_for(
+            PurePosixPath(self._docs_prefix)
+            / _caminho_relativo_seguro(relative_path)
+        )
+        existing = await self._read_existing(self._cliente(), url)
+        if existing is None:
+            raise NotFoundError("published artifact not found on the Git provider")
+        content, _ = existing
+        return content
+
     def _contents_url(
         self,
         job_id: str,
@@ -850,14 +889,97 @@ class GiteaProvider(GitContentProvider):
         return PublishedArtifact(url=md_url)
 
 
-def build_storage_provider(settings: Settings) -> StorageProvider:
+class MirroredStorage(StorageProvider):
+    """Publica no destino real e guarda uma cópia do resultado no banco.
+
+    Decorator, e não um passo dentro de `JobService`: assim os três provedores
+    ganham o espelho sem que a camada de aplicação saiba que ele existe, e um
+    provedor novo nasce espelhado.
+
+    A ordem importa. Espelhar DEPOIS da publicação evita registrar no banco um
+    documento que o Git recusou. Em troca, uma falha aqui derruba a requisição
+    com o artefato já gravado lá -- que é o desfecho seguro: o job não é
+    marcado como publicado, e a repetição reencontra o mesmo arquivo (publicar
+    é idempotente por contrato da porta) e completa o espelho.
+    """
+
+    def __init__(self, inner: StorageProvider, mirror: PublishedMirror) -> None:
+        self._inner = inner
+        self._mirror = mirror
+
+    async def publish(
+        self,
+        job_id: str,
+        created_at: datetime,
+        markdown: str,
+        artifact_name: str | None = None,
+        domain_function: str | None = None,
+        assets: tuple[AssetToPublish, ...] = (),
+    ) -> PublishedArtifact:
+        artifact = await self._inner.publish(
+            job_id, created_at, markdown, artifact_name, domain_function, assets
+        )
+        # As mesmas funções que os provedores usam, e não uma cópia da regra:
+        # o caminho aqui é o relativo à raiz dos documentos, sem o prefixo Git,
+        # porque é ele que vale em qualquer destino.
+        relative = playbook_relative_path(
+            job_id, created_at, artifact_name, domain_function
+        )
+        await self._mirror.save_published(
+            MirroredDocument(
+                job_id=job_id,
+                markdown=markdown,
+                relative_path=relative.as_posix(),
+                assets=tuple(
+                    MirroredAsset(
+                        filename=asset.filename,
+                        relative_path=asset_relative_path(
+                            job_id, relative, asset.filename
+                        ).as_posix(),
+                        content=asset.content,
+                    )
+                    for asset in assets
+                ),
+            )
+        )
+        return artifact
+
+    async def read_published(
+        self,
+        job_id: str,
+        created_at: datetime,
+        artifact_name: str | None = None,
+        domain_function: str | None = None,
+    ) -> str:
+        # Segue lendo do destino real: o artefato continua sendo a fonte de
+        # verdade do conteúdo, e o espelho é cópia. Ler do banco esconderia
+        # uma divergência entre os dois em vez de deixá-la aparecer.
+        return await self._inner.read_published(
+            job_id, created_at, artifact_name, domain_function
+        )
+
+    async def read_bytes(self, relative_path: str) -> bytes:
+        return await self._inner.read_bytes(relative_path)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+def build_storage_provider(
+    settings: Settings, mirror: PublishedMirror | None = None
+) -> StorageProvider:
     providers: dict[str, type[StorageProvider] | None] = {
         "local": None,
         "github": GitHubProvider,
         "gitea": GiteaProvider,
     }
+    provider: StorageProvider
     if settings.storage_provider == "local":
-        return LocalProvider(settings.local_storage_root)
-    provider_type = providers[settings.storage_provider]
-    assert provider_type is not None
-    return provider_type(settings)  # type: ignore[call-arg]
+        provider = LocalProvider(settings.local_storage_root)
+    else:
+        provider_type = providers[settings.storage_provider]
+        assert provider_type is not None
+        provider = provider_type(settings)  # type: ignore[call-arg]
+    if mirror is None:
+        return provider
+    return MirroredStorage(provider, mirror)

@@ -130,8 +130,18 @@ nivel_autor: "<role_level>"
 funcao: "<domain_function>"
 data_criacao: "<iso_8601>"
 tags_inferidas: ["<tags_geradas_pela_SLM>"]
+versao: "1"
+ultimo_revisor: ""
+data_revisao: ""
 ---
 ```
+
+Uma revisão acrescenta `runbook_raiz`, `revisao` e `substitui`, e preenche os dois
+últimos campos com quem a publicou e quando. Os quatro campos de procedência
+(`autor`, `nivel_autor`, `funcao`, `data_criacao`) são os da **raiz**, copiados da
+primeira versão: eles descrevem o runbook, não a versão. `funcao` em particular tem
+que ser a da raiz, porque é ela que decide o diretório de destino — publicar a área
+do revisor faria o documento contradizer a pasta onde está.
 
 A SLM só infere tags. Ela nunca determina autorização. Criticidade alta é
 classificada por regras determinísticas sobre comandos destrutivos; um usuário

@@ -26,6 +26,13 @@
   "login_submit": "Sign in",
   "login_error_generic": "Could not sign in. Check the token and the connection.",
   "login_settings_link": "Set up connection",
+  "login_permanent_title": "Save your permanent token",
+  "login_permanent_warning": "This token will not be shown again. Store it in a credential vault before closing this window.",
+  "login_permanent_copy": "Copy",
+  "login_permanent_copied": "Copied",
+  "login_permanent_copy_failed": "Could not copy. The token is selected: copy it manually.",
+  "login_permanent_hint": "This is the same token used by 'lucien login' in the terminal and on other machines. If you lose it, only an administrator can issue another — and that invalidates this one.",
+  "login_permanent_close": "I saved it",
   "settings_account": "Account",
   "account_signed_in_as": "Signed in as",
   "account_logout": "Sign out",
@@ -126,5 +133,7 @@
   "editor_step_title_error": "Complete the step title after the colon: without the action written there, the Hub does not recognize the line as a step and refuses the whole runbook",
   "markdown_link": "Insert link",
   "markdown_link_text": "link text",
+  "markdown_code_inline": "Inline code",
+  "markdown_code_inline_text": "text",
   "editor_enrich_no_source": "Enrich unavailable: the “Raw log or commands” field was left empty at creation. The SLM extracts the commands from that text, and the assembled draft does not work as input."
 }

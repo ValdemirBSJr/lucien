@@ -511,6 +511,25 @@ operational preset: `local-viewer`, `github`, `gitea-compact`, or `gitea-runner`
 The compact one runs no Actions; the Gitea workflow belongs only to the advanced
 mode with a dedicated VM.
 
+`MirroredStorage` wraps any of the three and, after publishing, writes the
+complete Markdown and the image bytes into `published_documents` and
+`published_assets`. It is a decorator rather than a step inside `JobService`: all
+three providers get the mirror without the application layer knowing about it,
+and a new provider is born mirrored.
+
+The order is publish, mirror, mark as published. A mirror failure fails the
+request with the artifact already written to the destination — which is the safe
+outcome, because the job does not become `PUBLISHED`, and the retry finds the
+same file (publishing is idempotent by the port's contract) and completes the
+mirror. The reverse would record in the database a document Git refused.
+
+The stored path is the one relative to the documents root, **without** the Git
+provider's prefix: it is the same under `local`, `github`, and `gitea`, and that
+is what lets `python -m app.export_wiki` (a tar on stdout) reproduce the tree at any
+destination. Reading (`read_published`) still goes to the real destination — the
+artifact remains the source of truth for content, and reading from the database
+would hide a divergence between the two instead of letting it surface.
+
 ## Verifying changes
 
 `scripts/verify.sh` runs every gate the same way CI does, and it exists to be run

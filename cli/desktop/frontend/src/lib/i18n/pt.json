@@ -26,6 +26,13 @@
   "login_submit": "Entrar",
   "login_error_generic": "Não foi possível entrar. Confira o token e a conexão.",
   "login_settings_link": "Configurar conexão",
+  "login_permanent_title": "Guarde seu token permanente",
+  "login_permanent_warning": "Este token não será mostrado de novo. Guarde-o em um cofre de senhas antes de fechar esta janela.",
+  "login_permanent_copy": "Copiar",
+  "login_permanent_copied": "Copiado",
+  "login_permanent_copy_failed": "Não foi possível copiar. O token está selecionado: copie manualmente.",
+  "login_permanent_hint": "É o mesmo token do 'lucien login' no terminal e em outras máquinas. Se perdê-lo, só um administrador pode emitir outro — e isso invalida este.",
+  "login_permanent_close": "Já guardei",
   "settings_account": "Conta",
   "account_signed_in_as": "Conectado como",
   "account_logout": "Sair",
@@ -126,5 +133,7 @@
   "editor_step_title_error": "Complete o título do passo depois dos dois-pontos: sem a ação escrita ali, o Hub não reconhece a linha como passo e recusa o runbook inteiro",
   "markdown_link": "Inserir link",
   "markdown_link_text": "texto do link",
+  "markdown_code_inline": "Código embutido",
+  "markdown_code_inline_text": "texto",
   "editor_enrich_no_source": "Enriquecer indisponível: o campo “Log bruto ou comandos” ficou vazio na criação. A SLM extrai os comandos desse texto, e o rascunho já montado não serve como entrada."
 }

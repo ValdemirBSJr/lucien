@@ -59,3 +59,10 @@ export const ICON_POST_ADD =
 
 export const ICON_LINK =
   'M17,7h-4v1.9h4c1.71,0,3.1,1.39,3.1,3.1s-1.39,3.1-3.1,3.1h-4V17h4c2.76,0,5-2.24,5-5S19.76,7,17,7z M11,15H7 c-1.71,0-3.1-1.39-3.1-3.1S5.29,8.8,7,8.8h4V7H7c-2.76,0-5,2.24-5,5s2.24,5,5,5h4V15z M8,11h8v2H8V11z';
+
+// Duas crases inclinadas -- feito a mao, e nao um icone de biblioteca, para
+// nao repetir o `</>` do bloco de codigo (ICON_CODE): os dois representam
+// "codigo", mas em escopos diferentes, e precisavam ser distinguiveis de
+// relance na barra de ferramentas.
+export const ICON_CODE_INLINE =
+  'M10.5,7 L9.3,7 L7.3,17 L8.5,17 Z M16.5,7 L15.3,7 L13.3,17 L14.5,17 Z';

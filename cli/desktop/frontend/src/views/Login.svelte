@@ -4,17 +4,26 @@
   import { view } from '../lib/router';
   import { Login as loginRequest } from '../../wailsjs/go/main/App';
   import { refreshSession } from '../lib/session';
+  import PermanentTokenModal from '../lib/PermanentTokenModal.svelte';
 
   let token = '';
   let submitting = false;
   let errorMessage = '';
+  // So vem preenchido quando um token provisorio acabou de ser trocado.
+  let issuedToken = '';
 
   async function submit(): Promise<void> {
     submitting = true;
     errorMessage = '';
     try {
-      await loginRequest(token.trim());
+      const result = await loginRequest(token.trim());
       token = '';
+      if (result.issuedToken) {
+        // A sessao so avanca quando o modal fechar: trocar de tela agora
+        // levaria junto o unico momento em que este token e visivel.
+        issuedToken = result.issuedToken;
+        return;
+      }
       await refreshSession();
     } catch (error) {
       // O detalhe tecnico vem junto -- uma mensagem so generica esconderia
@@ -23,6 +32,11 @@
     } finally {
       submitting = false;
     }
+  }
+
+  async function tokenSaved(): Promise<void> {
+    issuedToken = '';
+    await refreshSession();
   }
 </script>
 
@@ -51,6 +65,10 @@
     </button>
   </div>
 </div>
+
+{#if issuedToken}
+  <PermanentTokenModal token={issuedToken} on:close={tokenSaved} />
+{/if}
 
 <style>
   .login {

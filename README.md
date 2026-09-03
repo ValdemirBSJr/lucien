@@ -390,18 +390,27 @@ um worker de publicação e reconciliação. Não envolva chamada Git em transa�
   incorretos.
 - `LocalProvider` não serve para vários réplicas sem volume RWX coordenado. Para HA,
   use Git, objeto compatível com S3 ou filesystem distribuído e PostgreSQL externo.
-- `Base.metadata.create_all()` facilita instalações novas, mas um sênior não
-  aprovaria isso como gestão contínua de schema em produção. Somente ao atualizar
-  uma instalação anterior ao IAM, execute, em ordem,
-  `backend/migrations/001_iam_rbac_postgresql.sql`,
-  `backend/migrations/002_bootstrap_state_postgresql.sql` e
-  `backend/migrations/003_runbook_revisions_postgresql.sql`,
-  `backend/migrations/004_provisional_tokens_postgresql.sql` e
-  `backend/migrations/005_async_upload_queue_postgresql.sql`. Não aplique `001` em
-  banco vazio: ela renomeia colunas do schema legado. A migração `003` bloqueia a
-  tabela `jobs` durante a alteração; execute-a em uma janela de manutenção. Antes
-  da próxima revisão, adicione Alembic e execute migrações em um Job único de
-  deployment.
+- As migrações são aplicadas sozinhas na subida do Hub, e não mais à mão. O
+  módulo `app/infrastructure/migrations.py` percorre `backend/migrations/001` a
+  `014` em ordem, pula o que a tabela `schema_migrations` já registra e adota o
+  que um marcador — uma pergunta ao catálogo do PostgreSQL que só responde sim
+  depois da migração — encontra pronto. Isso cobre tanto uma instalação migrada
+  à mão antes do módulo existir quanto uma queda entre aplicar e registrar. Uma
+  trava de sessão impede que duas réplicas subindo juntas apliquem a mesma
+  migração. Instalação nova continua nascendo do `Base.metadata.create_all()`,
+  com a lista quitada de uma vez.
+
+  Duas exigem janela de manutenção porque travam a tabela `jobs`: a `003`, que
+  acrescenta a linhagem de revisões, e a `014`, que troca a chave estrangeira de
+  `jobs.owner_id` de `CASCADE` para `RESTRICT` — apagar um usuário passa a ser
+  recusado em vez de levar junto os runbooks que ele publicou. Como as duas rodam
+  na subida do Hub, o `--force-recreate` da atualização já é essa janela.
+
+  A `001` renomeia colunas do schema legado e não deve tocar um banco vazio; o
+  módulo não a aplica em instalação nova justamente por isso. Antes da próxima
+  revisão, avalie Alembic e migrações num Job único de deployment: o esquema
+  hoje é descrito em dois lugares (o modelo e os `.sql`), e mantê-los de acordo
+  é trabalho manual.
 - API Key estática não oferece expiração curta. A evolução recomendada é JWT M2M de
   curta duração emitido por IdP, rotação/revogação de chaves e, para maior confiança,
   mTLS entre CLI e Hub.

@@ -533,6 +533,54 @@ A recuperação é uma operação local privilegiada do Hub. Ela emite uma
 credencial provisória por quatro horas, não expõe rota de recuperação na rede e
 registra o evento sem incluir a credencial.
 
+### Reproduzir a árvore publicada a partir do banco
+
+Toda publicação é espelhada no PostgreSQL: o Markdown íntegro, com frontmatter, e
+os bytes das imagens (`published_documents` e `published_assets`). O destino Git
+continua sendo onde o artefato vive, mas deixou de ser o único lugar onde o
+conteúdo existe.
+
+Isso existe para uma decisão futura ter caminho: hospedar o acervo numa wiki
+local, sair do Gitea ou do GitHub, ou apenas conferir o que foi publicado sem
+clonar nada. A exportação escreve um tar em `stdout` — o contêiner do Hub roda
+`read_only`, então quem grava em disco é o host, igual ao `backup-db.sh`:
+
+```bash
+docker compose --env-file .env -f docker-compose.local.yml \
+  exec -T hub python -m app.export_wiki > wiki.tar
+mkdir -p wiki && tar -xf wiki.tar -C wiki
+```
+
+O `-T` é obrigatório: sem ele o Docker aloca um TTY e corrompe o tar. O relatório
+de quantos runbooks saíram vai para `stderr`, para não se misturar ao arquivo.
+
+O conteúdo extraído é a mesma árvore que o provedor `local` produz — a que o
+`wiki-builder` consome — então o MkDocs sobe direto sobre ela. O caminho gravado
+é o relativo à raiz dos documentos, sem o prefixo do provedor Git, então a mesma
+exportação serve para qualquer destino. Uma revisão que herdou uma imagem sem
+alterá-la não a duplica: os bytes ficam sob o job do ancestral, e a exportação da
+árvore inteira os grava de lá, exatamente como o Git faz hoje.
+
+O espelho preenche a cada nova publicação. Numa instalação que já tinha acervo
+antes desta versão, rode o backfill **uma vez** para trazer o que foi publicado
+antes — sem ele, a exportação sai só com o que veio depois:
+
+```bash
+docker compose --env-file .env -f docker-compose.local.yml \
+  exec -T hub python -m app.backfill_mirror
+```
+
+Ele só lê o repositório, é seguro repetir e pula o que já está espelhado.
+Encontra artefatos gravados nos layouts antigos (`<domínio>/<ano>` e
+`<ano>/<mês>`), porque publicação é imutável e continua onde foi gravada. Uma
+publicação que o repositório não tem mais é relatada e pulada, sem interromper
+as demais; o comando termina com status diferente de zero quando isso acontece.
+
+Apagar a linha de um usuário no banco não apaga mais os runbooks dele: a chave
+estrangeira é `RESTRICT`, e o PostgreSQL recusa. Um runbook publicado é
+conhecimento da equipe, não propriedade de quem o escreveu. O caminho de saída
+continua sendo desativar a conta, que preserva tudo.
+
 ### Usar em jump server
 
 Cada operador precisa de uma conta Unix individual fornecida pelo SSSD. Depois
@@ -842,8 +890,11 @@ existência do runbook. Com `RBAC_ENTRY_ROLES_ENABLED=true`, junior e pleno tamb
 revisam dentro do próprio domínio.
 
 O corpo baixado vem **sem** frontmatter: ele é gerado pelo Hub e recusado se vier do
-cliente. Preencha `ultimo_revisor` e `data_revisao` pelo fluxo de revisão do
-repositório, não colando frontmatter no editor. Fechar o editor sem alterar nada
+cliente. `ultimo_revisor` e `data_revisao` são preenchidos pelo próprio Hub, com quem
+publicou esta versão e quando — não colando frontmatter no editor. A procedência da
+raiz (`autor`, `nivel_autor`, `funcao`, `data_criacao`) é copiada da primeira versão e
+não se desloca para o revisor: o runbook é um só, e quem o escreveu continua sendo
+quem o escreveu. Fechar o editor sem alterar nada
 cancela a operação sem consumir um novo UUID. Um `412` significa que outra revisão
 foi publicada enquanto a sua estava aberta: rode o comando de novo para partir da
 versão atual.

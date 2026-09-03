@@ -248,26 +248,45 @@ func (a *App) AuthStatus() SessionProbe {
 	return SessionProbe{Unreachable: true}
 }
 
+// LoginResult separa quem entrou do que foi emitido nessa entrada.
+//
+// IssuedToken so vem preenchido quando um `luc_tmp_` acabou de ser trocado --
+// e o unico momento em que existe um token permanente novo, e o unico em que
+// o Hub o revela. Entrar com um token permanente ja conhecido devolve vazio:
+// nao ha nada novo para mostrar, e repetir a credencial na tela a toa so
+// aumentaria a exposicao dela.
+type LoginResult struct {
+	Identity    Identity `json:"identity"`
+	IssuedToken string   `json:"issuedToken"`
+}
+
 // Login aceita token provisorio ou permanente, exatamente como `lucien
 // login`: um `luc_tmp_` e trocado por um permanente antes de salvar. A
-// credencial final fica no keyring do SO (cli/internal/config), nunca
-// devolvida ao frontend -- diferente do CLI, que so mostra o token uma vez
-// porque roda num terminal sem outro lugar para guarda-lo.
-func (a *App) Login(token string) (Identity, error) {
+// credencial fica no keyring do SO (cli/internal/config) e o app nunca mais
+// precisa dela.
+//
+// Mas ela nao e do app: e do usuario. Ele precisa do mesmo token para o
+// `lucien` no terminal, para outra maquina e para o cofre de senhas. Guardar
+// so no keyring deixava a unica saida ser pedir reemissao ao admin -- que
+// invalida justamente o que o app acabou de salvar. Por isso o token recem
+// emitido sobe uma vez ate a tela, igual ao CLI, que tambem so o mostra uma
+// vez.
+func (a *App) Login(token string) (LoginResult, error) {
 	settings, err := loadedConnection()
 	if err != nil {
-		return Identity{}, err
+		return LoginResult{}, err
 	}
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {
-		return Identity{}, errors.New("token cannot be empty")
+		return LoginResult{}, errors.New("token cannot be empty")
 	}
 	client, err := api.NewClient(settings.APIHost, trimmed, settings.CAFile)
 	if err != nil {
-		return Identity{}, err
+		return LoginResult{}, err
 	}
 
 	finalToken := trimmed
+	issuedToken := ""
 	var identity api.UserIdentity
 	if strings.HasPrefix(trimmed, "luc_tmp_") {
 		issued, err := client.ExchangeProvisionalToken(a.ctx)
@@ -276,9 +295,10 @@ func (a *App) Login(token string) (Identity, error) {
 			// nao distingue "token provisorio recusado" de "token permanente
 			// nao reconhecido", e essa distincao e o primeiro passo do
 			// diagnostico.
-			return Identity{}, fmt.Errorf("exchanging provisional token: %w", err)
+			return LoginResult{}, fmt.Errorf("exchanging provisional token: %w", err)
 		}
 		finalToken = issued.APIToken
+		issuedToken = issued.APIToken
 		identity = api.UserIdentity{
 			ID:             issued.ID,
 			Username:       issued.Username,
@@ -289,7 +309,7 @@ func (a *App) Login(token string) (Identity, error) {
 	} else {
 		identity, err = client.Me(a.ctx)
 		if err != nil {
-			return Identity{}, fmt.Errorf(
+			return LoginResult{}, fmt.Errorf(
 				"signing in with permanent token (no luc_tmp_ prefix found): %w", err,
 			)
 		}
@@ -299,9 +319,9 @@ func (a *App) Login(token string) (Identity, error) {
 		UserID:   identity.ID,
 		Username: identity.Username,
 	}, settings.APIHost, finalToken); err != nil {
-		return Identity{}, err
+		return LoginResult{}, err
 	}
-	return identityFrom(identity), nil
+	return LoginResult{Identity: identityFrom(identity), IssuedToken: issuedToken}, nil
 }
 
 // Logout esquece só a credencial -- host e CA continuam configurados, então

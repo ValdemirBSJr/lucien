@@ -39,7 +39,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.secret_scanner_url, settings.secret_scanner_timeout_seconds
     )
     cipher = AESGCMUploadCipher(settings.auth_pepper.get_secret_value())
-    storage = build_storage_provider(settings)
+    # O repositório também é o espelho: publicar passa a gravar o documento e
+    # as imagens no banco, para que a árvore publicada possa ser reproduzida
+    # sem o Git.
+    storage = build_storage_provider(settings, mirror=repository)
     image_scanner = TesseractImageScanner(
         secret_scanner,
         settings.max_asset_bytes,
