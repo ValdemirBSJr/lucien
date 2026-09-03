@@ -569,6 +569,21 @@ the same export serves any destination. A revision that inherited an image witho
 changing it does not duplicate it: the bytes stay under the ancestor's job, and
 exporting the whole tree writes them from there, exactly as Git does today.
 
+The mirror fills on every new publication. On an installation that already had a
+collection before this version, run the backfill **once** to bring in what was
+published earlier — without it, the export only carries what came after:
+
+```bash
+docker compose --env-file .env -f docker-compose.local.yml \
+  exec -T hub python -m app.backfill_mirror
+```
+
+It only reads the repository, is safe to repeat, and skips whatever is already
+mirrored. It finds artifacts written in the older layouts (`<domain>/<year>` and
+`<year>/<month>`), because a publication is immutable and stays where it was
+written. A publication the repository no longer has is reported and skipped
+without interrupting the rest; the command exits non-zero when that happens.
+
 Deleting a user's row in the database no longer deletes their runbooks: the
 foreign key is `RESTRICT`, and PostgreSQL refuses. A published runbook is the
 team's knowledge, not the property of whoever wrote it. The way out is still
