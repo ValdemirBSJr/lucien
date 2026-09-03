@@ -43,9 +43,16 @@
   let enriching = false;
   let enrichError = '';
 
-  // Só faz sentido enquanto o runbook é local e há texto original para enviar:
-  // o rascunho já montado perdeu a forma que a SLM sabe ler.
-  $: canEnrich = !!pending && pending.rawLog.trim() !== '';
+  // O botão aparece sempre que o runbook ainda é local, mesmo sem poder rodar.
+  // Escondê-lo em silêncio fazia quem esperava a funcionalidade concluir que
+  // ela não existia -- e a ausência não distinguia "não dá" de "não tem".
+  $: showEnrich = !!pending;
+
+  // Vazio quando dá para enriquecer; caso contrário, o motivo, mostrado ao
+  // lado do botão desabilitado. O rascunho já montado perdeu a forma que a SLM
+  // sabe ler, então sem o texto original não há o que enviar.
+  $: enrichBlocked =
+    pending && pending.rawLog.trim() === '' ? $t('editor_enrich_no_source') : '';
 
   // Enquanto o job não existe (`pending`), as imagens referenciam um UUID
   // placeholder -- substituído pelo id real logo antes de publicar.
@@ -104,7 +111,7 @@
   // Esperar aqui dentro custaria a composição offline, que é a razão de o
   // "Criar" nunca falar com o Hub. Assim, quem não clica não perde nada.
   async function enrich(): Promise<void> {
-    if (!pending) return;
+    if (!pending || enrichBlocked) return;
     const confirmed = await confirmDialog($t('editor_enrich_confirm'));
     if (!confirmed) return;
     enrichError = '';
@@ -382,8 +389,8 @@
     />
     {#if publishError}<p class="message error">{publishError}</p>{/if}
     {#if enrichError}<p class="message error">{enrichError}</p>{/if}
-    {#if canEnrich}
-      <p class="hint">{$t('editor_enrich_hint')}</p>
+    {#if showEnrich}
+      <p class="hint">{enrichBlocked || $t('editor_enrich_hint')}</p>
     {/if}
     <div class="actions">
       {#if id && detail}
@@ -395,10 +402,11 @@
           {$t('editor_back_to_selection')}
         </button>
       {/if}
-      {#if canEnrich}
+      {#if showEnrich}
         <button
           class="secondary"
-          disabled={phase === 'publishing' || enriching}
+          disabled={phase === 'publishing' || enriching || !!enrichBlocked}
+          title={enrichBlocked}
           on:click={enrich}
         >
           {enriching ? $t('editor_enrich_running') : $t('editor_enrich')}
