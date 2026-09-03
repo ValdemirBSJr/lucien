@@ -1226,7 +1226,7 @@ class JobService:
             validated = dataclasses.replace(validated, body=final_body)
 
         document = build_revision_frontmatter(
-            revision, revision.publication_identity, validated
+            revision, revision_source, revision.publication_identity, validated
         )
         if prepared_assets:
             artifact = await self._storage.publish(

@@ -182,10 +182,15 @@ class QueuedUpload:
 
 @dataclass(frozen=True, slots=True)
 class RevisionSource:
-    """Versão editada e identidade imutável da publicação raiz."""
+    """Versão editada e procedência imutável da publicação raiz."""
 
     job: Job
     root_identity: PublicationIdentity
+    # Nascimento do runbook, não desta versão. `job.created_at` continua sendo
+    # o da versão editada -- é ele que decide o diretório em disco -- mas o
+    # frontmatter de toda revisão declara esta data, porque quem procura um
+    # procedimento quer saber quando ele passou a existir.
+    root_created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)

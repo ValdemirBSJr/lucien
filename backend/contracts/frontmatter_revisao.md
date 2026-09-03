@@ -9,8 +9,8 @@ funcao: "servidores"
 data_criacao: "2026-08-20T18:15:05.409161Z"
 tags_inferidas: ["rede", "criticidade_baixa"]
 versao: "2"
-ultimo_revisor: ""
-data_revisao: ""
+ultimo_revisor: "U000009 - Revisora Exemplo de Demonstracao"
+data_revisao: "2026-09-02T22:56:03.933681Z"
 ---
 ### Passo 1: Inspecionar rota
 ```bash
