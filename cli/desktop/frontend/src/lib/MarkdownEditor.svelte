@@ -12,6 +12,7 @@
     ICON_SUBJECT,
     ICON_QUOTE,
     ICON_POST_ADD,
+    ICON_LINK,
   } from './icons';
   import { ImportImage } from '../../wailsjs/go/main/App';
   import { main } from '../../wailsjs/go/models';
@@ -120,6 +121,26 @@
     // na linha em branco abaixo, e o título ficava para trás sem ser notado.
     const acaoStart = start + heading.length - acao.length - 2;
     focusAndSelect(acaoStart, acaoStart + acao.length);
+  }
+
+  // Insere `[texto do link]()`. Com trecho selecionado, ele vira o texto e o
+  // cursor cai dentro dos parenteses, que e o que falta digitar; sem selecao,
+  // o rotulo entra escrito e selecionado, para digitar substituir.
+  function insertLink(): void {
+    const el = textareaEl;
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    const selecionado = value.slice(start, end);
+    const rotulo = selecionado || $t('markdown_link_text');
+    const trecho = `[${rotulo}]()`;
+    value = value.slice(0, start) + trecho + value.slice(end);
+    if (selecionado) {
+      // Entre os parenteses: `[...](` tem o tamanho do rotulo mais tres.
+      const url = start + rotulo.length + 3;
+      focusAndSelect(url, url);
+    } else {
+      focusAndSelect(start + 1, start + 1 + rotulo.length);
+    }
   }
 
   function insertTable(): void {
@@ -270,6 +291,16 @@
     on:click={insertStep}
   >
     <Icon path={ICON_POST_ADD} size={16} />
+  </button>
+  <button
+    type="button"
+    class="tool"
+    title={$t('markdown_link')}
+    aria-label={$t('markdown_link')}
+    disabled={disabled}
+    on:click={insertLink}
+  >
+    <Icon path={ICON_LINK} size={16} />
   </button>
   <button
     type="button"
