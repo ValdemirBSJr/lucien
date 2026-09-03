@@ -4,15 +4,10 @@
   import Icon from './Icon.svelte';
   import { ICON_CLOSE } from './icons';
   import { GenerateLocalDraft, ListDomainFunctions } from '../../wailsjs/go/main/App';
+  import type { NewRunbookRequest } from './router';
 
   const dispatch = createEventDispatcher<{
-    created: {
-      name: string;
-      description: string;
-      domainFunction: string;
-      draft: string;
-      rawLog: string;
-    };
+    created: NewRunbookRequest;
     close: void;
   }>();
 

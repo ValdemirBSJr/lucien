@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { t } from '../lib/i18n';
   import { closeEditor, PENDING_ASSET_JOB_TOKEN, type PendingLocalRunbook } from '../lib/router';
   import { confirmDialog } from '../lib/confirm';
@@ -14,6 +14,8 @@
     SaveLocalDraft,
     LoadLocalDraft,
     DeleteLocalDraft,
+    SaveLocalRunbook,
+    DeleteLocalRunbook,
   } from '../../wailsjs/go/main/App';
   import { main } from '../../wailsjs/go/models';
 
@@ -34,7 +36,7 @@
   let detail: main.RunbookDetail | null = null;
   let selected: Record<string, boolean> = {};
   let draft = pending ? pending.draft : '';
-  let assets: main.EditorAsset[] = [];
+  let assets: main.EditorAsset[] = pending ? [...pending.assets] : [];
   let loadError = '';
   let generateError = '';
   let publishError = '';
@@ -57,6 +59,61 @@
   // Enquanto o job não existe (`pending`), as imagens referenciam um UUID
   // placeholder -- substituído pelo id real logo antes de publicar.
   $: jobIdForAssets = id ?? PENDING_ASSET_JOB_TOKEN;
+
+  // --- rascunho local em disco ---------------------------------------------
+  //
+  // Só vale enquanto o runbook não existe no Hub (`pending` com id gravado).
+  // Depois que ele nasce lá, quem preserva o texto é o SaveLocalDraft, que é
+  // indexado pelo job e já existia.
+  let autosaveHandle: ReturnType<typeof setTimeout> | undefined;
+  let autosaveError = '';
+
+  async function persistirRascunho(): Promise<void> {
+    if (!pending || !pending.id) return;
+    try {
+      await SaveLocalRunbook(
+        new main.LocalRunbook({
+          id: pending.id,
+          name: pending.name,
+          description: pending.description,
+          domainFunction: pending.domainFunction,
+          rawLog: pending.rawLog,
+          markdown: draft,
+          assets,
+          createdAt: '',
+        }),
+      );
+      autosaveError = '';
+    } catch (error) {
+      // Dito na tela, e não engolido: se o disco parou de aceitar, o operador
+      // precisa saber ANTES de fechar confiando que estava salvo.
+      autosaveError = `${$t('editor_autosave_error')} (${String(error)})`;
+    }
+  }
+
+  // Chamado quando o runbook deixa de ser local -- publicado ou enfileirado
+  // para enriquecimento. Cancela o autosave pendente antes de apagar: sem
+  // isso, um timer já agendado recriaria o arquivo logo depois.
+  async function descartarRascunhoLocal(): Promise<void> {
+    clearTimeout(autosaveHandle);
+    if (!pending || !pending.id) return;
+    await DeleteLocalRunbook(pending.id).catch(() => {});
+  }
+
+  // Espera o operador parar de digitar. Gravar a cada tecla escreveria em
+  // disco dezenas de vezes por frase, sem nada em troca: o que importa é que
+  // fechar o app não perca o trabalho, e um segundo de atraso não muda isso.
+  function agendarAutosave(): void {
+    if (!pending || !pending.id) return;
+    clearTimeout(autosaveHandle);
+    autosaveHandle = setTimeout(() => void persistirRascunho(), 1000);
+  }
+
+  // `phase` entra na dependência de propósito: sair de 'draft' (publicando,
+  // publicado, enfileirado) não deve reagendar gravação.
+  $: if (phase === 'draft' && (draft || assets.length)) agendarAutosave();
+
+  onDestroy(() => clearTimeout(autosaveHandle));
 
   onMount(() => {
     if (!pending) void load();
@@ -120,6 +177,10 @@
       await CreateRunbook(
         pending.name, pending.rawLog, pending.description, pending.domainFunction,
       );
+      // O job existe no Hub a partir daqui, e é ele a fonte de verdade. Manter
+      // o rascunho local deixaria o mesmo runbook em duas linhas da tabela, uma
+      // delas parada no texto de antes do enriquecimento.
+      await descartarRascunhoLocal();
       successMessage = $t('editor_enrich_queued');
       phase = 'enqueued';
     } catch (error) {
@@ -226,6 +287,7 @@
     try {
       await PublishRunbook(created.id, finalMarkdown, enviados);
       await DeleteLocalDraft(created.id).catch(() => {});
+      await descartarRascunhoLocal();
       successMessage = $t('editor_publish_success');
       phase = 'published';
     } catch (error) {
@@ -333,6 +395,15 @@
       return;
     }
     if (pending && (phase === 'draft' || phase === 'publishing')) {
+      // Com rascunho em disco não há o que descartar: fechar grava e o
+      // runbook fica na lista de Ativos para ser retomado. Perguntar aqui
+      // sugeriria uma perda que não acontece mais.
+      if (pending.id) {
+        clearTimeout(autosaveHandle);
+        await persistirRascunho();
+        closeEditor();
+        return;
+      }
       const confirmed = await confirmDialog($t('editor_discard_confirm'));
       if (!confirmed) return;
     }
@@ -389,6 +460,7 @@
     />
     {#if publishError}<p class="message error">{publishError}</p>{/if}
     {#if enrichError}<p class="message error">{enrichError}</p>{/if}
+    {#if autosaveError}<p class="message error">{autosaveError}</p>{/if}
     {#if showEnrich}
       <p class="hint">{enrichBlocked || $t('editor_enrich_hint')}</p>
     {/if}

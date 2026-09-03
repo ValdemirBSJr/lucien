@@ -48,6 +48,17 @@ func (a *App) SaveLocalDraft(jobID string, draft LocalDraft) error {
 	if err != nil {
 		return err
 	}
+	return escreverAtomico(path, encoded)
+}
+
+// escreverAtomico grava por arquivo temporário e rename, com 0600.
+//
+// O rename é o que evita meio arquivo no disco: uma queda no meio da escrita
+// deixa o temporário para trás (removido pelo defer) e preserva a versão
+// anterior intacta, em vez de truncar a boa. Vale para o rascunho de um job
+// e para o runbook ainda local -- os dois guardam trabalho que não está em
+// nenhum outro lugar.
+func escreverAtomico(path string, conteudo []byte) error {
 	temporary, err := os.CreateTemp(filepath.Dir(path), ".draft-*")
 	if err != nil {
 		return err
@@ -58,7 +69,7 @@ func (a *App) SaveLocalDraft(jobID string, draft LocalDraft) error {
 		temporary.Close()
 		return err
 	}
-	if _, err := temporary.Write(encoded); err != nil {
+	if _, err := temporary.Write(conteudo); err != nil {
 		temporary.Close()
 		return err
 	}

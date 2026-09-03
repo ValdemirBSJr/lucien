@@ -60,9 +60,8 @@ export const ICON_POST_ADD =
 export const ICON_LINK =
   'M17,7h-4v1.9h4c1.71,0,3.1,1.39,3.1,3.1s-1.39,3.1-3.1,3.1h-4V17h4c2.76,0,5-2.24,5-5S19.76,7,17,7z M11,15H7 c-1.71,0-3.1-1.39-3.1-3.1S5.29,8.8,7,8.8h4V7H7c-2.76,0-5,2.24-5,5s2.24,5,5,5h4V15z M8,11h8v2H8V11z';
 
-// Duas crases inclinadas -- feito a mao, e nao um icone de biblioteca, para
-// nao repetir o `</>` do bloco de codigo (ICON_CODE): os dois representam
-// "codigo", mas em escopos diferentes, e precisavam ser distinguiveis de
-// relance na barra de ferramentas.
+// `data_object` do Material: as chaves. Nao repete o `</>` do bloco de codigo
+// (ICON_CODE) -- os dois representam "codigo", mas em escopos diferentes, e
+// precisavam ser distinguiveis de relance na barra de ferramentas.
 export const ICON_CODE_INLINE =
-  'M10.5,7 L9.3,7 L7.3,17 L8.5,17 Z M16.5,7 L15.3,7 L13.3,17 L14.5,17 Z';
+  'M4,7v2c0,1.1-0.9,2-2,2v2c1.1,0,2,0.9,2,2v2c0,1.66,1.34,3,3,3h2v-2H7c-0.55,0-1-0.45-1-1v-2c0-1.3-0.84-2.4-2-2.82v-0.36C5.16,11.4,6,10.3,6,9V7c0-0.55,0.45-1,1-1h2V4H7C5.34,4,4,5.34,4,7z M20,11c-1.1,0-2-0.9-2-2V7c0-1.66-1.34-3-3-3h-2v2h2c0.55,0,1,0.45,1,1v2c0,1.3,0.84,2.4,2,2.82v0.36c-1.16,0.42-2,1.52-2,2.82v2c0,0.55-0.45,1-1,1h-2v2h2c1.66,0,3-1.34,3-3v-2c0-1.1,0.9-2,2-2V11z';

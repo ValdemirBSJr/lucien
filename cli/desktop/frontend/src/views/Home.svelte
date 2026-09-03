@@ -8,11 +8,15 @@
     openEditor,
     openLocalDraft,
     openPublished,
-    type PendingLocalRunbook,
+    type NewRunbookRequest,
   } from '../lib/router';
   import {
     ListActiveRunbooks,
+    ListLocalRunbooks,
     ListPublishedMine,
+    LoadLocalRunbook,
+    SaveLocalRunbook,
+    DeleteLocalRunbook,
     DeleteRunbook,
     RetryRunbook,
   } from '../../wailsjs/go/main/App';
@@ -21,8 +25,20 @@
 
   type Tab = 'active' | 'published';
 
+  // Uma linha da aba Ativos, venha ela do Hub ou do disco. `local` é o que
+  // decide as ações: um rascunho ainda não existe no Hub, então não há o que
+  // reenviar nem o que cancelar lá.
+  interface ActiveRow {
+    id: string;
+    name: string;
+    status: string;
+    createdAt: string;
+    processingError: string;
+    local: boolean;
+  }
+
   let tab: Tab = 'active';
-  let runbooks: main.RunbookRow[] = [];
+  let runbooks: ActiveRow[] = [];
   let published: main.PublishedRunbookSummary[] = [];
   let publishedFilter = '';
   let loading = true;
@@ -34,11 +50,41 @@
 
   let pollHandle: ReturnType<typeof setInterval> | undefined;
 
+  const LOCAL_STATUS = 'LOCAL';
+
+  // Os rascunhos são lidos do disco ANTES do Hub, e um erro de rede não os
+  // apaga da tela: eles são justamente o que continua acessível com o Hub
+  // fora do ar. Sem esta separação, ficar sem rede esconderia trabalho que
+  // está a salvo no disco.
   async function loadActive(): Promise<void> {
+    let locais: ActiveRow[] = [];
     try {
-      runbooks = await ListActiveRunbooks();
+      locais = (await ListLocalRunbooks()).map((rascunho) => ({
+        id: rascunho.id,
+        name: rascunho.name,
+        status: LOCAL_STATUS,
+        createdAt: rascunho.createdAt,
+        processingError: '',
+        local: true,
+      }));
+    } catch (error) {
+      loadError = `${$t('home_load_error')} (${String(error)})`;
+    }
+    try {
+      const doHub: ActiveRow[] = (await ListActiveRunbooks()).map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        createdAt: row.createdAt,
+        processingError: row.processingError,
+        local: false,
+      }));
+      runbooks = [...locais, ...doHub].sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      );
       loadError = '';
     } catch (error) {
+      runbooks = locais;
       loadError = `${$t('home_load_error')} (${String(error)})`;
     } finally {
       loading = false;
@@ -67,7 +113,7 @@
     void load();
   }
 
-  async function retry(row: main.RunbookRow): Promise<void> {
+  async function retry(row: ActiveRow): Promise<void> {
     busyId = row.id;
     try {
       await RetryRunbook(row.id);
@@ -79,14 +125,43 @@
     }
   }
 
-  async function remove(row: main.RunbookRow): Promise<void> {
-    const key = row.status === 'PROCESSING' ? 'home_delete_processing_confirm' : 'home_delete_confirm';
+  async function remove(row: ActiveRow): Promise<void> {
+    const key = row.local
+      ? 'home_delete_local_confirm'
+      : row.status === 'PROCESSING'
+        ? 'home_delete_processing_confirm'
+        : 'home_delete_confirm';
     const confirmed = await confirmDialog($t(key, { name: row.name }));
     if (!confirmed) return;
     busyId = row.id;
     try {
-      await DeleteRunbook(row.id, row.status === 'PROCESSING');
+      if (row.local) await DeleteLocalRunbook(row.id);
+      else await DeleteRunbook(row.id, row.status === 'PROCESSING');
       await loadActive();
+    } catch (error) {
+      loadError = `${$t('home_load_error')} (${String(error)})`;
+    } finally {
+      busyId = '';
+    }
+  }
+
+  // Retomar um rascunho relê do disco em vez de usar o que está na tabela:
+  // a listagem carrega os registros inteiros, mas depender disso amarraria o
+  // editor à forma da lista -- e a releitura é o mesmo caminho de quem abre o
+  // app do zero e clica em editar.
+  async function resumeLocal(row: ActiveRow): Promise<void> {
+    busyId = row.id;
+    try {
+      const rascunho = await LoadLocalRunbook(row.id);
+      openLocalDraft({
+        id: rascunho.id,
+        name: rascunho.name,
+        description: rascunho.description,
+        domainFunction: rascunho.domainFunction,
+        draft: rascunho.markdown,
+        rawLog: rascunho.rawLog,
+        assets: rascunho.assets ?? [],
+      });
     } catch (error) {
       loadError = `${$t('home_load_error')} (${String(error)})`;
     } finally {
@@ -97,20 +172,44 @@
   // O tipo vem de PendingLocalRunbook em vez de ser repetido aqui: escrito a
   // mao, ele saiu de sincronia assim que o modal passou a mandar o texto
   // original junto.
-  function onCreated(event: CustomEvent<PendingLocalRunbook>): void {
+  // "Começar" nunca criou nada no Hub. Agora ele grava o rascunho em disco
+  // antes de abrir o editor: assim o runbook já nasce recuperável, e não a
+  // partir do primeiro salvamento lá dentro.
+  async function onCreated(event: CustomEvent<NewRunbookRequest>): Promise<void> {
     showNewRunbook = false;
-    // "Enviar" nunca criou nada no Hub -- abre direto no editor local; o job
-    // só nasce quando o operador publicar de lá.
-    openLocalDraft(event.detail);
+    const pendente = event.detail;
+    try {
+      const salvo = await SaveLocalRunbook(
+        new main.LocalRunbook({
+          name: pendente.name,
+          description: pendente.description,
+          domainFunction: pendente.domainFunction,
+          rawLog: pendente.rawLog,
+          markdown: pendente.draft,
+          assets: [],
+        }),
+      );
+      openLocalDraft({ ...pendente, id: salvo.id, assets: [] });
+    } catch (error) {
+      // Não poder gravar em disco não pode impedir de trabalhar: abre o
+      // editor mesmo assim, sem id -- é o comportamento que existia antes
+      // desta tela guardar rascunho.
+      loadError = `${$t('home_load_error')} (${String(error)})`;
+      openLocalDraft({ ...pendente, id: '', assets: [] });
+    }
   }
 
-  function statusLabelKey(status: string): 'home_status_pending' | 'home_status_processing' | 'home_status_failed' {
+  function statusLabelKey(
+    status: string,
+  ): 'home_status_pending' | 'home_status_processing' | 'home_status_failed' | 'home_status_local' {
+    if (status === LOCAL_STATUS) return 'home_status_local';
     if (status === 'PENDING') return 'home_status_pending';
     if (status === 'FAILED') return 'home_status_failed';
     return 'home_status_processing';
   }
 
   function statusClass(status: string): string {
+    if (status === LOCAL_STATUS) return 'badge neutral';
     if (status === 'PENDING') return 'badge info';
     if (status === 'FAILED') return 'badge danger';
     return 'badge warning';
@@ -193,7 +292,17 @@
                 <td><span class={statusClass(row.status)}>{$t(statusLabelKey(row.status))}</span></td>
                 <td class="created">{formatDate(row.createdAt)}</td>
                 <td class="actions">
-                  {#if row.status === 'PENDING'}
+                  {#if row.local}
+                    <button
+                      class="icon-button"
+                      title={$t('home_action_resume')}
+                      aria-label={$t('home_action_resume')}
+                      disabled={busyId === row.id}
+                      on:click={() => resumeLocal(row)}
+                    >
+                      <Icon path={ICON_EDIT} size={16} />
+                    </button>
+                  {:else if row.status === 'PENDING'}
                     <button
                       class="icon-button"
                       title={$t('home_action_edit')}
@@ -203,7 +312,7 @@
                       <Icon path={ICON_EDIT} size={16} />
                     </button>
                   {/if}
-                  {#if row.status === 'FAILED'}
+                  {#if !row.local && row.status === 'FAILED'}
                     <button
                       class="icon-button"
                       title={$t('home_action_retry')}
@@ -478,6 +587,15 @@
     color: var(--danger-text);
     background: var(--danger-bg);
     border-color: var(--danger-border);
+  }
+
+  /* Rascunho local: cinza de propósito. Os outros três estados são do Hub e
+     pedem atenção; este é só "ainda comigo", e colori-lo como os demais o
+     faria disputar o olho com quem de fato está esperando algo. */
+  .badge.neutral {
+    color: var(--ink-soft);
+    background: var(--page);
+    border-color: var(--line);
   }
 
   .published-search {
