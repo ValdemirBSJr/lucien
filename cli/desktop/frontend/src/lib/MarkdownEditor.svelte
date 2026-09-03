@@ -9,6 +9,7 @@
     ICON_TABLE,
     ICON_IMAGE,
     ICON_CODE,
+    ICON_CODE_INLINE,
     ICON_SUBJECT,
     ICON_QUOTE,
     ICON_POST_ADD,
@@ -141,6 +142,19 @@
     } else {
       focusAndSelect(start + 1, start + 1 + rotulo.length);
     }
+  }
+
+  // Envolve o trecho selecionado em crase, ou insere um placeholder
+  // selecionado quando nao ha selecao -- mesmo padrao do botao de link, mas
+  // sem uma segunda parte (URL) para completar depois: aqui basta envolver.
+  function insertInlineCode(): void {
+    const el = textareaEl;
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    const selecionado = value.slice(start, end);
+    const conteudo = selecionado || $t('markdown_code_inline_text');
+    value = value.slice(0, start) + '`' + conteudo + '`' + value.slice(end);
+    focusAndSelect(start + 1, start + 1 + conteudo.length);
   }
 
   function insertTable(): void {
@@ -301,6 +315,16 @@
     on:click={insertLink}
   >
     <Icon path={ICON_LINK} size={16} />
+  </button>
+  <button
+    type="button"
+    class="tool"
+    title={$t('markdown_code_inline')}
+    aria-label={$t('markdown_code_inline')}
+    disabled={disabled}
+    on:click={insertInlineCode}
+  >
+    <Icon path={ICON_CODE_INLINE} size={16} />
   </button>
   <button
     type="button"

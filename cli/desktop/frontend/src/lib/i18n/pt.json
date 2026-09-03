@@ -133,5 +133,7 @@
   "editor_step_title_error": "Complete o título do passo depois dos dois-pontos: sem a ação escrita ali, o Hub não reconhece a linha como passo e recusa o runbook inteiro",
   "markdown_link": "Inserir link",
   "markdown_link_text": "texto do link",
+  "markdown_code_inline": "Código embutido",
+  "markdown_code_inline_text": "texto",
   "editor_enrich_no_source": "Enriquecer indisponível: o campo “Log bruto ou comandos” ficou vazio na criação. A SLM extrai os comandos desse texto, e o rascunho já montado não serve como entrada."
 }

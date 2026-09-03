@@ -133,5 +133,7 @@
   "editor_step_title_error": "Complete the step title after the colon: without the action written there, the Hub does not recognize the line as a step and refuses the whole runbook",
   "markdown_link": "Insert link",
   "markdown_link_text": "link text",
+  "markdown_code_inline": "Inline code",
+  "markdown_code_inline_text": "text",
   "editor_enrich_no_source": "Enrich unavailable: the “Raw log or commands” field was left empty at creation. The SLM extracts the commands from that text, and the assembled draft does not work as input."
 }
