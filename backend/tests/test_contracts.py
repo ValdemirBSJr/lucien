@@ -20,6 +20,7 @@ from app.domain.models import (
     Job,
     JobStatus,
     PublicationIdentity,
+    RevisionSource,
     RoleLevel,
     RunbookSuggestions,
     User,
@@ -64,7 +65,13 @@ def _usuario() -> User:
     )
 
 
-def _job(job_id: str, **extras: object) -> Job:
+_NASCIMENTO = datetime(2026, 8, 20, 18, 15, 5, 409161, tzinfo=_UTC)
+_REVISAO = datetime(2026, 9, 2, 22, 56, 3, 933681, tzinfo=_UTC)
+
+
+def _job(
+    job_id: str, created_at: datetime = _NASCIMENTO, **extras: object
+) -> Job:
     return Job(
         id=job_id,
         owner_id="11111111-1111-4111-8111-111111111111",
@@ -74,7 +81,7 @@ def _job(job_id: str, **extras: object) -> Job:
         command_outputs=("default via 10.0.0.254 dev eth0",),
         runbook_suggestions=RunbookSuggestions("", (), ("",), ()),
         inferred_tags=("rede", "criticidade_baixa"),
-        created_at=datetime(2026, 8, 20, 18, 15, 5, 409161, tzinfo=_UTC),
+        created_at=created_at,
         **extras,  # type: ignore[arg-type]
     )
 
@@ -85,6 +92,21 @@ def _identidade() -> PublicationIdentity:
         role_level=RoleLevel.SENIOR,
         domain_function="servidores",
         display_name="Operador Exemplo de Demonstracao Júnior",
+    )
+
+
+def _revisor() -> PublicationIdentity:
+    """Deliberadamente outra pessoa, de outro nível e outra área.
+
+    Com o revisor igual ao autor o golden não provaria nada: as duas
+    procedências coincidiriam e trocar uma pela outra passaria despercebido.
+    """
+
+    return PublicationIdentity(
+        username="U000009",
+        role_level=RoleLevel.ADMIN,
+        domain_function="plataforma",
+        display_name="Revisora Exemplo de Demonstracao",
     )
 
 
@@ -126,12 +148,27 @@ def test_contrato_frontmatter_revisao() -> None:
     validado = validate_playbook(_CORPO)
     job = _job(
         _ID_PUBLICADO,
+        created_at=_REVISAO,
         root_job_id=_ID_RAIZ,
         supersedes_job_id=_ID_ANTERIOR,
         revision_number=2,
     )
-    documento = build_revision_frontmatter(job, _identidade(), validado)
+    fonte = RevisionSource(
+        job=_job(_ID_ANTERIOR),
+        root_identity=_identidade(),
+        root_created_at=_NASCIMENTO,
+    )
+    documento = build_revision_frontmatter(job, fonte, _revisor(), validado)
     _confere("frontmatter_revisao.md", documento)
+
+    # O que o golden precisa provar, dito em voz alta: a revisão carrega a
+    # procedência da raiz e a assinatura de quem a fez, e nunca as mistura.
+    assert 'autor: "U000004 - Operador Exemplo de Demonstracao Júnior"' in documento
+    assert 'nivel_autor: "senior"' in documento
+    assert 'funcao: "servidores"' in documento
+    assert 'data_criacao: "2026-08-20T18:15:05.409161Z"' in documento
+    assert 'ultimo_revisor: "U000009 - Revisora Exemplo de Demonstracao"' in documento
+    assert 'data_revisao: "2026-09-02T22:56:03.933681Z"' in documento
 
 
 def test_contrato_frontmatter_sem_nome_do_ldap() -> None:

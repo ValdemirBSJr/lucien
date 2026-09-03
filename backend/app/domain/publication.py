@@ -2,10 +2,15 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime
 from enum import StrEnum
 
-from app.domain.models import Job, PublicationIdentity, RoleLevel
+from app.domain.models import (
+    Job,
+    PublicationIdentity,
+    RevisionSource,
+    RoleLevel,
+)
 from app.domain.ports import ForbiddenError, ValidationError
 
 
@@ -216,13 +221,35 @@ def build_frontmatter(
 ) -> str:
     """Funde metadados confiáveis do servidor com o Markdown já validado."""
 
-    return _build_frontmatter(job, identity, validated, lineage="")
+    return _build_frontmatter(
+        job,
+        identity,
+        job.created_at,
+        validated,
+        lineage="",
+        revised_by="",
+        revised_at="",
+    )
 
 
 def build_revision_frontmatter(
-    job: Job, identity: PublicationIdentity, validated: ValidatedPlaybook
+    job: Job,
+    source: RevisionSource,
+    reviser: PublicationIdentity,
+    validated: ValidatedPlaybook,
 ) -> str:
-    """Acrescenta a linhagem calculada pelo Hub sem alterar a versão anterior."""
+    """Acrescenta a linhagem calculada pelo Hub sem alterar a versão anterior.
+
+    Uma revisão declara duas procedências, e trocar uma pela outra é o que este
+    corte separa: `autor`/`nivel_autor`/`funcao`/`data_criacao` são da **raiz**
+    -- o runbook é um só, e quem o criou não muda porque alguém o corrigiu --
+    enquanto `ultimo_revisor`/`data_revisao` descrevem esta versão.
+
+    Publicar a função do revisor em `funcao` também contradizia o diretório: a
+    gravação sempre usou o domínio da raiz (`root_identity.domain_function`),
+    então uma revisão feita por admin de outra área declarava um domínio que
+    não era o da pasta onde o arquivo estava.
+    """
 
     if (
         job.root_job_id is None
@@ -235,21 +262,35 @@ def build_revision_frontmatter(
         f"revisao: {job.revision_number}\n"
         f"substitui: {json.dumps(job.supersedes_job_id, ensure_ascii=False)}\n"
     )
-    return _build_frontmatter(job, identity, validated, lineage=lineage)
+    return _build_frontmatter(
+        job,
+        source.root_identity,
+        source.root_created_at,
+        validated,
+        lineage=lineage,
+        revised_by=reviser.author_label,
+        revised_at=_iso_utc(job.created_at),
+    )
+
+
+def _iso_utc(momento: datetime) -> str:
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=UTC)
+    return momento.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _build_frontmatter(
     job: Job,
     identity: PublicationIdentity,
+    created_at: datetime,
     validated: ValidatedPlaybook,
     lineage: str,
+    revised_by: str,
+    revised_at: str,
 ) -> str:
     """Serializa somente valores originados de contexto e persistência confiáveis."""
 
-    created_at = job.created_at
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=UTC)
-    iso_created_at = created_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    iso_created_at = _iso_utc(created_at)
     tags = list(job.inferred_tags)
 
     # JSON strings são escalares YAML válidos e impedem quebra/injeção de novas chaves.
@@ -263,8 +304,8 @@ def _build_frontmatter(
         f"data_criacao: {json.dumps(iso_created_at, ensure_ascii=False)}\n"
         f"tags_inferidas: {json.dumps(tags, ensure_ascii=False)}\n"
         f"versao: {json.dumps(str(job.revision_number), ensure_ascii=False)}\n"
-        'ultimo_revisor: ""\n'
-        'data_revisao: ""\n'
+        f"ultimo_revisor: {json.dumps(revised_by, ensure_ascii=False)}\n"
+        f"data_revisao: {json.dumps(revised_at, ensure_ascii=False)}\n"
         "---\n"
     )
     return f"{frontmatter}{validated.body}"

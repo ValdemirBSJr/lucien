@@ -96,6 +96,14 @@ def _context(user) -> SecurityContext:
     return SecurityContext.from_user(user)
 
 
+def _iso(momento: datetime) -> str:
+    """Mesma serialização do frontmatter, para comparar sem reescrevê-la."""
+
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=timezone.utc)
+    return momento.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 async def _user(
     repository: SQLAlchemyJobRepository,
     username: str,
@@ -214,7 +222,12 @@ async def test_rbac_dominio_frontmatter_e_imutabilidade(
     assert f'runbook_raiz: "{source.id}"' in revision_text
     assert "revisao: 2" in revision_text
     assert f'substitui: "{source.id}"' in revision_text
-    assert 'autor: "server-senior"' in revision_text
+    # A autoria é a da raiz: `source-author` escreveu o runbook e continua
+    # sendo quem o escreveu depois que `server-senior` o corrigiu.
+    assert 'autor: "source-author"' in revision_text
+    assert 'ultimo_revisor: "server-senior"' in revision_text
+    assert f'data_criacao: "{_iso(source.created_at)}"' in revision_text
+    assert f'data_revisao: "{_iso(revision.created_at)}"' in revision_text
     assert "runbook_raiz:" not in original_bytes.decode("utf-8")
     assert captured_events[0][0] == "runbook.revise"
     assert captured_events[0][1] == senior.id
@@ -235,10 +248,16 @@ async def test_rbac_dominio_frontmatter_e_imutabilidade(
     admin_revision_text = next(
         playbooks.rglob(f"*--{admin_revision.id}.md")
     ).read_text(encoding="utf-8")
-    assert 'autor: "global-admin"' in admin_revision_text
-    assert 'funcao: "plataforma"' in admin_revision_text
+    # O admin é de `plataforma` e revisou um runbook de `servidores`. O
+    # frontmatter declarava a área DELE enquanto o arquivo era gravado em
+    # `<ano>/servidores/` -- o documento contradizia a própria pasta, e o
+    # portal precisava subir a cadeia até a raiz para achar o domínio real.
+    assert 'autor: "source-author"' in admin_revision_text
+    assert 'funcao: "servidores"' in admin_revision_text
+    assert 'ultimo_revisor: "global-admin"' in admin_revision_text
 
-    # O editor aparece no frontmatter, mas não redefine o domínio da linhagem.
+    # O editor aparece no frontmatter como revisor, e nem isso lhe dá o
+    # domínio: quem pode revisar continua sendo decidido pela raiz.
     with pytest.raises(NotFoundError):
         await service.revise(
             _context(platform_senior),
@@ -258,8 +277,12 @@ async def test_rbac_dominio_frontmatter_e_imutabilidade(
     third_revision_text = next(
         playbooks.rglob(f"*--{third_revision.id}.md")
     ).read_text(encoding="utf-8")
-    assert 'autor: "server-senior"' in third_revision_text
+    # Terceira versão, terceiro revisor: a procedência não se desloca nem
+    # encadeia -- continua sendo a da raiz, não a da versão anterior.
+    assert 'autor: "source-author"' in third_revision_text
     assert 'funcao: "servidores"' in third_revision_text
+    assert 'ultimo_revisor: "server-senior"' in third_revision_text
+    assert f'data_criacao: "{_iso(second_source.created_at)}"' in third_revision_text
 
 
 async def test_spoof_scanner_e_dlp_continuam_obrigatorios(

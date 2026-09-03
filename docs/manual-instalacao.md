@@ -842,8 +842,11 @@ existência do runbook. Com `RBAC_ENTRY_ROLES_ENABLED=true`, junior e pleno tamb
 revisam dentro do próprio domínio.
 
 O corpo baixado vem **sem** frontmatter: ele é gerado pelo Hub e recusado se vier do
-cliente. Preencha `ultimo_revisor` e `data_revisao` pelo fluxo de revisão do
-repositório, não colando frontmatter no editor. Fechar o editor sem alterar nada
+cliente. `ultimo_revisor` e `data_revisao` são preenchidos pelo próprio Hub, com quem
+publicou esta versão e quando — não colando frontmatter no editor. A procedência da
+raiz (`autor`, `nivel_autor`, `funcao`, `data_criacao`) é copiada da primeira versão e
+não se desloca para o revisor: o runbook é um só, e quem o escreveu continua sendo
+quem o escreveu. Fechar o editor sem alterar nada
 cancela a operação sem consumir um novo UUID. Um `412` significa que outra revisão
 foi publicada enquanto a sua estava aberta: rode o comando de novo para partir da
 versão atual.

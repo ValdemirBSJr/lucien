@@ -135,8 +135,18 @@ nivel_autor: "<role_level>"
 funcao: "<domain_function>"
 data_criacao: "<iso_8601>"
 tags_inferidas: ["<tags_generated_by_the_SLM>"]
+versao: "1"
+ultimo_revisor: ""
+data_revisao: ""
 ---
 ```
+
+A revision adds `runbook_raiz`, `revisao`, and `substitui`, and fills the last two
+fields with whoever published it and when. The four provenance fields (`autor`,
+`nivel_autor`, `funcao`, `data_criacao`) are the **root's**, copied from the first
+version: they describe the runbook, not the version. `funcao` in particular has to be
+the root's, because it is what decides the destination directory — publishing the
+reviser's area would make the document contradict the folder it sits in.
 
 The frontmatter keys stay in Portuguese: they are part of the published document
 format, read by the portal and by the wiki builder, and they are the same in

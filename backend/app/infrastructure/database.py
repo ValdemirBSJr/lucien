@@ -1136,11 +1136,14 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
             )
         if root is None:
             raise ConflictError("publicação raiz da revisão não foi encontrada")
-        root_identity = self._to_domain(root).publication_identity
+        raiz = self._to_domain(root)
+        root_identity = raiz.publication_identity
         if root_identity is None:
             raise ConflictError("publicação raiz não possui identidade confiável")
         return RevisionSource(
-            job=self._to_domain(row), root_identity=root_identity
+            job=self._to_domain(row),
+            root_identity=root_identity,
+            root_created_at=raiz.created_at,
         )
 
     async def list_published_runbook_ids(self, max_ids: int) -> tuple[str, ...]:
