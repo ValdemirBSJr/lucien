@@ -123,5 +123,7 @@
   "editor_enrich_queued": "Enviado. O runbook está PROCESSANDO no Hub — acompanhe na tela inicial. Quando ficar PENDENTE, abra-o pela tabela para revisar e publicar.",
   "editor_no_step_error": "O runbook precisa de pelo menos um passo. Use o botão de passo na barra de ferramentas para acrescentar um com comando, ou um com imagem como evidência visual. O Hub recusa a publicação sem isso.",
   "markdown_step_action": "Ação",
-  "editor_step_title_error": "Complete o título do passo depois dos dois-pontos: sem a ação escrita ali, o Hub não reconhece a linha como passo e recusa o runbook inteiro"
+  "editor_step_title_error": "Complete o título do passo depois dos dois-pontos: sem a ação escrita ali, o Hub não reconhece a linha como passo e recusa o runbook inteiro",
+  "markdown_link": "Inserir link",
+  "markdown_link_text": "texto do link"
 }
