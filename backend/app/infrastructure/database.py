@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -10,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -47,8 +50,11 @@ from app.domain.ports import (
     ConflictError,
     IdentityRepository,
     JobRepository,
+    MirroredAsset,
+    MirroredDocument,
     NotFoundError,
     PreconditionFailedError,
+    PublishedMirror,
 )
 
 
@@ -194,8 +200,15 @@ class JobRow(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # RESTRICT, e nao CASCADE: apagar um usuario nao pode apagar o que ele
+    # documentou. Um runbook publicado e conhecimento da equipe, nao
+    # propriedade de quem o escreveu -- desligar alguem nao pode desfazer os
+    # procedimentos que a equipe passou a seguir. O caminho normal de saida ja
+    # e `is_active = false`, que preserva tudo; quem insistir em apagar a linha
+    # do usuario no banco agora recebe uma recusa do PostgreSQL em vez de um
+    # apagamento silencioso.
     owner_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True, nullable=False
     )
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str] = mapped_column(
@@ -259,6 +272,54 @@ class UploadQueueRow(Base):
     )
 
 
+class PublishedDocumentRow(Base):
+    """O Markdown publicado, íntegro, do jeito que foi para o repositório.
+
+    Guardar o documento inteiro parece redundante com o Git -- e é, de
+    propósito. A redundância é o ponto: com ela o Hub reconstrói a árvore
+    publicada sozinho, e trocar de hospedagem deixa de depender de migrar
+    repositório.
+    """
+
+    __tablename__ = "published_documents"
+
+    job_id: Mapped[str] = mapped_column(
+        # RESTRICT pelo mesmo motivo de `jobs.owner_id`: o espelho existe para
+        # sobreviver, não para sumir junto. Um job PUBLISHED já é indelével
+        # (`delete_job` recusa), então esta trava só cobre remoção manual.
+        ForeignKey("jobs.id", ondelete="RESTRICT"), primary_key=True
+    )
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    # Relativo à raiz dos documentos, sem o prefixo do provedor Git.
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    document_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
+class PublishedAssetRow(Base):
+    """Os bytes da imagem, não uma referência a ela.
+
+    `BYTEA` e não base64: base64 inflaria 33% e cobraria uma decodificação a
+    cada leitura, sem nada em troca -- o PostgreSQL já comprime e desloca
+    valor grande para TOAST por conta própria.
+    """
+
+    __tablename__ = "published_assets"
+
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("published_documents.job_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    filename: Mapped[str] = mapped_column(String(128), primary_key=True)
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 def _identity_from_payload(
     payload: dict[str, str | None] | None,
 ) -> PublicationIdentity | None:
@@ -298,10 +359,14 @@ def _identity_payload(identity: PublicationIdentity) -> dict[str, str | None]:
     }
 
 
+def _sha256_texto(valor: str) -> str:
+    return hashlib.sha256(valor.encode("utf-8")).hexdigest()
+
+
 _BOOTSTRAP_STATE_ID = "initial-admin"
 
 
-class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
+class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror):
     """Adapter assíncrono; toda busca de Job exige também o owner_id."""
 
     def __init__(self, database_url: str) -> None:
@@ -1116,6 +1181,92 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository):
         async with self._sessions() as session:
             row = await self._find_row(session, owner_id, id_or_name)
         return self._to_domain(row)
+
+    async def save_published(self, document: MirroredDocument) -> None:
+        """Grava o espelho da publicação numa transação só.
+
+        Idempotente porque a republicação é: um retry depois de uma queda
+        reescreve exatamente o mesmo estado. Os assets são apagados e
+        regravados em vez de conciliados um a um -- o conjunto é pequeno (no
+        máximo `MAX_ASSETS_PER_PUBLICATION`) e a substituição inteira dispensa
+        raciocinar sobre qual imagem saiu entre uma tentativa e outra.
+        """
+
+        async with self._sessions() as session, session.begin():
+            espelho = await session.get(PublishedDocumentRow, document.job_id)
+            if espelho is None:
+                session.add(
+                    PublishedDocumentRow(
+                        job_id=document.job_id,
+                        markdown=document.markdown,
+                        relative_path=document.relative_path,
+                        document_sha256=_sha256_texto(document.markdown),
+                        published_at=datetime.now(timezone.utc),
+                    )
+                )
+            else:
+                espelho.markdown = document.markdown
+                espelho.relative_path = document.relative_path
+                espelho.document_sha256 = _sha256_texto(document.markdown)
+                anteriores = await session.scalars(
+                    select(PublishedAssetRow).where(
+                        PublishedAssetRow.job_id == document.job_id
+                    )
+                )
+                for linha in anteriores.all():
+                    await session.delete(linha)
+                await session.flush()
+            for asset in document.assets:
+                session.add(
+                    PublishedAssetRow(
+                        job_id=document.job_id,
+                        filename=asset.filename,
+                        relative_path=asset.relative_path,
+                        content=asset.content,
+                        content_sha256=hashlib.sha256(asset.content).hexdigest(),
+                    )
+                )
+
+    async def iter_published_mirror(self) -> AsyncIterator[MirroredDocument]:
+        """Percorre o espelho inteiro, um documento por vez.
+
+        Um documento de cada vez porque os anexos são bytes: carregar a árvore
+        toda na memória para escrevê-la em disco não escala com o acervo, e
+        quem exporta só precisa de um por vez.
+        """
+
+        async with self._sessions() as session:
+            identificadores = (
+                await session.scalars(
+                    select(PublishedDocumentRow.job_id).order_by(
+                        PublishedDocumentRow.relative_path.asc()
+                    )
+                )
+            ).all()
+            for job_id in identificadores:
+                documento = await session.get(PublishedDocumentRow, job_id)
+                if documento is None:
+                    continue
+                anexos = (
+                    await session.scalars(
+                        select(PublishedAssetRow)
+                        .where(PublishedAssetRow.job_id == job_id)
+                        .order_by(PublishedAssetRow.filename.asc())
+                    )
+                ).all()
+                yield MirroredDocument(
+                    job_id=documento.job_id,
+                    markdown=documento.markdown,
+                    relative_path=documento.relative_path,
+                    assets=tuple(
+                        MirroredAsset(
+                            filename=anexo.filename,
+                            relative_path=anexo.relative_path,
+                            content=anexo.content,
+                        )
+                        for anexo in anexos
+                    ),
+                )
 
     async def get_published_for_revision(self, job_id: str) -> RevisionSource:
         async with self._sessions() as session:

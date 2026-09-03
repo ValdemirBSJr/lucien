@@ -499,6 +499,25 @@ Os providers permanecem preparados simultaneamente, mas o instalador escolhe um
 `gitea-runner`. O compacto não executa Actions; o workflow Gitea pertence somente
 ao modo avançado com VM dedicada.
 
+`MirroredStorage` embrulha qualquer um dos três e, depois da publicação, grava o
+Markdown íntegro e os bytes das imagens em `published_documents` e
+`published_assets`. É decorator e não um passo do `JobService`: os três providers
+ganham o espelho sem que a camada de aplicação saiba dele, e um provider novo
+nasce espelhado.
+
+A ordem é publicar, espelhar, marcar como publicado. Uma falha no espelho derruba
+a requisição com o artefato já gravado no destino — que é o desfecho seguro,
+porque o job não vira `PUBLISHED` e a repetição reencontra o mesmo arquivo
+(publicar é idempotente por contrato da porta) e completa o espelho. O inverso
+registraria no banco um documento que o Git recusou.
+
+O caminho gravado é o relativo à raiz dos documentos, **sem** o prefixo do
+provedor Git: é o mesmo em `local`, `github` e `gitea`, e é isso que permite
+`python -m app.export_wiki` (um tar em stdout) reproduzir a árvore em qualquer
+destino. A leitura (`read_published`) continua indo ao destino real — o artefato segue
+sendo a fonte de verdade do conteúdo, e ler do banco esconderia uma divergência
+entre os dois em vez de deixá-la aparecer.
+
 ## Verificação de mudanças
 
 `scripts/verify.sh` roda todos os portões na mesma forma que o CI, e existe

@@ -57,6 +57,16 @@ def _tabela(nome: str) -> str:
     return f"SELECT to_regclass('public.{nome}') IS NOT NULL"
 
 
+def _regra_de_exclusao(restricao: str, regra: str) -> str:
+    """Marcador para migração cujo efeito é trocar o ON DELETE de uma FK."""
+
+    return (
+        "SELECT EXISTS (SELECT 1 FROM information_schema.referential_constraints "
+        f"WHERE constraint_schema = 'public' AND constraint_name = '{restricao}' "
+        f"AND delete_rule = '{regra}')"
+    )
+
+
 @dataclass(frozen=True)
 class Migracao:
     versao: str
@@ -117,6 +127,16 @@ MIGRACOES: tuple[Migracao, ...] = (
         # anterior interrompida) ainda precisa rodar o script de novo. CREATE
         # TABLE IF NOT EXISTS torna isso seguro de repetir.
         _coluna("users", "provisional_scope"),
+    ),
+    Migracao(
+        "014",
+        "014_published_mirror_postgresql.sql",
+        # A troca da FK, e não uma das tabelas novas: é o último efeito do
+        # script, e o único que uma adoção à mão poderia ter deixado para trás
+        # depois de criar as tabelas. O nome serve aos dois caminhos de
+        # criação -- o PostgreSQL nomeia `<tabela>_<coluna>_fkey` para a FK
+        # que o modelo cria, e o script reusa esse mesmo nome.
+        _regra_de_exclusao("jobs_owner_id_fkey", "RESTRICT"),
     ),
 )
 
