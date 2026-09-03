@@ -14,6 +14,10 @@ export function DeleteLocalDraft(arg1) {
   return window['go']['main']['App']['DeleteLocalDraft'](arg1);
 }
 
+export function DeleteLocalRunbook(arg1) {
+  return window['go']['main']['App']['DeleteLocalRunbook'](arg1);
+}
+
 export function DeleteRunbook(arg1, arg2) {
   return window['go']['main']['App']['DeleteRunbook'](arg1, arg2);
 }
@@ -62,12 +66,20 @@ export function ListDomainFunctions() {
   return window['go']['main']['App']['ListDomainFunctions']();
 }
 
+export function ListLocalRunbooks() {
+  return window['go']['main']['App']['ListLocalRunbooks']();
+}
+
 export function ListPublishedMine() {
   return window['go']['main']['App']['ListPublishedMine']();
 }
 
 export function LoadLocalDraft(arg1) {
   return window['go']['main']['App']['LoadLocalDraft'](arg1);
+}
+
+export function LoadLocalRunbook(arg1) {
+  return window['go']['main']['App']['LoadLocalRunbook'](arg1);
 }
 
 export function Login(arg1) {
@@ -100,4 +112,8 @@ export function SaveConnectionSettings(arg1, arg2) {
 
 export function SaveLocalDraft(arg1, arg2) {
   return window['go']['main']['App']['SaveLocalDraft'](arg1, arg2);
+}
+
+export function SaveLocalRunbook(arg1) {
+  return window['go']['main']['App']['SaveLocalRunbook'](arg1);
 }

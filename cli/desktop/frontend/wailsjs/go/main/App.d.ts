@@ -8,6 +8,8 @@ export function CreateRunbook(arg1:string,arg2:string,arg3:string,arg4:string):P
 
 export function DeleteLocalDraft(arg1:string):Promise<void>;
 
+export function DeleteLocalRunbook(arg1:string):Promise<void>;
+
 export function DeleteRunbook(arg1:string,arg2:boolean):Promise<void>;
 
 export function ForgetEverything():Promise<void>;
@@ -32,9 +34,13 @@ export function ListActiveRunbooks():Promise<Array<main.RunbookRow>>;
 
 export function ListDomainFunctions():Promise<Array<string>>;
 
+export function ListLocalRunbooks():Promise<Array<main.LocalRunbook>>;
+
 export function ListPublishedMine():Promise<Array<main.PublishedRunbookSummary>>;
 
 export function LoadLocalDraft(arg1:string):Promise<main.LocalDraft>;
+
+export function LoadLocalRunbook(arg1:string):Promise<main.LocalRunbook>;
 
 export function Login(arg1:string):Promise<main.LoginResult>;
 
@@ -51,3 +57,5 @@ export function ReviseRunbook(arg1:string,arg2:string,arg3:string,arg4:Array<mai
 export function SaveConnectionSettings(arg1:string,arg2:string):Promise<void>;
 
 export function SaveLocalDraft(arg1:string,arg2:main.LocalDraft):Promise<void>;
+
+export function SaveLocalRunbook(arg1:main.LocalRunbook):Promise<main.LocalRunbook>;

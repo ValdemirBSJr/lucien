@@ -1,4 +1,7 @@
 import { writable } from 'svelte/store';
+import type { main } from '../../wailsjs/go/models';
+
+type EditorAsset = main.EditorAsset;
 
 export type View = 'home' | 'settings' | 'editor' | 'published';
 
@@ -10,6 +13,10 @@ export const view = writable<View>('home');
 export const editingRunbookId = writable<string | null>(null);
 
 export interface PendingLocalRunbook {
+  // Id do registro em disco (`local-runbooks/<id>.json`), gerado pelo Go na
+  // primeira gravação. Não é job do Hub e nunca chega lá: serve para retomar
+  // o rascunho depois de fechar o app, e para apagá-lo pela lista.
+  id: string;
   name: string;
   description: string;
   domainFunction: string;
@@ -18,7 +25,15 @@ export interface PendingLocalRunbook {
   // entrada que a SLM do Hub sabe enriquecer, e o rascunho local descarta a
   // estrutura dele. Sem isso, "enriquecer" no editor nao teria o que enviar.
   rawLog: string;
+  // Imagens já coladas no editor, para que retomar um rascunho salvo não
+  // volte com as referências no texto apontando para anexos que sumiram.
+  assets: EditorAsset[];
 }
+
+// O que o formulário de "Novo runbook" produz: tudo menos o que só existe
+// depois de gravar. O `id` vem do disco e as imagens começam vazias, então
+// exigi-los do modal o obrigaria a inventar valores que não são dele.
+export type NewRunbookRequest = Omit<PendingLocalRunbook, 'id' | 'assets'>;
 
 // UUID-formato-válido usado como job_id nas referências `assets/<id>/...`
 // enquanto o runbook ainda não existe no Hub -- o Hub exige exatamente esse
