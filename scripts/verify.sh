@@ -104,6 +104,29 @@ portao_scanner() {
   imagem_de_teste secret-scanner lucien-scanner-test secret-scanner
 }
 
+# O único portão que varre o HISTÓRICO, e não a árvore de trabalho -- por isso
+# o mais caro de descobrir tarde. O achado mora dentro de um commit, e um
+# commit de correção não o limpa: depois de empurrado com PR aberta, sai
+# reescrita de história; antes do push, sai troca de palavra.
+#
+# As regras são afinadas para configuração de equipamento de rede, então
+# escrever SOBRE credencial já basta para disparar: uma frase de interface que
+# mandava guardar o token num cofre reprovou uma PR inteira, só por juntar a
+# palavra inglesa para senha a outra em seguida. Não é vazamento, é prosa --
+# e este comentário evita repetir o exemplo para não se acusar sozinho, coisa
+# que aconteceu na primeira vez que o portão rodou.
+#
+# `--redact=100` de propósito: quando acusa, mostra arquivo, linha e regra --
+# nunca o valor.
+portao_segredos() {
+  docker run --rm \
+    --mount "type=bind,src=$ROOT_DIR,dst=/repo,readonly" \
+    --workdir /repo \
+    "$IMAGEM_GITLEAKS" \
+    detect --source=/repo --config=/repo/secret-scanner/gitleaks-lucien.toml \
+      --no-banner --redact=100 --exit-code=1
+}
+
 # --- CLI --------------------------------------------------------------------
 
 portao_cli() {
@@ -187,6 +210,7 @@ portao_tipagem() {
   docker run --rm lucien-hub-test sh -euc     'pip install --quiet mypy==1.18.2 >/dev/null && python -m mypy --config-file pyproject.toml app'
 }
 
+IMAGEM_GITLEAKS="zricethezav/gitleaks:v8.30.0@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9"
 IMAGEM_PG="postgres:17.10-alpine3.23@sha256:8189a1f6e40904781fc9e2612687877791d21679866db58b1de996b31fc312e4"
 IMAGEM_LINT="python:3.13.14-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91"
 
@@ -199,6 +223,16 @@ portao "migrations" portao_migracoes
 portao "runbook-viewer" portao_viewer
 portao "wiki-builder" portao_wiki
 portao "secret-scanner" portao_scanner
+
+# Só onde o histórico é o que vai a público. Na raiz ele acusaria 48 achados
+# do baseline antigo e da branch de backup -- conteúdo que nunca é sincronizado
+# e que deixaria o portão vermelho para sempre, treinando todo mundo a ignorá-lo.
+# O publisher é limpo por construção, e é o histórico dele que o CI examina.
+if git remote get-url origin >/dev/null 2>&1; then
+  portao "segredos" portao_segredos
+else
+  pular "segredos" "sem remoto: o historico local nao e o publicado"
+fi
 
 if tem go; then
   portao "cli" portao_cli
