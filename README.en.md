@@ -211,11 +211,11 @@ The CLI runs natively in the operator terminal on Linux or macOS. On Linux, use
 the separate installer, which detects the correct package, installs only the
 Hub's public CA, and persists `API_HOST`, `TLS_CA_FILE`, and `EDITOR`:
 
-### Download CLI 1.1.9
+### Download CLI 1.2.0
 
 Official binaries are published on the
 [Lucien Releases page](https://github.com/ValdemirBSJr/lucien/releases), never
-in Git history. Release `v1.1.9` provides Linux and macOS packages for `amd64`
+in Git history. Release `v1.2.0` provides Linux and macOS packages for `amd64`
 and `arm64`, together with SHA-256 checksums, `LICENSE`, `NOTICE`, and
 third-party license notices.
 
@@ -227,7 +227,7 @@ from the project copy. The installer supports Linux only; Darwin packages are
 provided for manual installation on macOS.
 
 ```sh
-VERSION=1.1.9
+VERSION=1.2.0
 ARCH=amd64
 BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
 mkdir -p dist
