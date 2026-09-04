@@ -36,10 +36,52 @@ _FENCE_OPENING = re.compile(r"^(`{3,})")
 # passou por aqui. Um passo visual nao tem comando para revisar; a imagem
 # referenciada e a evidencia mínima de que a acao documentada aconteceu.
 _IMAGE_REFERENCE = re.compile(r"!\[[^\]\n]*\]\([^)\s]+\)")
+# ATENÇÃO -- isto é um RÓTULO HEURÍSTICO, não uma fronteira de segurança.
+#
+# A classificação alimenta duas coisas: a tag `criticidade_*` do runbook e o
+# único gate que ela decide, que é impedir um `junior` de publicar operação de
+# criticidade alta (`authorize_publication`). Nada aqui executa comando, e
+# nenhuma outra autorização depende deste resultado.
+#
+# É um denylist, e denylist de comando shell é evadível por construção: o mesmo
+# efeito destrutivo tem infinitas grafias. Um pentest interno confirmou isso --
+# `rm -r -f /` (flags separadas), `find / -delete`, `chmod -R 000 /` e
+# `cat /dev/zero > /dev/sda` passavam como criticidade baixa. Os padrões abaixo
+# foram ampliados para cobrir esses idiomas, mas a lista continua sendo
+# best-effort: quem quiser escapar, escapa.
+#
+# A fronteira real é o RBAC por papel mais a revisão humana obrigatória --
+# revisar exige senior ou admin. Não trate esta classificação como controle de
+# acesso, e não relaxe aquelas duas confiando nela.
+#
+# Só os blocos ```bash de um passo são classificados. Um comando dentro de um
+# fence genérico (```sh, ```console) é texto ilustrativo, não passo operacional,
+# e de propósito não entra na conta: documentação que ADVERTE contra um comando
+# perigoso não deve ser rotulada como se fosse executá-lo.
 _HIGH_RISK_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE | re.MULTILINE)
     for pattern in (
         r"\brm\s+[^\n]*(?:-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|--no-preserve-root)",
+        # `rm` com recursivo e força em flags SEPARADAS ou em forma longa:
+        # `rm -r -f /`, `rm --recursive --force /`. O padrão acima só casa o
+        # cluster único (`-rf`), e era assim que a evasão passava.
+        r"\brm\b(?=[^\n]*(?:\s-\w*r|\s--recursive))(?=[^\n]*(?:\s-\w*f|\s--force))",
+        # Remoção em massa sem `rm`.
+        r"\bfind\b[^\n]*\s-delete\b",
+        r"\bfind\b[^\n]*-exec\s+rm\b",
+        # Escrita direta em dispositivo de bloco -- `dd of=` já é coberto
+        # abaixo, mas o redirecionamento não era.
+        r">\s*/dev/(?:sd|nvme|vd|hd|mapper|disk)",
+        # Permissão ou dono trocados recursivamente na raiz ou em diretório de
+        # sistema: não apaga nada, mas deixa o host inoperante.
+        r"\b(?:chmod|chown)\b[^\n]*(?:\s-\w*R|\s--recursive)[^\n]*\s/(?:etc|usr|bin|sbin|boot|lib|var)\b",
+        r"\b(?:chmod|chown)\b[^\n]*(?:\s-\w*R|\s--recursive)[^\n]*\s/\s*$",
+        # Mover diretório de sistema equivale a removê-lo do caminho esperado.
+        r"\bmv\s+/(?:etc|usr|bin|sbin|boot|lib|var)\b",
+        # Truncar arquivo crítico de identidade ou de boot.
+        r">\s*/etc/(?:passwd|shadow|fstab|sudoers|hosts)\b",
+        # Fork bomb.
+        r":\(\)\s*\{[^\n]*\}\s*;\s*:",
         r"\bmkfs(?:\.[a-z0-9]+)?\b",
         r"\bdd\b[^\n]*\bof=/dev/",
         r"\bkubectl\s+delete\b",
