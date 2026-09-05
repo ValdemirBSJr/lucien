@@ -202,11 +202,11 @@ O CLI é nativo no terminal do operador (Linux/macOS). No Linux, use o instalado
 separado, que detecta o pacote correto, instala somente a CA pública do Hub e
 persiste `API_HOST`, `TLS_CA_FILE` e `EDITOR`:
 
-### Baixar o CLI 1.2.0
+### Baixar o CLI 1.3.0
 
 Os binários oficiais ficam na página de
 [Releases do Lucien](https://github.com/ValdemirBSJr/lucien/releases), nunca no
-histórico Git. A release `v1.2.0` oferece pacotes para Linux e macOS nas
+histórico Git. A release `v1.3.0` oferece pacotes para Linux e macOS nas
 arquiteturas `amd64` e `arm64`, acompanhados por checksums SHA-256, `LICENSE`,
 `NOTICE` e avisos de licenças de terceiros.
 
@@ -218,7 +218,7 @@ da cópia do projeto. O instalador suporta somente Linux; os pacotes Darwin são
 destinados à instalação manual no macOS.
 
 ```sh
-VERSION=1.2.0
+VERSION=1.3.0
 ARCH=amd64
 BASE_URL="https://github.com/ValdemirBSJr/lucien/releases/download/v${VERSION}"
 mkdir -p dist
