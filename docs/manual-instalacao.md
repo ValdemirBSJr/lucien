@@ -674,6 +674,13 @@ Sessões SSH para equipamentos de rede são gravadas como qualquer outra: os
 comandos digitados no CLI do equipamento e suas saídas entram no log da mesma
 forma, sem configuração adicional.
 
+Se já existir uma sessão encerrada e nunca enviada, o `start` avisa e pergunta
+antes de prosseguir: começar outra gravação apaga a anterior e o log dela.
+Responder não aborta o comando; a sessão fica intacta e pode ser lida com
+`lucien session cat` ou removida com `lucien session discard`. `-y` ou `--yes`
+descarta sem perguntar, para uso não interativo. Com uma captura ainda em
+andamento o `start` recusa direto, sem pergunta — use `lucien stop` antes.
+
 ### O que a descrição do `-d` vira no documento
 
 O texto de `lucien start -d` aparece como subtítulo da seção `## Objetivo`:
@@ -777,6 +784,35 @@ comandos continua acontecendo; o rascunho sai com a estrutura básica e sem
 objetivo, impactos ou rollback sugeridos. O opt-out é do operador e prevalece
 mesmo com `SLM_ENRICHMENT_ENABLED=true` no Hub. Use em hosts onde a inferência é
 lenta demais para caber em `SLM_TIMEOUT_SECONDS`.
+
+### `lucien session cat`
+
+Imprime a sessão gravada que ainda não foi aceita pelo Hub, com os escapes ANSI
+removidos — exatamente o texto que o `upload` enviaria.
+
+É a gravação, não uma lista de comandos extraídos. Separar comando de saída é
+trabalho do Hub, cuja gramática cobre tanto shells POSIX quanto CLIs de
+equipamento de rede. Uma segunda gramática no cliente divergiria da primeira, e
+uma visão filtrada que discorda do que o Hub realmente lê é pior que nenhuma
+visão: levaria você a concluir que a sessão está limpa quando não está.
+
+A saída vai para o stdout, então aceita pipe e `grep`. O comando recusa rodar
+dentro de uma captura em andamento, pela mesma razão que `lucien job cat`: o
+conteúdo entraria no log da nova sessão — e ele pode conter justamente o segredo
+que fez a publicação anterior ser recusada.
+
+### `lucien session discard [-y|--yes]`
+
+Apaga desta máquina o estado da sessão e o arquivo de log. Nada é enviado ao
+Hub: uma sessão recusada nunca chegou a criar um Job lá, então não há o que
+apagar do outro lado.
+
+Existe porque a limpeza automática só acontece no caminho feliz — o `upload`
+remove os arquivos locais depois do `202 Accepted`, e mais ninguém os remove.
+Uma sessão recusada pela política de segredo mantinha o segredo em disco por
+tempo indeterminado.
+
+Recusa apagar uma captura ainda em andamento; use `lucien stop` antes.
 
 ### `lucien job status <id_ou_nome_ou_indice>`
 

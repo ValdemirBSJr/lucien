@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/lucien-runbook/lucien/internal/api"
 	"github.com/lucien-runbook/lucien/internal/recording"
 	"github.com/spf13/cobra"
@@ -26,9 +27,65 @@ type sessionUploader interface {
 // entao aqui so a gramatica. Quem recusa um nome que nao existe e o upload.
 var domainFunctionGrammar = regexp.MustCompile(`^[a-z][a-z0-9_]{2,63}$`)
 
+// clearPendingSession resolve a sessao que ja esta em disco antes de gravar
+// por cima dela.
+//
+// Antes disto o `start` sobrescrevia o session.json calado e criava um log
+// novo. O log anterior ficava orfao: nada mais apontava para ele, e nem
+// `upload` nem `stop` o alcancavam. Quando a sessao anterior tinha sido
+// recusada pela politica de segredo, era o segredo que ficava para tras.
+func clearPendingSession(command *cobra.Command, assumeYes bool) error {
+	session, existe, err := recording.Pending()
+	if err != nil {
+		return err
+	}
+	if !existe {
+		return nil
+	}
+	// Uma captura viva nao e um orfao, e perguntar seria a pergunta errada:
+	// sobrescrever deixaria o PTY rodando sem nada que o descrevesse.
+	if session.Status == "RUNNING" {
+		return fmt.Errorf(
+			"session %s is still recording; run lucien stop before starting another",
+			session.JobName,
+		)
+	}
+	if !assumeYes {
+		fmt.Fprintf(
+			command.ErrOrStderr(),
+			"Session %s is stopped and was never uploaded.\n"+
+				"Starting a new recording deletes it and its log.\n"+
+				"To read it first, run: lucien session cat\n\n",
+			session.JobName,
+		)
+		confirmed := false
+		if err := survey.AskOne(&survey.Confirm{
+			Message: "Discard it and start a new recording?",
+			Default: false,
+		}, &confirmed); err != nil {
+			return err
+		}
+		if !confirmed {
+			return fmt.Errorf(
+				"aborted; session %s was kept -- read it with lucien session cat "+
+					"or remove it with lucien session discard",
+				session.JobName,
+			)
+		}
+	}
+	// Apagar aqui, e nao deixar para o `start` sobrescrever, e o que remove o
+	// log antigo: o session.json seria substituido de qualquer forma, mas o
+	// arquivo de log so sai por Cleanup.
+	if _, _, err := recording.Discard(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func newStartCommand() *cobra.Command {
 	var description string
 	var domainFunction string
+	var assumeYes bool
 	command := &cobra.Command{
 		Use:   "start <provider_name>",
 		Short: "Opens a PTY and records stdin/stdout locally",
@@ -50,6 +107,9 @@ func newStartCommand() *cobra.Command {
 					command.ErrOrStderr(),
 					"Recommendation: use -d \"short description\" to improve SLM accuracy.",
 				)
+			}
+			if err := clearPendingSession(command, assumeYes); err != nil {
+				return err
 			}
 			session, err := recording.Start(args[0], description, domainFunction)
 			if err != nil {
@@ -77,6 +137,13 @@ func newStartCommand() *cobra.Command {
 		"r",
 		"",
 		"area to publish under (not a permission level); defaults to your own",
+	)
+	command.Flags().BoolVarP(
+		&assumeYes,
+		"yes",
+		"y",
+		false,
+		"discard a stopped, never-uploaded session without asking",
 	)
 	return command
 }

@@ -686,6 +686,13 @@ SSH sessions to network equipment are recorded like any other: the commands type
 into the equipment's CLI and their outputs enter the log the same way, with no
 extra configuration.
 
+If a stopped, never-uploaded session already exists, `start` warns and asks
+before going on: starting another recording deletes that session and its log.
+Answering no aborts the command; the session stays intact and can be read with
+`lucien session cat` or removed with `lucien session discard`. `-y` or `--yes`
+discards without asking, for non-interactive use. With a capture still running,
+`start` refuses outright rather than asking -- run `lucien stop` first.
+
 ### What the `-d` description becomes in the document
 
 The text from `lucien start -d` appears as a subheading of the `## Objetivo`
@@ -792,6 +799,34 @@ still happens; the draft comes out with the basic structure and without a
 suggested goal, impacts, or rollback. The opt-out belongs to the operator and
 prevails even with `SLM_ENRICHMENT_ENABLED=true` on the Hub. Use it on hosts where
 inference is too slow to fit within `SLM_TIMEOUT_SECONDS`.
+
+### `lucien session cat`
+
+Prints the recorded session that the Hub has not accepted yet, with the ANSI
+escapes stripped -- byte for byte what `upload` would send.
+
+It is the recording, not a list of extracted commands. Separating command from
+output is the Hub's job, and its grammar covers both POSIX shells and network
+equipment CLIs. A second grammar in the client would drift from that one, and a
+filtered view that disagrees with what the Hub actually reads is worse than no
+view: it would let you conclude the session is clean when it is not.
+
+Output goes to stdout, so it can be piped or grepped. The command refuses to run
+inside an ongoing capture, for the same reason `lucien job cat` does: the content
+would enter the new session's log -- and it may hold exactly the secret that got
+the previous publication refused.
+
+### `lucien session discard [-y|--yes]`
+
+Deletes the session state and the log file from this machine. Nothing is sent to
+the Hub: a refused session never created a job there, so there is nothing to
+delete on the other side.
+
+It exists because the automatic cleanup only runs on the happy path -- `upload`
+removes the local files after `202 Accepted`, and nothing else removes them. A
+session refused by the secret policy kept the secret on disk indefinitely.
+
+It refuses to delete an ongoing capture; run `lucien stop` first.
 
 ### `lucien job status <id_or_name_or_index>`
 
