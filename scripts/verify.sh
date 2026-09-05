@@ -118,6 +118,10 @@ portao_scanner() {
 #
 # `--redact=100` de propósito: quando acusa, mostra arquivo, linha e regra --
 # nunca o valor.
+portao_readme_versao() {
+  bash "$ROOT_DIR/scripts/update-readme-version.sh" --check
+}
+
 portao_segredos() {
   docker run --rm \
     --mount "type=bind,src=$ROOT_DIR,dst=/repo,readonly" \
@@ -232,6 +236,16 @@ if git remote get-url origin >/dev/null 2>&1; then
   portao "segredos" portao_segredos
 else
   pular "segredos" "sem remoto: o historico local nao e o publicado"
+fi
+
+# Mesma condicao, mesma razao: sem remoto as tags locais nao sao as releases
+# publicadas. A secao de download ficou obsoleta em duas releases seguidas --
+# quem chegava no repositorio era mandado baixar a versao anterior --, e o
+# script sozinho nao resolvia, porque depende de alguem lembrar de roda-lo.
+if git remote get-url origin >/dev/null 2>&1; then
+  portao "readme-versao" portao_readme_versao
+else
+  pular "readme-versao" "sem remoto: as tags locais nao sao as releases"
 fi
 
 if tem go; then
