@@ -133,7 +133,7 @@ func loadSession() (Session, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return Session{}, errors.New("no local session found")
+		return Session{}, ErrNoSession
 	}
 	if err != nil {
 		return Session{}, err
@@ -268,6 +268,89 @@ func PendingUpload() (Session, string, error) {
 		return Session{}, "", fmt.Errorf("read recorded log: %w", err)
 	}
 	return session, StripANSI(string(data)), nil
+}
+
+// ErrNoSession separa "nao ha sessao" de uma falha real de leitura.
+//
+// O `start` precisa dessa distincao: ausencia e o caso normal e ele segue em
+// frente; disco ilegivel tem que interromper, porque sobrescrever no escuro
+// apagaria uma gravacao que o operador talvez ainda quisesse.
+var ErrNoSession = errors.New("no local session found")
+
+// Pending devolve a sessao guardada em disco, se houver.
+//
+// Ao contrario de PendingUpload, nao exige STOPPED. Quem pergunta e o `start`,
+// e ele precisa saber que vai sobrescrever tanto uma sessao parada e nunca
+// enviada quanto uma ainda em andamento.
+func Pending() (Session, bool, error) {
+	session, err := loadSession()
+	if errors.Is(err, ErrNoSession) {
+		return Session{}, false, nil
+	}
+	if err != nil {
+		return Session{}, false, err
+	}
+	return session, true, nil
+}
+
+// Log devolve a gravacao sem as sequencias ANSI -- o mesmo texto que o upload
+// mandaria ao Hub, e nao uma reconstrucao dele.
+func Log(session Session) (string, error) {
+	data, err := os.ReadFile(session.LogPath)
+	if err != nil {
+		return "", fmt.Errorf("read recorded log: %w", err)
+	}
+	return StripANSI(string(data)), nil
+}
+
+// ReplaceLog substitui a gravacao pelo texto corrigido pelo operador.
+//
+// Grava por temporario e rename, como saveSession: uma queda no meio da
+// escrita deixa o temporario para tras e preserva a gravacao anterior, em vez
+// de truncar a boa. O conteudo aqui e trabalho que nao existe em nenhum outro
+// lugar -- a sessao ja terminou e o Hub nao a aceitou.
+//
+// O texto gravado e o ja limpo de ANSI, que e o que `cat` mostra e o que o
+// upload envia. StripANSI e idempotente, entao o proximo upload nao muda mais
+// nada; e o operador edita exatamente o que viu.
+func ReplaceLog(session Session, content string) error {
+	destino := filepath.Dir(session.LogPath)
+	temporary, err := os.CreateTemp(destino, ".session-log-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.WriteString(content); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryName, session.LogPath)
+}
+
+// Discard apaga a sessao local e o log, devolvendo o que foi removido.
+//
+// Existe porque a limpeza so acontecia no caminho feliz: `upload` chama
+// Cleanup depois que o Hub aceita, e mais ninguem chama. Uma sessao recusada
+// pela politica de segredo ficava em disco com o segredo dentro, e um `start`
+// seguinte sobrescrevia o session.json e criava outro log -- deixando o
+// anterior orfao, sem nada apontando para ele e sem ninguem para apaga-lo.
+func Discard() (Session, bool, error) {
+	session, existe, err := Pending()
+	if err != nil || !existe {
+		return Session{}, existe, err
+	}
+	if err := Cleanup(session); err != nil {
+		return Session{}, true, err
+	}
+	return session, true, nil
 }
 
 func Cleanup(session Session) error {
