@@ -689,7 +689,8 @@ extra configuration.
 If a stopped, never-uploaded session already exists, `start` warns and asks
 before going on: starting another recording deletes that session and its log.
 Answering no aborts the command; the session stays intact and can be read with
-`lucien session cat` or removed with `lucien session discard`. `-y` or `--yes`
+`lucien session cat`, fixed with `lucien session edit`, or removed with
+`lucien session discard`. `-y` or `--yes`
 discards without asking, for non-interactive use. With a capture still running,
 `start` refuses outright rather than asking -- run `lucien stop` first.
 
@@ -815,6 +816,26 @@ Output goes to stdout, so it can be piped or grepped. The command refuses to run
 inside an ongoing capture, for the same reason `lucien job cat` does: the content
 would enter the new session's log -- and it may hold exactly the secret that got
 the previous publication refused.
+
+### `lucien session edit`
+
+Opens the recording in `$EDITOR` and saves what you write back. `upload` reads
+the log from disk on every attempt, so the next one sends the corrected text.
+
+It is the way out of a refusal that would otherwise cost the whole recording. A
+session refused for one secret in one line used to leave two options: keep
+something that cannot be uploaded, or discard a maneuver that may have taken an
+hour.
+
+What you edit is the recording -- the evidence the published runbook is built
+from. Removing a secret is what this is for; rewriting output the equipment
+returned defeats the purpose of recording it. The Hub scans again on the next
+upload, so editing does not get past the gate: it only restores access to the
+review step the operator was already entitled to.
+
+The text you get is the one already stripped of ANSI escapes -- the same one
+`session cat` shows and the same one the upload sends. It refuses to run inside
+a capture and on a session that is still running.
 
 ### `lucien session discard [-y|--yes]`
 

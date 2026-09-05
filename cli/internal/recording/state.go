@@ -303,6 +303,38 @@ func Log(session Session) (string, error) {
 	return StripANSI(string(data)), nil
 }
 
+// ReplaceLog substitui a gravacao pelo texto corrigido pelo operador.
+//
+// Grava por temporario e rename, como saveSession: uma queda no meio da
+// escrita deixa o temporario para tras e preserva a gravacao anterior, em vez
+// de truncar a boa. O conteudo aqui e trabalho que nao existe em nenhum outro
+// lugar -- a sessao ja terminou e o Hub nao a aceitou.
+//
+// O texto gravado e o ja limpo de ANSI, que e o que `cat` mostra e o que o
+// upload envia. StripANSI e idempotente, entao o proximo upload nao muda mais
+// nada; e o operador edita exatamente o que viu.
+func ReplaceLog(session Session, content string) error {
+	destino := filepath.Dir(session.LogPath)
+	temporary, err := os.CreateTemp(destino, ".session-log-*")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.WriteString(content); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryName, session.LogPath)
+}
+
 // Discard apaga a sessao local e o log, devolvendo o que foi removido.
 //
 // Existe porque a limpeza so acontecia no caminho feliz: `upload` chama

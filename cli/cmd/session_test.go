@@ -109,3 +109,55 @@ func TestSessionDiscardRecusaSessaoEmAndamento(t *testing.T) {
 		t.Fatalf("esperava recusa apontando para lucien stop, veio: %v", err)
 	}
 }
+
+func TestSessionEditRecusaSessaoEmAndamento(t *testing.T) {
+	prepararEstado(t, "RUNNING", "job-vivo")
+	command := newSessionEditCommand()
+	saida := &bytes.Buffer{}
+	command.SetOut(saida)
+	command.SetErr(saida)
+
+	// Abrir o editor sobre uma captura viva editaria o arquivo que ainda está
+	// recebendo escrita do PTY.
+	err := command.RunE(command, nil)
+	if err == nil || !strings.Contains(err.Error(), "lucien stop") {
+		t.Fatalf("esperava recusa apontando para lucien stop, veio: %v", err)
+	}
+}
+
+func TestSessionEditSemSessaoNaoAbreEditor(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	command := newSessionEditCommand()
+	saida := &bytes.Buffer{}
+	command.SetOut(saida)
+	command.SetErr(saida)
+
+	err := command.RunE(command, nil)
+	if err == nil || !strings.Contains(err.Error(), "no local session found") {
+		t.Fatalf("esperava 'no local session found', veio: %v", err)
+	}
+}
+
+func TestSessionCatMostraOndeOLogEsta(t *testing.T) {
+	logPath := prepararEstado(t, "STOPPED", "job-parado")
+	command := newSessionCatCommand()
+	saidaPadrao := &bytes.Buffer{}
+	saidaErro := &bytes.Buffer{}
+	command.SetOut(saidaPadrao)
+	command.SetErr(saidaErro)
+
+	if err := command.RunE(command, nil); err != nil {
+		t.Fatalf("session cat: %v", err)
+	}
+	// Sem o caminho, quem quer corrigir à mão não sabe qual arquivo abrir.
+	if !strings.Contains(saidaErro.String(), logPath) {
+		t.Fatalf("o cabeçalho não trouxe o caminho do log: %q", saidaErro.String())
+	}
+	if !strings.Contains(saidaErro.String(), "session edit") {
+		t.Fatalf("o cabeçalho não aponta a saída construtiva: %q", saidaErro.String())
+	}
+	// A gravação sai no stdout, separada do cabeçalho, para aceitar pipe.
+	if !strings.Contains(saidaPadrao.String(), "enable secret exemplo") {
+		t.Fatalf("a gravação não saiu no stdout: %q", saidaPadrao.String())
+	}
+}

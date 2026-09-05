@@ -98,3 +98,67 @@ func TestLogRemoveANSIComoOUploadFaria(t *testing.T) {
 		t.Fatalf("saída não confere com a do upload: %q", log)
 	}
 }
+
+func TestReplaceLogTrocaAGravacaoPreservandoOEstado(t *testing.T) {
+	session, logPath := prepararSessao(t, "STOPPED")
+
+	if err := ReplaceLog(session, "docker ps\n"); err != nil {
+		t.Fatalf("ReplaceLog: %v", err)
+	}
+
+	conteudo, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ler log: %v", err)
+	}
+	if string(conteudo) != "docker ps\n" {
+		t.Fatalf("gravação não foi substituída: %q", conteudo)
+	}
+	// O estado tem que sobreviver: é ele que liga o log ao nome do Job, e um
+	// upload posterior depende disso.
+	if _, existe, _ := Pending(); !existe {
+		t.Fatal("o estado da sessão sumiu ao trocar o log")
+	}
+}
+
+func TestUploadEnviaOTextoCorrigido(t *testing.T) {
+	session, _ := prepararSessao(t, "STOPPED")
+
+	// Este é o ponto do `session edit`: o upload relê o log do disco a cada
+	// tentativa, então corrigir e reenviar tem que funcionar sem gravar de
+	// novo. Sem isto, uma recusa por um segredo custaria a sessão inteira.
+	//
+	// O texto corrigido é neutro de propósito. A primeira versão deste teste
+	// usava uma fixture com forma de credencial de equipamento, para parecer
+	// com o caso real, e o portão de segredos reprovou o PR: a própria fixture
+	// casava a regra. O que o teste prova é que o upload pega a substituição
+	// -- para isso o conteúdo não precisa ter forma de segredo.
+	if err := ReplaceLog(session, "show version\n"); err != nil {
+		t.Fatalf("ReplaceLog: %v", err)
+	}
+
+	_, log, err := PendingUpload()
+	if err != nil {
+		t.Fatalf("PendingUpload: %v", err)
+	}
+	if log != "show version\n" {
+		t.Fatalf("o upload não pegou a correção: %q", log)
+	}
+}
+
+func TestReplaceLogNaoDeixaTemporarioParaTras(t *testing.T) {
+	session, logPath := prepararSessao(t, "STOPPED")
+
+	if err := ReplaceLog(session, "ls -la\n"); err != nil {
+		t.Fatalf("ReplaceLog: %v", err)
+	}
+
+	entradas, err := os.ReadDir(filepath.Dir(logPath))
+	if err != nil {
+		t.Fatalf("listar diretório: %v", err)
+	}
+	for _, entrada := range entradas {
+		if len(entrada.Name()) > 0 && entrada.Name()[0] == '.' {
+			t.Fatalf("temporário sobrou no diretório: %s", entrada.Name())
+		}
+	}
+}

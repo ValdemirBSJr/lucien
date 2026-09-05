@@ -54,8 +54,10 @@ func clearPendingSession(command *cobra.Command, assumeYes bool) error {
 		fmt.Fprintf(
 			command.ErrOrStderr(),
 			"Session %s is stopped and was never uploaded.\n"+
-				"Starting a new recording deletes it and its log.\n"+
-				"To read it first, run: lucien session cat\n\n",
+				"Starting a new recording deletes it and its log.\n\n"+
+				"  lucien session cat      read it\n"+
+				"  lucien session edit     fix it and upload again\n"+
+				"  lucien session discard  throw it away\n\n",
 			session.JobName,
 		)
 		confirmed := false
@@ -67,8 +69,9 @@ func clearPendingSession(command *cobra.Command, assumeYes bool) error {
 		}
 		if !confirmed {
 			return fmt.Errorf(
-				"aborted; session %s was kept -- read it with lucien session cat "+
-					"or remove it with lucien session discard",
+				"aborted; session %s was kept -- read it with lucien session cat, "+
+					"fix it with lucien session edit, or remove it with "+
+					"lucien session discard",
 				session.JobName,
 			)
 		}

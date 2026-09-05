@@ -677,7 +677,8 @@ forma, sem configuração adicional.
 Se já existir uma sessão encerrada e nunca enviada, o `start` avisa e pergunta
 antes de prosseguir: começar outra gravação apaga a anterior e o log dela.
 Responder não aborta o comando; a sessão fica intacta e pode ser lida com
-`lucien session cat` ou removida com `lucien session discard`. `-y` ou `--yes`
+`lucien session cat`, corrigida com `lucien session edit` ou removida com
+`lucien session discard`. `-y` ou `--yes`
 descarta sem perguntar, para uso não interativo. Com uma captura ainda em
 andamento o `start` recusa direto, sem pergunta — use `lucien stop` antes.
 
@@ -800,6 +801,25 @@ A saída vai para o stdout, então aceita pipe e `grep`. O comando recusa rodar
 dentro de uma captura em andamento, pela mesma razão que `lucien job cat`: o
 conteúdo entraria no log da nova sessão — e ele pode conter justamente o segredo
 que fez a publicação anterior ser recusada.
+
+### `lucien session edit`
+
+Abre a gravação no `$EDITOR` e salva o que você escrever de volta. O `upload`
+relê o log do disco a cada tentativa, então a próxima envia o texto corrigido.
+
+É a saída para uma recusa que, sem ela, custaria a gravação inteira. Uma sessão
+recusada por um segredo em uma linha deixava duas opções: guardar algo que não
+sobe, ou descartar uma manobra que pode ter levado uma hora.
+
+O que se edita é a gravação — a evidência de onde o runbook publicado nasce.
+Remover um segredo é para isso que serve; reescrever a saída que o equipamento
+devolveu anula a razão de tê-la gravado. O Hub escaneia de novo no próximo
+upload, então editar não passa por cima do portão: apenas devolve o acesso à
+etapa de revisão à qual o operador já tinha direito.
+
+O texto aberto é o já limpo de escapes ANSI — o mesmo que o `session cat` mostra
+e o mesmo que o upload envia. Recusa rodar dentro de uma captura e sobre uma
+sessão ainda em andamento.
 
 ### `lucien session discard [-y|--yes]`
 

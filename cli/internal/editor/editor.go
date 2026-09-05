@@ -12,8 +12,18 @@ import (
 
 const maxDraftBytes = 1024 * 1024
 
+// Edit abre o rascunho de um playbook no $EDITOR do operador.
 func Edit(initial []byte) ([]byte, error) {
-	temporary, err := os.CreateTemp("", "lucien-playbook-*.md")
+	return EditWith(initial, "lucien-playbook-*.md", maxDraftBytes)
+}
+
+// EditWith e o mesmo fluxo com o sufixo e o teto de tamanho do chamador.
+//
+// A gravacao de uma sessao nao cabe no teto do playbook: o log local vai a
+// 2 MiB por padrao e a 10 MiB com LUCIEN_MAX_LOG_BYTES. Reaproveitar o limite
+// de 1 MiB recusaria justamente a sessao longa -- a que mais custa refazer.
+func EditWith(initial []byte, pattern string, maxBytes int) ([]byte, error) {
+	temporary, err := os.CreateTemp("", pattern)
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +64,12 @@ func Edit(initial []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer file.Close()
-	content, err := io.ReadAll(io.LimitReader(file, maxDraftBytes+1))
+	content, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(content) > maxDraftBytes {
-		return nil, errors.New("playbook exceeds 1 MiB")
+	if len(content) > maxBytes {
+		return nil, fmt.Errorf("edited content exceeds %d bytes", maxBytes)
 	}
 	return content, nil
 }
