@@ -209,8 +209,9 @@ services:
       - ${CERTS_DIR:-./certs}/server.crt:/certs/server.crt:ro
       - ${CERTS_DIR:-./certs}/ca.crt:/certs/ca.crt:ro
       - playbooks-data:/runbooks:ro
-    ports:
-      - "${VIEWER_BIND_ADDRESS:-127.0.0.1}:9091:9091"
+    # Sem `ports` de propósito: quem publica é o viewer-proxy. Publicar aqui
+    # exigiria pôr este serviço numa rede não-interna, e ele passaria a ter
+    # rota para a internet sem precisar dela.
     depends_on:
       hub:
         condition: service_healthy
@@ -232,6 +233,49 @@ services:
     deploy: *resources-small
     restart: unless-stopped
     networks: [viewer_auth]
+
+  # Publica o portal local. Existe por uma razão de rede: publicar porta exige
+  # rede não-interna, e rede não-interna dá saída para a internet. Com o proxy
+  # na frente, quem recebe essa saída é ele -- um Nginx que só encaminha --, e
+  # o runbook-viewer continua isolado.
+  viewer-proxy:
+    image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+    profiles: ["local-viewer"]
+    # Mesmo UID do viewer, e não o 101 padrão da imagem: o certgen entrega
+    # server.key com 0600 para 10001, e o Nginx precisa lê-la para terminar TLS.
+    user: "10001:10001"
+    volumes:
+      - ./deploy/nginx/viewer-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${CERTS_DIR:-./certs}/server.key:/certs/server.key:ro
+      - ${CERTS_DIR:-./certs}/server.crt:/certs/server.crt:ro
+      - ${CERTS_DIR:-./certs}/ca.crt:/certs/ca.crt:ro
+    ports:
+      - "${VIEWER_BIND_ADDRESS:-127.0.0.1}:9091:8443"
+    depends_on:
+      runbook-viewer:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - --spider
+        - --no-check-certificate
+        - https://localhost:8443/healthz
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755
+      - /var/run:size=1m,mode=0755
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    deploy: *resources-tiny
+    restart: unless-stopped
+    networks: [viewer_ingress, viewer_auth]
 
   wiki-volume-init:
     image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
@@ -330,7 +374,7 @@ services:
       - no-new-privileges:true
     deploy: *resources-tiny
     restart: unless-stopped
-    networks: [wiki_frontend]
+    networks: [wiki_frontend, wiki_ingress]
 
   secret-scanner:
     image: lucien-runbook-secret-scanner:${LUCIEN_IMAGE_TAG:-development}
@@ -429,7 +473,7 @@ services:
     image: lucien-runbook-certgen:${LUCIEN_IMAGE_TAG:-development}
     profiles: ["tools"]
     environment:
-      CERT_DNS: ${CERT_DNS:-hub,localhost}
+      CERT_DNS: ${CERT_DNS:-hub,runbook-viewer,localhost}
       CERT_IP: ${CERT_IP:-127.0.0.1}
     volumes:
       - ${CERTS_DIR:-./certs}:/certs
@@ -479,11 +523,23 @@ networks:
   viewer_auth:
     driver: bridge
     internal: true
+  # Ingresso: existem para que uma porta publicada funcione. O Docker nao
+  # publica porta de container que so esteja em rede internal -- aceita a
+  # declaracao e nao faz nada. Cada uma toca um servico so, e esse servico
+  # existe para receber conexao, nao para iniciar.
+  #
+  # Nao ha meia rede no Docker: nao-interna da entrada E saida. O ganho e
+  # concentrar essa saida em um Nginx que so encaminha, mantendo fora dela
+  # o servico que le os runbooks.
+  viewer_ingress:
+    driver: bridge
   wiki_egress:
     driver: bridge
   wiki_frontend:
     driver: bridge
     internal: true
+  wiki_ingress:
+    driver: bridge
 
 secrets:
   postgres_password:

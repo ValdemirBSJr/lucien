@@ -543,6 +543,10 @@ case "$publication_choice" in
     exigir_artefato "$PROJECT_ROOT/runbook-viewer/Dockerfile" \
       'local viewer image'
     exigir_artefato "$PROJECT_ROOT/logo-lucien.png" 'local viewer logo'
+    # Sem este arquivo o proxy sobe servindo a pagina padrao do Nginx, e o
+    # portal responde 404 em tudo -- falha tardia e confusa, longe da causa.
+    exigir_artefato "$PROJECT_ROOT/deploy/nginx/viewer-proxy.conf" \
+      'local viewer reverse proxy configuration'
     if confirmar 'Expose the HTTPS viewer to the network on TCP/9091'; then
       viewer_bind_address='0.0.0.0'
     fi
@@ -700,7 +704,7 @@ WIKI_MAX_FILE_BYTES=1048576
 WIKI_RELEASE_RETENTION=5
 WIKI_BIND_ADDRESS=$wiki_bind_address
 
-CERT_DNS=$hub_dns,hub,localhost
+CERT_DNS=$hub_dns,hub,runbook-viewer,localhost
 CERT_IP=$cert_ip
 EOF
 
