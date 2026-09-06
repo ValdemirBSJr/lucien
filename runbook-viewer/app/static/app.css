@@ -113,6 +113,61 @@ button, input { font: inherit; }
 .button-primary:hover { color: #fff; background: #1a7f37; }
 .button-quiet { background: transparent; }
 
+/* Interruptor de tema.
+   O estado mora no aria-checked, e o CSS so o reflete: assim o que o leitor
+   de tela anuncia e o que a tela mostra saem sempre da mesma fonte. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.theme-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.theme-switch-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--canvas-subtle);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.theme-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+.theme-switch[aria-checked="true"] .theme-switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.theme-switch[aria-checked="true"] .theme-switch-thumb {
+  background: var(--canvas);
+  transform: translateX(16px);
+}
+.theme-switch[aria-checked="true"] { color: var(--text); }
+
+/* Quem prefere menos movimento nao ganha nada com a animacao do polegar. */
+@media (prefers-reduced-motion: reduce) {
+  .theme-switch-track,
+  .theme-switch-thumb { transition: none; }
+}
+
 .single-column { max-width: 1120px; margin: 0 auto; padding: 48px 24px; }
 .login-card, .error-card {
   width: min(100%, 420px);

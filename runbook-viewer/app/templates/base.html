@@ -21,7 +21,23 @@
             <button class="button button-quiet" type="submit">Sign out</button>
           </form>
         {% endif %}
-        <button id="theme-toggle" class="button button-quiet" type="button" aria-label="Toggle theme">Theme</button>
+        {#
+          role="switch" com aria-checked, e nao um botao comum: o leitor de
+          tela anuncia o estado ("ligado"/"desligado") em vez de so ler um
+          rotulo que muda sozinho. O texto visivel fica fixo; quem diz em que
+          posicao esta e o proprio controle.
+        #}
+        <button
+          id="theme-toggle"
+          class="theme-switch"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Dark theme"
+        >
+          <span class="theme-switch-label" aria-hidden="true">Dark</span>
+          <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
+        </button>
       </div>
     </header>
     {% block shell %}
