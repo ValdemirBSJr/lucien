@@ -87,7 +87,7 @@ Ollama/SLM e o inicializador do modelo no mesmo host. O Gitea continua externo e
 | diretório `certgen/` | somente na emissão/rotação | gera a CA e o certificado do Hub |
 | `deploy/install-hub.sh` | instalação guiada e modos auxiliares | cria `.env`/Compose ou configura runner/SSH em hosts separados |
 | `deploy/systemd/act-runner.service` | somente Gitea Actions | unidade endurecida instalada no host dedicado do runner |
-| `runbook-viewer/` e `logo-lucien.png` | somente `local-viewer` | portal autenticado em HTTPS/9091; volume read-only e revisões via Hub |
+| `runbook-viewer/`, `logo-lucien.png` e `deploy/nginx/viewer-proxy.conf` | somente `local-viewer` | portal autenticado em HTTPS/9091, publicado pelo `viewer-proxy`; volume read-only e revisões via Hub |
 | `wiki-builder/` e `deploy/nginx/wiki-compact.conf` | somente `gitea-compact` | builder fixo e servidor estático sem Docker socket |
 | `cli/`, `docs/`, `site/`, MkDocs local e workflows | não | não participam da execução do Hub nem dos dois serviços fixos |
 

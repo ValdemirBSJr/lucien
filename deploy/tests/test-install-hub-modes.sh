@@ -41,7 +41,7 @@ preparar_pacote() {
   touch "$raiz/backend/Dockerfile" "$raiz/certgen/Dockerfile" \
     "$raiz/secret-scanner/Dockerfile" "$raiz/runbook-viewer/Dockerfile" \
     "$raiz/wiki-builder/Dockerfile" "$raiz/deploy/nginx/wiki-compact.conf" \
-    "$raiz/logo-lucien.png"
+    "$raiz/deploy/nginx/viewer-proxy.conf" "$raiz/logo-lucien.png"
 
   case "$estado_certificados" in
     completos)
@@ -170,6 +170,20 @@ testar_local_viewer() {
     falhar 'the builder token should be empty in local mode'
   grep -Fq -- 'https://localhost:9091' "$raiz/saida.txt" || \
     falhar 'the viewer URL was not reported'
+
+  # O certificado precisa nomear o viewer: o proxy verifica TLS ao encaminhar,
+  # e um SAN sem `runbook-viewer` derruba a conexao interna.
+  assert_linha "$raiz/.env" 'CERT_DNS=runbook.example.internal,hub,runbook-viewer,localhost'
+
+  # Quem publica a porta e o proxy. O viewer sozinho numa rede interna nao
+  # publicaria nada: o Docker aceita a declaracao e nao faz nada, que foi
+  # exatamente como o portal ficou inalcancavel.
+  assert_linha "$raiz/docker-compose.local.yml" '  viewer-proxy:'
+  assert_linha "$raiz/docker-compose.local.yml" '    networks: [viewer_ingress, viewer_auth]'
+  assert_linha "$raiz/docker-compose.local.yml" '      - "${VIEWER_BIND_ADDRESS:-127.0.0.1}:9091:8443"'
+  grep -Fq -- '${VIEWER_BIND_ADDRESS:-127.0.0.1}:9091:9091' \
+    "$raiz/docker-compose.local.yml" && \
+    falhar 'the viewer publishes a port again, and only reaches internal networks'
 
   # Uma segunda execução deve falhar sem alterar a configuração já emitida.
   hash_antes="$(sha256sum "$raiz/.env" | awk '{print $1}')"
@@ -376,9 +390,32 @@ testar_hardening_compose() {
     falhar 'the Ollama images are not pinned by digest'
 }
 
+# Sem a conf do proxy o Nginx sobe servindo a pagina padrao e o portal
+# responde 404 em tudo -- falha tardia, longe da causa. O instalador recusa
+# antes de gravar qualquer coisa.
+testar_local_viewer_exige_conf_do_proxy() {
+  local raiz
+  raiz="$(preparar_pacote local-viewer-sem-conf)"
+  rm -f "$raiz/deploy/nginx/viewer-proxy.conf"
+
+  if (
+    cd "$raiz"
+    printf '%s' $'\n\n\ny\n\n\n1\n\n\n\n\n' | \
+      FAKE_PROJECT_ROOT="$raiz" PATH="$raiz/fakebin:/usr/bin:/bin" \
+        ./deploy/install-hub.sh > "$raiz/saida.txt" 2>&1
+  ); then
+    falhar 'the installer accepted local-viewer without the proxy configuration'
+  fi
+  grep -Fq -- 'local viewer reverse proxy configuration' "$raiz/saida.txt" || \
+    falhar 'the missing proxy configuration was not named in the error'
+  [[ ! -e "$raiz/.env" ]] || \
+    falhar 'the installer wrote .env even after refusing'
+}
+
 bash -n "$PROJECT_ROOT/deploy/install-hub.sh"
 testar_certificados_tls
 testar_local_viewer
+testar_local_viewer_exige_conf_do_proxy
 testar_github
 testar_gitea_compact
 testar_gitea_runner

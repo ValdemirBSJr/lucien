@@ -89,7 +89,7 @@ stays external and is reached exclusively through the REST API configured in
 | `certgen/` directory | only when issuing/rotating | generates the CA and the Hub certificate |
 | `deploy/install-hub.sh` | guided install and auxiliary modes | creates `.env`/Compose, or configures runner/SSH on separate hosts |
 | `deploy/systemd/act-runner.service` | only for Gitea Actions | hardened unit installed on the dedicated runner host |
-| `runbook-viewer/` and `logo-lucien.png` | only for `local-viewer` | authenticated portal over HTTPS/9091; read-only volume and revisions through the Hub |
+| `runbook-viewer/`, `logo-lucien.png`, and `deploy/nginx/viewer-proxy.conf` | only for `local-viewer` | authenticated portal over HTTPS/9091, published by `viewer-proxy`; read-only volume and revisions through the Hub |
 | `wiki-builder/` and `deploy/nginx/wiki-compact.conf` | only for `gitea-compact` | fixed builder and static server with no Docker socket |
 | `cli/`, `docs/`, `site/`, local MkDocs, and workflows | no | take no part in running the Hub or the two fixed services |
 

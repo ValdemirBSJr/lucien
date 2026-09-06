@@ -24,7 +24,7 @@ O instalador atual oferece:
 
 | Opção | Uso | Requisitos adicionais no host do Hub |
 | --- | --- | --- |
-| `1) local-viewer` | disco local e portal HTTPS/9091 | `runbook-viewer/` e `logo-lucien.png` |
+| `1) local-viewer` | disco local e portal HTTPS/9091 | `runbook-viewer/`, `logo-lucien.png` e `deploy/nginx/viewer-proxy.conf` |
 | `2) github` | GitHub-hosted Actions e GitHub Pages | nenhum runner local |
 | `3) gitea-compact` | builder fixo e Nginx no host do Hub | `wiki-builder/` e `deploy/nginx/wiki-compact.conf` |
 | `4) gitea-runner` | Gitea Actions em runner dedicado | workflow no repositório e outro host para o runner |
