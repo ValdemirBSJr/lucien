@@ -464,6 +464,52 @@ development easier, but it is not a production vault.
 | `VIEWER_SESSION_SECRET_FILE` | local portal | file holding the session key; it is not a user token |
 | `WIKI_REPOSITORY_TOKEN_FILE` | compact builder | file holding a separate, read-only Gitea token |
 | `EDITOR` | CLI | editor for the review flow; falls back to `vi` |
+| `POSTGRES_DB` | PostgreSQL | database name. Default `lucien` |
+| `POSTGRES_USER` | PostgreSQL | database user. Default `lucien` |
+| `DATABASE_URL` | Hub and worker | plain-text connection string, an alternative to `DATABASE_URL_FILE`. Prefer the file: an environment variable shows up in `docker inspect` |
+| `AUTH_PEPPER` | Hub | plain-text token-hash secret, an alternative to `AUTH_PEPPER_FILE`. Same caveat |
+| `BOOTSTRAP_API_KEY` | Hub | plain-text bootstrap credential, an alternative to `BOOTSTRAP_API_KEY_FILE`. Same caveat |
+| `GIT_TOKEN` | Hub | plain-text Git provider token, an alternative to `GIT_TOKEN_FILE`. Same caveat |
+| `GIT_TOKEN_FILE` | Hub | file holding the Git provider token |
+| `GIT_OWNER` | Hub | organization or owner of the runbook repository. Empty in the Git-less modes |
+| `GIT_REPO` | Hub | name of the runbook repository. Empty in the Git-less modes |
+| `GIT_BRANCH` | Hub | publication branch. Default `main`; it must match the workflow trigger |
+| `GIT_CA_SOURCE` | Compose | host path of the CA that validates the Git provider, mounted as `/trust/git-ca.crt`. Default `./certs/ca.crt` |
+| `LOCAL_STORAGE_ROOT` | Hub | runbook root in `local` mode. Default `/data/playbooks` |
+| `STORAGE_PROVIDER` | Hub | publication target: `local`, `gitea`, or `github` |
+| `MAX_ASSET_BYTES` | Hub | maximum size of an attached image. Default `5242880` (5 MiB) |
+| `MAX_ASSETS_PER_PUBLICATION` | Hub | maximum number of images per publication. Default `20` |
+| `MAX_ASSET_DIMENSION_PX` | Hub | largest accepted image side, in pixels. Default `8192` |
+| `OCR_LANGUAGES` | Hub | Tesseract languages for the secret scan on images, in Tesseract's own format. Default `por+eng` |
+| `SCANNER_TIMEOUT_SECONDS` | secret-scanner | maximum duration of one gitleaks run. Default `5` |
+| `ALLOW_INSECURE_DEV` | Hub | drops TLS requirements for development. **Never use outside a disposable machine**: without it the Hub refuses to start without a certificate, which is the correct production behavior. Default `false` |
+| `CERTS_DIR` | Compose | host directory holding the TLS material mounted into the services. Default `./certs` |
+| `SECRETS_DIR` | Compose | host directory holding the individual secrets. Default `./secrets`, mode `0700` |
+| `CERT_DNS` | certgen | DNS names in the certificate SAN, comma-separated. Default `hub,runbook-viewer,localhost`; the installer appends the chosen FQDN. `runbook-viewer` is required by `viewer-proxy`, which verifies TLS when forwarding |
+| `CERT_IP` | certgen | IPs in the certificate SAN. Default `127.0.0.1` |
+| `HUB_BIND_ADDRESS` | Compose | interface where the Hub publishes TCP/8443. Default `127.0.0.1`; `0.0.0.0` exposes it on the network and requires a firewall |
+| `VIEWER_BIND_ADDRESS` | Compose | interface where the portal publishes TCP/9091. Default `127.0.0.1` |
+| `WIKI_BIND_ADDRESS` | Compose | interface where the compact wiki publishes TCP/9092. Default `127.0.0.1` |
+| `VIEWER_HUB_URL` | portal | internal Hub URL used by the portal. Default `https://hub:8443` |
+| `VIEWER_SESSION_TTL_SECONDS` | portal | portal session lifetime. Default `900` |
+| `VIEWER_MAX_DOCUMENTS` | portal | ceiling of documents the portal indexes; above it the portal answers with an error instead of degrading. Default `10000` |
+| `VIEWER_MAX_FILE_BYTES` | portal | maximum size of a runbook read by the portal. Default `1048576` |
+| `VIEWER_SESSION_SECRET_FILE` | portal | file holding the secret that signs the portal session |
+| `WIKI_REPOSITORY_URL` | wiki-builder | HTTPS clone URL of the wiki repository. Empty outside the compact mode |
+| `WIKI_REPOSITORY_BRANCH` | wiki-builder | branch watched by the builder. Default `main` |
+| `WIKI_REPOSITORY_USER` | wiki-builder | read-only service user used for the clone |
+| `WIKI_POLL_SECONDS` | wiki-builder | interval between repository checks. Default `60` |
+| `WIKI_BUILD_TIMEOUT_SECONDS` | wiki-builder | maximum duration of one MkDocs build. Default `120` |
+| `WIKI_RELEASE_RETENTION` | wiki-builder | how many previous builds stay on disk for rollback. Default `5` |
+| `WIKI_MAX_FILE_BYTES` | wiki-builder | maximum size of a repository file. Default `1048576` |
+| `WIKI_MAX_SOURCE_BYTES` | wiki-builder | maximum size of the source tree. Default `268435456` (256 MiB) |
+| `WIKI_MAX_SOURCE_FILES` | wiki-builder | maximum number of files in the source tree. Default `10000` |
+| `WIKI_MAX_REPOSITORY_BYTES` | wiki-builder | maximum size of the cloned repository. Default `536870912` (512 MiB) |
+| `LUCIEN_IMAGE_TAG` | Compose | immutable tag of the locally built images, shaped `src-<hash>`. The installer derives it from the source contents; changing it requires rebuilding **all** images of the active profiles, not just the Hub |
+| `LUCIEN_TINY_CPU_LIMIT` | Compose | CPU ceiling of the `tiny` class. Default `0.50` |
+| `LUCIEN_SMALL_CPU_LIMIT` | Compose | CPU ceiling of the `small` class. Default `1.00` |
+| `LUCIEN_MEDIUM_CPU_LIMIT` | Compose | CPU ceiling of the `medium` class. Default `1.00`; the installer never generates a value above what the Docker daemon reports |
+| `LUCIEN_SLM_CPU_LIMIT` | Compose | CPU ceiling of the `slm` class. Default `1.00` |
 
 The installer keeps configuration in `.env` and individual secrets in `secrets/`,
 mounted by Docker Compose at `/run/secrets`. That prevents exposure in

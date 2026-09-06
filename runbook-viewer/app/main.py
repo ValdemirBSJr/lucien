@@ -113,19 +113,19 @@ def create_app(
             content_length = request.headers.get("Content-Length")
             if content_length is None:
                 early_response = JSONResponse(
-                    {"detail": "Content-Length obrigatório"}, status_code=411
+                    {"detail": "Content-Length is required"}, status_code=411
                 )
             else:
                 try:
                     request_size = int(content_length)
                 except ValueError:
                     early_response = JSONResponse(
-                        {"detail": "Content-Length inválido"}, status_code=400
+                        {"detail": "invalid Content-Length"}, status_code=400
                     )
                 else:
                     if request_size < 0 or request_size > request_limit:
                         early_response = JSONResponse(
-                            {"detail": "payload excede o limite"}, status_code=413
+                            {"detail": "payload exceeds the limit"}, status_code=413
                         )
         response = early_response or await call_next(request)  # type: ignore[operator]
         if request.url.path.startswith("/static/"):
@@ -195,8 +195,8 @@ def create_app(
             request=request,
             name="error.html",
             context={
-                "title": "Hub temporariamente indisponível",
-                "message": "Não foi possível confirmar sua sessão. Tente novamente em instantes.",
+                "title": "Hub temporarily unavailable",
+                "message": "Your session could not be confirmed. Try again in a moment.",
             },
             status_code=503,
         )
@@ -207,8 +207,8 @@ def create_app(
             request=request,
             name="error.html",
             context={
-                "title": "Catálogo temporariamente indisponível",
-                "message": "O limite operacional de documentos foi atingido.",
+                "title": "Catalog temporarily unavailable",
+                "message": "The operational document limit has been reached.",
             },
             status_code=503,
         )
@@ -235,18 +235,18 @@ def create_app(
             or not hmac.compare_digest(csrf_cookie, csrf_token)
         ):
             return login_page(
-                request, "A sessão do formulário expirou. Tente novamente.", 400
+                request, "The form session expired. Please try again.", 400
             )
         if (
             _USERNAME_PATTERN.fullmatch(username) is None
             or not 16 <= len(api_token) <= 512
         ):
-            return login_page(request, "Usuário ou token inválido.", 401)
+            return login_page(request, "Invalid username or token.", 401)
         assert hub_client is not None
         try:
             user = await hub_client.verify(username, api_token)
         except InvalidCredentialsError:
-            return login_page(request, "Usuário ou token inválido.", 401)
+            return login_page(request, "Invalid username or token.", 401)
         except IdentityUnavailableError:
             raise
         encrypted = cipher.seal(
@@ -271,18 +271,18 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     async def index(
         request: Request,
-        categoria: str | None = Query(default=None, max_length=64),
-        pagina: int = Query(default=1, ge=1, le=100_000),
+        category: str | None = Query(default=None, max_length=64),
+        page: int = Query(default=1, ge=1, le=100_000),
     ) -> HTMLResponse:
         session = await authenticated_session(request)
         summaries = await catalog.list_runbooks(await published_ids(session))
         categories = _group_categories(summaries)
-        selected = categoria if categoria in categories else None
+        selected = category if category in categories else None
         filtered = categories[selected] if selected else summaries
         total_pages = max(1, (len(filtered) + _PAGE_SIZE - 1) // _PAGE_SIZE)
-        if pagina > total_pages:
-            raise HTTPException(status_code=404, detail="página inexistente")
-        start = (pagina - 1) * _PAGE_SIZE
+        if page > total_pages:
+            raise HTTPException(status_code=404, detail="page does not exist")
+        start = (page - 1) * _PAGE_SIZE
         return templates.TemplateResponse(
             request=request,
             name="index.html",
@@ -291,7 +291,7 @@ def create_app(
                 "runbooks": filtered[start : start + _PAGE_SIZE],
                 "categories": categories,
                 "selected_category": selected,
-                "page": pagina,
+                "page": page,
                 "total_pages": total_pages,
                 "total_documents": len(summaries),
             },
@@ -303,7 +303,7 @@ def create_app(
         allowed_ids = await published_ids(session)
         document = await catalog.get_runbook(runbook_id, allowed_ids)
         if document is None:
-            raise HTTPException(status_code=404, detail="runbook não encontrado")
+            raise HTTPException(status_code=404, detail="runbook not found")
         summaries = await catalog.list_runbooks(allowed_ids)
         return templates.TemplateResponse(
             request=request,
@@ -327,13 +327,13 @@ def create_app(
             root_id, await published_ids(session)
         )
         if document is None:
-            raise HTTPException(status_code=404, detail="runbook não encontrado")
+            raise HTTPException(status_code=404, detail="runbook not found")
         if not _can_edit(
             session.user,
             document.summary.root_domain_function,
             settings.rbac_entry_roles_enabled,
         ):
-            raise HTTPException(status_code=403, detail="edição não permitida")
+            raise HTTPException(status_code=403, detail="editing is not allowed")
 
         csrf_token = secrets.token_urlsafe(32)
         state = EditFormState(
@@ -365,26 +365,26 @@ def create_app(
         try:
             state = edit_cipher.open(edit_state)
         except InvalidCredentialsError:
-            raise HTTPException(status_code=400, detail="formulário inválido") from None
+            raise HTTPException(status_code=400, detail="invalid form") from None
         csrf_cookie = request.cookies.get(EDIT_CSRF_COOKIE, "")
         if (
             state.root_id != root_id
             or not csrf_cookie
             or not hmac.compare_digest(csrf_cookie, state.csrf_token)
         ):
-            raise HTTPException(status_code=400, detail="formulário inválido")
+            raise HTTPException(status_code=400, detail="invalid form")
 
         document = await catalog.get_runbook(
             root_id, await published_ids(session)
         )
         if document is None:
-            raise HTTPException(status_code=404, detail="runbook não encontrado")
+            raise HTTPException(status_code=404, detail="runbook not found")
         if not _can_edit(
             session.user,
             document.summary.root_domain_function,
             settings.rbac_entry_roles_enabled,
         ):
-            raise HTTPException(status_code=403, detail="edição não permitida")
+            raise HTTPException(status_code=403, detail="editing is not allowed")
         if not markdown.strip() or len(markdown.encode("utf-8")) > settings.viewer_max_file_bytes:
             return _render_edit_page(
                 templates,
@@ -407,7 +407,7 @@ def create_app(
                 session.credential.token,
             )
         except RevisionForbiddenError:
-            raise HTTPException(status_code=403, detail="edição não permitida") from None
+            raise HTTPException(status_code=403, detail="editing is not allowed") from None
         except RevisionConflictError:
             return _render_edit_page(
                 templates,
