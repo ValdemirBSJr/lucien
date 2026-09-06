@@ -436,7 +436,7 @@ case "${1:-}" in
     ;;
   *)
     uso >&2
-    erro "opção desconhecida: $1"
+    erro "unknown option: $1"
     ;;
 esac
 
