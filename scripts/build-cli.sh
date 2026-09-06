@@ -29,10 +29,27 @@ mkdir -p "$BUILD_CACHE_DIR/build" "$BUILD_CACHE_DIR/mod"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 
+# O pacote inteiro é montado DENTRO do contêiner, e só o .tar.gz pronto cruza
+# para o host.
+#
+# Antes o binário era escrito no bind mount, recebia `chmod 0755` ali, e o tar
+# rodava no host. Em Linux funciona; no Windows o bit de execução não persiste
+# através do bind mount, o chmod vira no-op e o tar grava 0644. O resultado é o
+# pior tipo de defeito: build verde, checksum correto, testes passando, e um
+# pacote em que `./lucien` responde "Permission denied" para quem baixou.
+#
+# Aconteceu de verdade nas releases 1.2.0 e 1.3.0. A 1.1.9, construída em
+# Linux, saiu certa -- o que escondeu o problema até alguém instalar do zero.
+#
+# Dentro do contêiner o /tmp é um sistema de arquivos real: o modo gravado no
+# tar é o modo que foi escrito, em qualquer sistema operacional hospedeiro.
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   --mount "type=bind,src=$ROOT_DIR/cli,dst=/src,readonly" \
   --mount "type=bind,src=$TEMP_DIR,dst=/out" \
+  --mount "type=bind,src=$ROOT_DIR/LICENSE,dst=/licencas/LICENSE,readonly" \
+  --mount "type=bind,src=$ROOT_DIR/NOTICE,dst=/licencas/NOTICE,readonly" \
+  --mount "type=bind,src=$ROOT_DIR/THIRD-PARTY-NOTICES.txt,dst=/licencas/THIRD-PARTY-NOTICES.txt,readonly" \
   --mount "type=bind,src=$BUILD_CACHE_DIR/build,dst=/go-build" \
   --mount "type=bind,src=$BUILD_CACHE_DIR/mod,dst=/go-mod" \
   --workdir /src \
@@ -48,24 +65,19 @@ docker run --rm \
       target_os=${target%/*}
       target_arch=${target#*/}
       package_name="lucien_${VERSION}_${target_os}_${target_arch}"
-      mkdir -p "/out/${package_name}"
+      package_dir="/tmp/pacote/${package_name}"
+      mkdir -p "$package_dir"
       CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
         go build -trimpath -buildvcs=false \
         -ldflags="-s -w -X github.com/lucien-runbook/lucien/cmd.version=$VERSION" \
-        -o "/out/${package_name}/lucien" .
-      chmod 0755 "/out/${package_name}/lucien"
-    done
-  '
+        -o "$package_dir/lucien" .
+      chmod 0755 "$package_dir/lucien"
 
-for target in $TARGETS; do
-  target_os=${target%/*}
-  target_arch=${target#*/}
-  package_name="lucien_${VERSION}_${target_os}_${target_arch}"
-  package_dir="$TEMP_DIR/$package_name"
-  archive="$OUTPUT_DIR/$package_name.tar.gz"
+      cp /licencas/LICENSE /licencas/NOTICE \
+        /licencas/THIRD-PARTY-NOTICES.txt "$package_dir/"
 
-  cat > "$package_dir/LEIA-ME.txt" <<EOF
-Lucien CLI para $target_os/$target_arch
+      cat > "$package_dir/LEIA-ME.txt" <<LEIAME
+Lucien CLI para ${target_os}/${target_arch}
 
 Este pacote contém somente o binário do cliente. Não contém token, certificado ou
 configuração do Hub. Verifique o SHA-256 antes de instalar. Configure API_HOST e
@@ -73,14 +85,38 @@ TLS_CA_FILE no ambiente do operador e distribua somente a CA pública do Hub.
 
 Os pacotes macOS são cross-compilados e não são assinados nem notarizados.
 As licenças do Lucien e das dependências compiladas acompanham este pacote.
-EOF
+LEIAME
 
-  install -m 0644 "$ROOT_DIR/LICENSE" "$package_dir/LICENSE"
-  install -m 0644 "$ROOT_DIR/NOTICE" "$package_dir/NOTICE"
-  install -m 0644 "$ROOT_DIR/THIRD-PARTY-NOTICES.txt" \
-    "$package_dir/THIRD-PARTY-NOTICES.txt"
+      chmod 0644 "$package_dir/LICENSE" "$package_dir/NOTICE" \
+        "$package_dir/THIRD-PARTY-NOTICES.txt" "$package_dir/LEIA-ME.txt"
 
-  tar -C "$TEMP_DIR" -czf "$archive" "$package_name"
+      tar -C /tmp/pacote -czf "/out/${package_name}.tar.gz" "$package_name"
+    done
+  '
+
+# O contêiner escreveu os arquivos prontos; ao host resta conferir o que saiu.
+#
+# A verificação existe porque o defeito anterior era silencioso: nada no build
+# acusava, e o pacote só falhava na mão de quem baixou.
+for target in $TARGETS; do
+  target_os=${target%/*}
+  target_arch=${target#*/}
+  package_name="lucien_${VERSION}_${target_os}_${target_arch}"
+  archive="$TEMP_DIR/$package_name.tar.gz"
+
+  [[ -f "$archive" ]] || erro "package was not produced: $package_name.tar.gz"
+
+  # Caminho relativo de propósito: no Git Bash do Windows o `C:` de um caminho
+  # absoluto é lido pelo tar como nome de host remoto, e ele tenta conectar.
+  modo="$(cd "$TEMP_DIR" && tar -tvzf "$package_name.tar.gz" \
+    | awk -v alvo="$package_name/lucien" '$NF == alvo { print $1 }')"
+  [[ -n "$modo" ]] || erro "binary missing from $package_name.tar.gz"
+  case "$modo" in
+    -rwxr-xr-x) ;;
+    *) erro "binary in $package_name.tar.gz is not executable: $modo" ;;
+  esac
+
+  mv -- "$archive" "$OUTPUT_DIR/$package_name.tar.gz"
 done
 
 checksum_file="$OUTPUT_DIR/lucien_${VERSION}_SHA256SUMS"
