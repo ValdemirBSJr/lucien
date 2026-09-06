@@ -429,7 +429,7 @@ desenvolvimento, mas não é cofre de produção.
 | `SCANNER_QUEUE_TIMEOUT_SECONDS` | secret-scanner | espera máxima por vaga antes de `503`. Padrão `10` |
 | `SLM_NUM_CTX` | upload-worker | janela de contexto da SLM; `0` devolve o padrão do runtime (2048), que corta o prompt em silêncio. Padrão `8192` |
 | `SLM_PROMPT_MAX_CHARS` | upload-worker | teto do log reduzido enviado à SLM. Padrão `8000`; o cálculo está em [Operação](operacao.md) |
-| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub e wiki-builder | funções de domínio aceitas, separadas por vírgula; governa `lucien start -r`, a criação de usuários e o enrollment de jump server. No builder, lista no índice as áreas ainda sem runbook. Padrão `acessos,servidores,redes,suporte` |
+| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub e wiki-builder | funções de domínio aceitas, separadas por vírgula; governa `lucien start -r`, a criação de usuários e o enrollment de jump server. No builder, lista no índice as áreas ainda sem runbook. Padrão `platform,acessos,servidores,redes,suporte`. `platform` é a área do primeiro administrador: declarando uma lista própria sem ela, informe `domain_function` ao criar o administrador — o Hub recusa área não declarada |
 | `RBAC_ENTRY_ROLES_ENABLED` | Hub e portal | `false` (padrão) mantém junior sem publicar criticidade alta e junior/pleno sem revisar; `true` libera ambos, com a revisão restrita ao próprio domínio |
 | `SLM_BASE_URL` | upload-worker | endpoint privado do Ollama |
 | `SLM_MODEL` | upload-worker | modelo usado para extração e enriquecimento revisável |
@@ -452,6 +452,52 @@ desenvolvimento, mas não é cofre de produção.
 | `VIEWER_SESSION_SECRET_FILE` | portal local | arquivo com a chave de sessão; não é token de usuário |
 | `WIKI_REPOSITORY_TOKEN_FILE` | builder compacto | arquivo com token Gitea separado, somente leitura |
 | `EDITOR` | CLI | editor do fluxo de revisão; fallback `vi` |
+| `POSTGRES_DB` | PostgreSQL | nome do banco. Padrão `lucien` |
+| `POSTGRES_USER` | PostgreSQL | usuário do banco. Padrão `lucien` |
+| `DATABASE_URL` | Hub e worker | conexão em texto, alternativa a `DATABASE_URL_FILE`. Prefira o arquivo: variável de ambiente aparece em `docker inspect` |
+| `AUTH_PEPPER` | Hub | segredo do hash de tokens em texto, alternativa a `AUTH_PEPPER_FILE`. Mesma ressalva |
+| `BOOTSTRAP_API_KEY` | Hub | credencial de bootstrap em texto, alternativa a `BOOTSTRAP_API_KEY_FILE`. Mesma ressalva |
+| `GIT_TOKEN` | Hub | token do provedor Git em texto, alternativa a `GIT_TOKEN_FILE`. Mesma ressalva |
+| `GIT_TOKEN_FILE` | Hub | arquivo com o token do provedor Git |
+| `GIT_OWNER` | Hub | organização ou dono do repositório de runbooks. Vazio nos modos sem Git |
+| `GIT_REPO` | Hub | nome do repositório de runbooks. Vazio nos modos sem Git |
+| `GIT_BRANCH` | Hub | branch de publicação. Padrão `main`; precisa coincidir com o gatilho do workflow |
+| `GIT_CA_SOURCE` | Compose | caminho no host da CA que valida o provedor Git, montada como `/trust/git-ca.crt`. Padrão `./certs/ca.crt` |
+| `LOCAL_STORAGE_ROOT` | Hub | raiz dos runbooks no modo `local`. Padrão `/data/playbooks` |
+| `STORAGE_PROVIDER` | Hub | destino da publicação: `local`, `gitea` ou `github` |
+| `MAX_ASSET_BYTES` | Hub | tamanho máximo de uma imagem anexada. Padrão `5242880` (5 MiB) |
+| `MAX_ASSETS_PER_PUBLICATION` | Hub | quantidade máxima de imagens por publicação. Padrão `20` |
+| `MAX_ASSET_DIMENSION_PX` | Hub | maior lado aceito de uma imagem, em pixels. Padrão `8192` |
+| `OCR_LANGUAGES` | Hub | idiomas do Tesseract na varredura de segredo em imagem, no formato do próprio Tesseract. Padrão `por+eng` |
+| `SCANNER_TIMEOUT_SECONDS` | secret-scanner | tempo máximo de uma execução do gitleaks. Padrão `5` |
+| `ALLOW_INSECURE_DEV` | Hub | desativa exigências de TLS para desenvolvimento. **Nunca use fora de máquina descartável**: sem ela o Hub recusa subir sem certificado, que é o comportamento correto em produção. Padrão `false` |
+| `CERTS_DIR` | Compose | diretório no host com o material TLS montado nos serviços. Padrão `./certs` |
+| `SECRETS_DIR` | Compose | diretório no host com os segredos individuais. Padrão `./secrets`, modo `0700` |
+| `CERT_DNS` | certgen | nomes DNS no SAN do certificado, separados por vírgula. Padrão `hub,runbook-viewer,localhost`; o instalador acrescenta o FQDN escolhido. `runbook-viewer` é exigido pelo `viewer-proxy`, que verifica TLS ao encaminhar |
+| `CERT_IP` | certgen | IPs no SAN do certificado. Padrão `127.0.0.1` |
+| `HUB_BIND_ADDRESS` | Compose | interface onde o Hub publica a TCP/8443. Padrão `127.0.0.1`; `0.0.0.0` expõe na rede e exige firewall |
+| `VIEWER_BIND_ADDRESS` | Compose | interface onde o portal publica a TCP/9091. Padrão `127.0.0.1` |
+| `WIKI_BIND_ADDRESS` | Compose | interface onde a wiki compacta publica a TCP/9092. Padrão `127.0.0.1` |
+| `VIEWER_HUB_URL` | portal | URL interna do Hub usada pelo portal. Padrão `https://hub:8443` |
+| `VIEWER_SESSION_TTL_SECONDS` | portal | validade da sessão do portal. Padrão `900` |
+| `VIEWER_MAX_DOCUMENTS` | portal | teto de documentos que o portal indexa; acima dele responde erro em vez de degradar. Padrão `10000` |
+| `VIEWER_MAX_FILE_BYTES` | portal | tamanho máximo de um runbook lido pelo portal. Padrão `1048576` |
+| `VIEWER_SESSION_SECRET_FILE` | portal | arquivo com o segredo que assina a sessão do portal |
+| `WIKI_REPOSITORY_URL` | wiki-builder | URL HTTPS de clone do repositório da wiki. Vazio fora do modo compacto |
+| `WIKI_REPOSITORY_BRANCH` | wiki-builder | branch observada pelo builder. Padrão `main` |
+| `WIKI_REPOSITORY_USER` | wiki-builder | usuário de serviço, somente leitura, usado no clone |
+| `WIKI_POLL_SECONDS` | wiki-builder | intervalo entre verificações do repositório. Padrão `60` |
+| `WIKI_BUILD_TIMEOUT_SECONDS` | wiki-builder | tempo máximo de uma compilação MkDocs. Padrão `120` |
+| `WIKI_RELEASE_RETENTION` | wiki-builder | quantas compilações anteriores permanecem em disco para rollback. Padrão `5` |
+| `WIKI_MAX_FILE_BYTES` | wiki-builder | tamanho máximo de um arquivo do repositório. Padrão `1048576` |
+| `WIKI_MAX_SOURCE_BYTES` | wiki-builder | tamanho máximo da árvore de origem. Padrão `268435456` (256 MiB) |
+| `WIKI_MAX_SOURCE_FILES` | wiki-builder | quantidade máxima de arquivos na árvore de origem. Padrão `10000` |
+| `WIKI_MAX_REPOSITORY_BYTES` | wiki-builder | tamanho máximo do repositório clonado. Padrão `536870912` (512 MiB) |
+| `LUCIEN_IMAGE_TAG` | Compose | tag imutável das imagens construídas localmente, no formato `src-<hash>`. O instalador a calcula a partir do conteúdo das fontes; trocá-la exige reconstruir **todas** as imagens dos perfis ativos, não apenas o Hub |
+| `LUCIEN_TINY_CPU_LIMIT` | Compose | teto de CPU da classe `tiny`. Padrão `0.50` |
+| `LUCIEN_SMALL_CPU_LIMIT` | Compose | teto de CPU da classe `small`. Padrão `1.00` |
+| `LUCIEN_MEDIUM_CPU_LIMIT` | Compose | teto de CPU da classe `medium`. Padrão `1.00`; o instalador nunca gera valor acima do que o daemon Docker informa |
+| `LUCIEN_SLM_CPU_LIMIT` | Compose | teto de CPU da classe `slm`. Padrão `1.00` |
 
 O instalador mantém configuração no `.env` e segredos individuais em `secrets/`,
 montados pelo Docker Compose em `/run/secrets`. Isso impede exposição no

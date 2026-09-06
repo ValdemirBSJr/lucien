@@ -196,7 +196,7 @@ def test_login_exige_csrf_e_nao_aceita_username_divergente(tmp_path: Path) -> No
 
     assert missing_csrf.status_code == 400
     assert divergent.status_code == 401
-    assert "Usuário ou token inválido" in divergent.text
+    assert "Invalid username or token" in divergent.text
 
 
 def test_login_limita_payload_antes_de_processar_formulario(tmp_path: Path) -> None:

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,18 +10,34 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Página inicial do Lucien Runbooks">
-        <img class="brand-logo" src="{{ url_for('static', path='/logo.png') }}" alt="Logo do Lucien">
+      <a class="brand" href="/" aria-label="Lucien Runbooks home">
+        <img class="brand-logo" src="{{ url_for('static', path='/logo.png') }}" alt="Lucien logo">
         <span>Lucien Runbooks</span>
       </a>
       <div class="topbar-actions">
         {% if user %}
           <span class="signed-user">{{ user.username }}</span>
           <form action="/logout" method="post">
-            <button class="button button-quiet" type="submit">Sair</button>
+            <button class="button button-quiet" type="submit">Sign out</button>
           </form>
         {% endif %}
-        <button id="theme-toggle" class="button button-quiet" type="button" aria-label="Alternar tema">Tema</button>
+        {#
+          role="switch" com aria-checked, e nao um botao comum: o leitor de
+          tela anuncia o estado ("ligado"/"desligado") em vez de so ler um
+          rotulo que muda sozinho. O texto visivel fica fixo; quem diz em que
+          posicao esta e o proprio controle.
+        #}
+        <button
+          id="theme-toggle"
+          class="theme-switch"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Dark theme"
+        >
+          <span class="theme-switch-label" aria-hidden="true">Dark</span>
+          <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
+        </button>
       </div>
     </header>
     {% block shell %}

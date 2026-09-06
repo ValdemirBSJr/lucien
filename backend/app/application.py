@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.domain.models import (
+    ADMIN_DOMAIN_FUNCTION,
     DEFAULT_DOMAIN_FUNCTIONS,
     Job,
     PublicationIdentity,
@@ -124,8 +125,32 @@ class IdentityService:
             )
 
     async def bootstrap_admin(
-        self, username: str, domain_function: str
+        self, username: str, domain_function: str | None = None
     ) -> tuple[User, str]:
+        # O administrador tem area propria: ele nao publica manobra de acesso
+        # nem de rede. Quem quiser outra passa domain_function explicitamente.
+        #
+        # Recusar e melhor que cair na primeira area da lista: numa instalacao
+        # com RUNBOOK_DOMAIN_FUNCTIONS proprio, o administrador apareceria
+        # dentro de uma area operacional sem ninguem ter pedido, e isso so
+        # seria notado quando ele publicasse.
+        if domain_function is None:
+            domain_function = ADMIN_DOMAIN_FUNCTION
+            if domain_function not in self._domain_functions:
+                declaradas = ", ".join(self._domain_functions) or "(nenhuma)"
+                raise ValidationError(
+                    f"the administrator area '{domain_function}' is not declared; "
+                    f"add it to RUNBOOK_DOMAIN_FUNCTIONS or pass domain_function "
+                    f"explicitly. Declared: {declaradas}"
+                )
+
+        # As mesmas verificacoes que create_user ja fazia. A ausencia delas
+        # aqui era o defeito: o comentario de _require_known_domain avisa que
+        # publicar em area nao declarada cai num diretorio que ninguem pediu,
+        # e o bootstrap era justamente o caminho que escapava.
+        self._validate_identity(username, domain_function)
+        self._require_known_domain(domain_function)
+
         api_token, token_hash = self._prepare_permanent_credentials(
             username, domain_function
         )

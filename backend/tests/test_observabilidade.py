@@ -48,7 +48,7 @@ def _admin(client: TestClient) -> str:
     resposta = client.post(
         "/bootstrap/admin",
         headers={"Authorization": f"Bearer {'b' * 32}"},
-        json={"username": "root-admin", "domain_function": "plataforma"},
+        json={"username": "root-admin", "domain_function": "platform"},
     )
     assert resposta.status_code == 201, resposta.text
     return resposta.json()["api_token"]

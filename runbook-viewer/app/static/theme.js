@@ -17,21 +17,25 @@
       : "light";
   };
 
-  const button = document.getElementById("theme-toggle");
-  if (!button) return;
+  const control = document.getElementById("theme-toggle");
+  if (!control) return;
 
-  const updateLabel = () => {
-    const next = preferredTheme() === "dark" ? "claro" : "escuro";
-    button.textContent = `Tema ${next}`;
-    button.setAttribute("aria-label", `Ativar tema ${next}`);
+  // O rotulo visivel nao muda: quem diz em que posicao o controle esta e o
+  // aria-checked, que o leitor de tela anuncia como ligado ou desligado. Um
+  // rotulo que se reescreve a cada clique obriga o usuario a deduzir se ele
+  // descreve o estado atual ou a proxima acao.
+  const refletirEstado = () => {
+    control.setAttribute(
+      "aria-checked",
+      preferredTheme() === "dark" ? "true" : "false",
+    );
   };
 
-  updateLabel();
-  button.addEventListener("click", () => {
+  refletirEstado();
+  control.addEventListener("click", () => {
     const next = preferredTheme() === "dark" ? "light" : "dark";
     root.dataset.theme = next;
     window.localStorage.setItem(storageKey, next);
-    updateLabel();
+    refletirEstado();
   });
 })();
-

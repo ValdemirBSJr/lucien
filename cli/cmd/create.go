@@ -30,9 +30,10 @@ func newCreateCommand() *cobra.Command {
 			}
 			fmt.Fprintf(
 				command.OutOrStdout(),
-				"Administrator %s created.\n"+
+				"Administrator %s created in area %s.\n"+
 					"Permanent API token (shown once):\n%s\n",
 				created.Username,
+				created.DomainFunction,
 				created.APIToken,
 			)
 			host, err := configuredAPIHost()

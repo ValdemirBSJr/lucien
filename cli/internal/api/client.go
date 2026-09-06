@@ -220,7 +220,11 @@ func (c *Client) BootstrapAdmin(ctx context.Context, username string) (CreatedUs
 		ctx,
 		http.MethodPost,
 		c.endpoint("bootstrap", "admin"),
-		map[string]string{"username": username, "domain_function": "plataforma"},
+		// Sem `domain_function`: quem sabe quais areas existem e o Hub, pela
+		// RUNBOOK_DOMAIN_FUNCTIONS dele. Antes o CLI mandava "plataforma"
+		// fixo, que nem pertence a lista padrao -- o primeiro
+		// administrador nascia numa area que o Hub nao reconhecia.
+		map[string]string{"username": username},
 		&response,
 		nil,
 	)

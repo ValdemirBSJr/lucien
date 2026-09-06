@@ -23,11 +23,11 @@ async def test_publish_with_assets_writes_files_alongside_markdown(tmp_path: Pat
         _CREATED_AT,
         "# runbook\n",
         artifact_name="exemplo",
-        domain_function="plataforma",
+        domain_function="platform",
         assets=assets,
     )
 
-    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "plataforma")
+    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "platform")
     md_path = tmp_path / md_relative
     asset_path = md_path.parent / "assets" / _JOB_ID / "shot.png"
 
@@ -56,7 +56,7 @@ async def test_assets_are_written_before_the_markdown_file(
         _CREATED_AT,
         "# runbook\n",
         artifact_name="exemplo",
-        domain_function="plataforma",
+        domain_function="platform",
         assets=assets,
     )
 
@@ -67,7 +67,7 @@ async def test_assets_are_written_before_the_markdown_file(
 
 async def test_retry_after_partial_asset_write_converges(tmp_path: Path) -> None:
     provider = _provider(tmp_path)
-    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "plataforma")
+    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "platform")
     asset_dir = (tmp_path / md_relative).parent / "assets" / _JOB_ID
     asset_dir.mkdir(parents=True)
     (asset_dir / "shot.png").write_bytes(b"fake-png-bytes")  # ja gravado numa tentativa anterior
@@ -78,7 +78,7 @@ async def test_retry_after_partial_asset_write_converges(tmp_path: Path) -> None
         _CREATED_AT,
         "# runbook\n",
         artifact_name="exemplo",
-        domain_function="plataforma",
+        domain_function="platform",
         assets=assets,
     )
 
@@ -88,7 +88,7 @@ async def test_retry_after_partial_asset_write_converges(tmp_path: Path) -> None
 
 async def test_conflicting_asset_content_raises(tmp_path: Path) -> None:
     provider = _provider(tmp_path)
-    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "plataforma")
+    md_relative = playbook_relative_path(_JOB_ID, _CREATED_AT, "exemplo", "platform")
     asset_dir = (tmp_path / md_relative).parent / "assets" / _JOB_ID
     asset_dir.mkdir(parents=True)
     (asset_dir / "shot.png").write_bytes(b"different-bytes-already-there")
@@ -100,7 +100,7 @@ async def test_conflicting_asset_content_raises(tmp_path: Path) -> None:
             _CREATED_AT,
             "# runbook\n",
             artifact_name="exemplo",
-            domain_function="plataforma",
+            domain_function="platform",
             assets=assets,
         )
 
@@ -114,6 +114,6 @@ async def test_invalid_asset_filename_is_rejected(tmp_path: Path) -> None:
             _CREATED_AT,
             "# runbook\n",
             artifact_name="exemplo",
-            domain_function="plataforma",
+            domain_function="platform",
             assets=assets,
         )

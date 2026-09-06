@@ -51,7 +51,7 @@ async def test_admin_ve_todos_os_dominios(tmp_path: Path, repository: SQLAlchemy
     service = _service(repository, LocalProvider(tmp_path / "playbooks"))
     autor_servidores = await _user(repository, "autor-servidores", RoleLevel.SENIOR, "servidores")
     autor_redes = await _user(repository, "autor-redes", RoleLevel.SENIOR, "redes")
-    admin = await _user(repository, "admin-global", RoleLevel.ADMIN, "plataforma")
+    admin = await _user(repository, "admin-global", RoleLevel.ADMIN, "platform")
 
     publicado_servidores = await _publish(repository, service, autor_servidores, "job-servidores")
     publicado_redes = await _publish(repository, service, autor_redes, "job-redes")

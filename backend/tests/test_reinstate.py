@@ -38,7 +38,7 @@ async def test_readmissao_devolve_acesso_sem_ressuscitar_credencial_antiga(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     await repository.create_user(
-        "admin-raiz", "api-hash-admin", RoleLevel.ADMIN, "plataforma"
+        "admin-raiz", "api-hash-admin", RoleLevel.ADMIN, "platform"
     )
     user = await repository.create_user(
         "readmitido", "api-hash-legado", RoleLevel.PLENO, "servidores"

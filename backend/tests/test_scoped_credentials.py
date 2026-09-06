@@ -123,7 +123,7 @@ async def test_revogacao_invalida_credencial_de_qualquer_escopo(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     await repository.create_user(
-        "admin-raiz", "api-hash-admin", RoleLevel.ADMIN, "plataforma"
+        "admin-raiz", "api-hash-admin", RoleLevel.ADMIN, "platform"
     )
     user = await repository.create_user(
         "vai-ser-revogado", "api-hash-legado", RoleLevel.PLENO, "servidores"

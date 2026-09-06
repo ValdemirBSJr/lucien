@@ -77,11 +77,21 @@ class SecurityContext:
 # Manter o padrao igual ao que estava fixo no codigo evita que uma
 # instalacao existente perca dominios ao atualizar.
 DEFAULT_DOMAIN_FUNCTIONS: tuple[str, ...] = (
+    "platform",
     "acessos",
     "servidores",
     "redes",
     "suporte",
 )
+
+# Area do primeiro administrador. Ele nao pertence a uma area operacional --
+# nao publica manobra de acesso nem de rede --, entao ganha a propria.
+#
+# Antes o bootstrap usava "plataforma" fixo, que nao estava declarado em lugar
+# nenhum: o administrador nascia numa area que o Hub nao reconhecia, e a
+# publicacao dele cairia num diretorio nunca declarado. Acrescentar so um nome
+# a lista padrao nao remove dominio de instalacao existente.
+ADMIN_DOMAIN_FUNCTION: str = "platform"
 
 
 @dataclass(frozen=True, slots=True)
