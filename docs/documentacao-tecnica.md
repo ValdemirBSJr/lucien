@@ -429,7 +429,7 @@ desenvolvimento, mas não é cofre de produção.
 | `SCANNER_QUEUE_TIMEOUT_SECONDS` | secret-scanner | espera máxima por vaga antes de `503`. Padrão `10` |
 | `SLM_NUM_CTX` | upload-worker | janela de contexto da SLM; `0` devolve o padrão do runtime (2048), que corta o prompt em silêncio. Padrão `8192` |
 | `SLM_PROMPT_MAX_CHARS` | upload-worker | teto do log reduzido enviado à SLM. Padrão `8000`; o cálculo está em [Operação](operacao.md) |
-| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub e wiki-builder | funções de domínio aceitas, separadas por vírgula; governa `lucien start -r`, a criação de usuários e o enrollment de jump server. No builder, lista no índice as áreas ainda sem runbook. Padrão `acessos,servidores,redes,suporte` |
+| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub e wiki-builder | funções de domínio aceitas, separadas por vírgula; governa `lucien start -r`, a criação de usuários e o enrollment de jump server. No builder, lista no índice as áreas ainda sem runbook. Padrão `platform,acessos,servidores,redes,suporte`. `platform` é a área do primeiro administrador: declarando uma lista própria sem ela, informe `domain_function` ao criar o administrador — o Hub recusa área não declarada |
 | `RBAC_ENTRY_ROLES_ENABLED` | Hub e portal | `false` (padrão) mantém junior sem publicar criticidade alta e junior/pleno sem revisar; `true` libera ambos, com a revisão restrita ao próprio domínio |
 | `SLM_BASE_URL` | upload-worker | endpoint privado do Ollama |
 | `SLM_MODEL` | upload-worker | modelo usado para extração e enriquecimento revisável |

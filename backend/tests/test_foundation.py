@@ -571,8 +571,8 @@ async def test_bootstrap_concorrente_cria_somente_um_admin(
     second_service = IdentityService(repository, "pepper-de-teste")
 
     results = await asyncio.gather(
-        first_service.bootstrap_admin("admin-a", "plataforma"),
-        second_service.bootstrap_admin("admin-b", "plataforma"),
+        first_service.bootstrap_admin("admin-a", "platform"),
+        second_service.bootstrap_admin("admin-b", "platform"),
         return_exceptions=True,
     )
 
@@ -597,10 +597,10 @@ async def test_bootstrap_postgresql_serializa_repositorios_independentes() -> No
     try:
         results = await asyncio.gather(
             IdentityService(first_repository, "pepper-de-teste").bootstrap_admin(
-                "admin-worker-a", "plataforma"
+                "admin-worker-a", "platform"
             ),
             IdentityService(second_repository, "pepper-de-teste").bootstrap_admin(
-                "admin-worker-b", "plataforma"
+                "admin-worker-b", "platform"
             ),
             return_exceptions=True,
         )
@@ -662,7 +662,7 @@ async def test_auditoria_registra_mutacoes_sem_segredos(
 
     with caplog.at_level(logging.INFO, logger="lucien.audit"):
         admin, admin_token = await service.bootstrap_admin(
-            "root-admin", "plataforma"
+            "root-admin", "platform"
         )
         _, provisional_token, _ = await service.create_user(
             SecurityContext.from_user(admin),
@@ -688,7 +688,7 @@ async def test_recuperacao_offline_rotaciona_apenas_admin_ativo(
 ) -> None:
     pepper = "pepper-de-recuperacao"
     service = IdentityService(repository, pepper)
-    admin, old_token = await service.bootstrap_admin("admin-recovery", "plataforma")
+    admin, old_token = await service.bootstrap_admin("admin-recovery", "platform")
 
     recovered, provisional_token, expires_at = await service.recover_admin_token(
         admin.username
@@ -1276,7 +1276,7 @@ class UnavailableTagInferrer(RunbookEnricher):
 
 async def test_enriquecimento_indisponivel_nao_derruba_o_job(repository) -> None:
     owner = await repository.create_user(
-        f"dono-{id(repository)}", "e" * 64, RoleLevel.PLENO, "plataforma"
+        f"dono-{id(repository)}", "e" * 64, RoleLevel.PLENO, "platform"
     )
     job = await ready_job(
         repository,
@@ -1299,7 +1299,7 @@ async def test_enriquecimento_indisponivel_nao_derruba_o_job(repository) -> None
 
 async def test_enriquecimento_desligado_nao_chama_a_slm(repository) -> None:
     owner = await repository.create_user(
-        f"dono-{id(repository)}", "e" * 64, RoleLevel.PLENO, "plataforma"
+        f"dono-{id(repository)}", "e" * 64, RoleLevel.PLENO, "platform"
     )
     inferrer = StaticTagInferrer()
     job = await ready_job(
@@ -1322,7 +1322,7 @@ async def test_skip_enrichment_por_job_ignora_a_slm_mesmo_habilitada(
     repository,
 ) -> None:
     owner = await repository.create_user(
-        "dono-skip", "f" * 64, RoleLevel.PLENO, "plataforma"
+        "dono-skip", "f" * 64, RoleLevel.PLENO, "platform"
     )
     inferrer = StaticTagInferrer()
     scanner = StaticSecretScanner()
@@ -1358,7 +1358,7 @@ async def test_skip_enrichment_por_job_ignora_a_slm_mesmo_habilitada(
 
 async def test_retry_sem_flag_preserva_a_escolha_do_upload(repository) -> None:
     owner = await repository.create_user(
-        "dono-retry", "a" * 64, RoleLevel.PLENO, "plataforma"
+        "dono-retry", "a" * 64, RoleLevel.PLENO, "platform"
     )
     job = await repository.enqueue_job(
         owner.id, "retry-preserva", "fingerprint-retry", "ciphertext", True
@@ -1520,7 +1520,7 @@ async def test_start_r_admin_cruza_dominios_e_o_artefato_segue_o_pedido(
     tmp_path: Path,
 ) -> None:
     intake = _intake(repository, ("acessos", "servidores"))
-    admin = await _usuario(repository, "admin-global", RoleLevel.ADMIN, "plataforma")
+    admin = await _usuario(repository, "admin-global", RoleLevel.ADMIN, "platform")
 
     job = await intake.enqueue(
         context_for(admin), "cruza-dominio", "docker ps", domain_function="acessos"
@@ -1629,7 +1629,7 @@ async def test_area_adicional_precisa_existir_no_env(
     identity = IdentityService(
         repository, "pepper-de-teste" * 4, ("acessos", "servidores")
     )
-    admin = await _com_areas(repository, "admin-areas", RoleLevel.ADMIN, "plataforma")
+    admin = await _com_areas(repository, "admin-areas", RoleLevel.ADMIN, "platform")
     alvo = await _com_areas(repository, "alvo-areas", RoleLevel.SENIOR, "servidores")
 
     with pytest.raises(ValidationError):
@@ -1646,7 +1646,7 @@ async def test_lista_de_areas_substitui_o_conjunto(
     identity = IdentityService(
         repository, "pepper-de-teste" * 4, ("acessos", "servidores", "roteamento")
     )
-    admin = await _com_areas(repository, "admin-troca", RoleLevel.ADMIN, "plataforma")
+    admin = await _com_areas(repository, "admin-troca", RoleLevel.ADMIN, "platform")
     alvo = await _com_areas(
         repository, "alvo-troca", RoleLevel.SENIOR, "servidores", ("acessos",)
     )
@@ -1965,7 +1965,7 @@ async def test_nome_sobrevive_ao_redirecionamento_por_area(
         "U000004", "servidores", "idem-redirect", "Operador Exemplo de Demonstracao"
     )
     admin = await repository.create_user(
-        "admin-redirect", "d" * 64, RoleLevel.ADMIN, "plataforma"
+        "admin-redirect", "d" * 64, RoleLevel.ADMIN, "platform"
     )
     await repository.update_user_scopes(usuario.id, RoleLevel.SENIOR, None, ("acessos",))
     usuario = await repository.get_user(usuario.id)

@@ -14,8 +14,15 @@ class BootstrapAdminRequest(StrictRequest):
     username: str = Field(
         min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$"
     )
-    domain_function: str = Field(
-        default="plataforma",
+    # Sem valor fixo: quando ausente, o Hub usa a primeira area declarada em
+    # RUNBOOK_DOMAIN_FUNCTIONS.
+    #
+    # O padrao anterior era "plataforma" -- palavra em portugues, numa API que
+    # fala ingles, e que nao pertencia a lista padrao de areas. O primeiro
+    # administrador nascia fora dela, e a publicacao dele caia num diretorio
+    # que o administrador nunca declarou.
+    domain_function: str | None = Field(
+        default=None,
         min_length=3,
         max_length=64,
         pattern=r"^[a-z][a-z0-9_]*$",

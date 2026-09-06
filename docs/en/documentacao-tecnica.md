@@ -441,7 +441,7 @@ development easier, but it is not a production vault.
 | `SCANNER_QUEUE_TIMEOUT_SECONDS` | secret-scanner | maximum wait for a slot before `503`. Default `10` |
 | `SLM_NUM_CTX` | upload-worker | SLM context window; `0` returns the runtime default (2048), which truncates the prompt silently. Default `8192` |
 | `SLM_PROMPT_MAX_CHARS` | upload-worker | ceiling of the reduced log sent to the SLM. Default `8000`; the calculation is in [Operation](operacao.md) |
-| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub and wiki-builder | accepted domain functions, comma-separated; governs `lucien start -r`, user creation, and jump server enrollment. In the builder, it lists in the index the areas that still have no runbook. Default `acessos,servidores,redes,suporte` |
+| `RUNBOOK_DOMAIN_FUNCTIONS` | Hub and wiki-builder | accepted domain functions, comma-separated; governs `lucien start -r`, user creation, and jump server enrollment. In the builder, it lists in the index the areas that still have no runbook. Default `platform,acessos,servidores,redes,suporte`. `platform` is the first administrator's area: if you declare your own list without it, pass `domain_function` when creating the administrator — the Hub refuses an undeclared area |
 | `RBAC_ENTRY_ROLES_ENABLED` | Hub and portal | `false` (default) keeps junior from publishing high criticality and junior/pleno from reviewing; `true` releases both, with the review restricted to their own domain |
 | `SLM_BASE_URL` | upload-worker | private Ollama endpoint |
 | `SLM_MODEL` | upload-worker | model used for extraction and reviewable enrichment |

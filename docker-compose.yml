@@ -81,7 +81,7 @@ services:
       AUTH_PEPPER_FILE: /run/secrets/auth_pepper
       USER_CREATION_ENABLED: ${USER_CREATION_ENABLED:-false}
       RBAC_ENTRY_ROLES_ENABLED: ${RBAC_ENTRY_ROLES_ENABLED:-false}
-      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-acessos,servidores,redes,suporte}
+      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-platform,acessos,servidores,redes,suporte}
       SLM_LANGUAGE_RUNBOOK: ${SLM_LANGUAGE_RUNBOOK:-pt-br}
       MAX_LOG_BYTES: ${MAX_LOG_BYTES:-2097152}
       SECRET_SCANNER_URL: ${SECRET_SCANNER_URL:-http://secret-scanner:8090}
@@ -318,7 +318,7 @@ services:
       WIKI_RELEASE_RETENTION: ${WIKI_RELEASE_RETENTION:-5}
       # Mesma variavel do Hub: um unico valor no .env serve os dois. O
       # builder so a usa para listar no indice as areas ainda vazias.
-      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-acessos,servidores,redes,suporte}
+      RUNBOOK_DOMAIN_FUNCTIONS: ${RUNBOOK_DOMAIN_FUNCTIONS:-platform,acessos,servidores,redes,suporte}
       WIKI_WORKSPACE: /workspace
       WIKI_PUBLISH_ROOT: /publish
     secrets:

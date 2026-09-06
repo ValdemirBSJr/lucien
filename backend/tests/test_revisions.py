@@ -169,9 +169,9 @@ async def test_rbac_dominio_frontmatter_e_imutabilidade(
         repository, "network-senior", RoleLevel.SENIOR, "redes"
     )
     senior = await _user(repository, "server-senior", RoleLevel.SENIOR, "servidores")
-    admin = await _user(repository, "global-admin", RoleLevel.ADMIN, "plataforma")
+    admin = await _user(repository, "global-admin", RoleLevel.ADMIN, "platform")
     platform_senior = await _user(
-        repository, "platform-senior", RoleLevel.SENIOR, "plataforma"
+        repository, "platform-senior", RoleLevel.SENIOR, "platform"
     )
     source = await _publish_base(repository, service, author, "rbac-source")
     original_path = next(playbooks.rglob(f"*--{source.id}.md"))
@@ -348,7 +348,7 @@ async def test_falha_storage_permite_reconciliacao_sem_trocar_autoria(
     stable_service = _service(repository, LocalProvider(playbooks))
     author = await _user(repository, "retry-author", RoleLevel.SENIOR, "servidores")
     editor = await _user(repository, "retry-editor", RoleLevel.SENIOR, "servidores")
-    admin = await _user(repository, "retry-admin", RoleLevel.ADMIN, "plataforma")
+    admin = await _user(repository, "retry-admin", RoleLevel.ADMIN, "platform")
     source = await _publish_base(repository, stable_service, author, "retry-source")
     flaky_service = _service(
         repository, _FlakyStorage(LocalProvider(playbooks), failures=1)

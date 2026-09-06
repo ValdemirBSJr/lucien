@@ -105,7 +105,7 @@ def _revisor() -> PublicationIdentity:
     return PublicationIdentity(
         username="U000009",
         role_level=RoleLevel.ADMIN,
-        domain_function="plataforma",
+        domain_function="platform",
         display_name="Revisora Exemplo de Demonstracao",
     )
 

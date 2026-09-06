@@ -199,7 +199,7 @@ async def test_banco_migrado_continua_operavel(banco: str) -> None:
     repositorio = SQLAlchemyJobRepository(banco)
     try:
         usuario = await repositorio.create_user(
-            "migrado", "h" * 64, RoleLevel.ADMIN, "plataforma"
+            "migrado", "h" * 64, RoleLevel.ADMIN, "platform"
         )
         job = await repositorio.create_job(usuario.id, "runbook", ("ls",), ("linux",))
         assert (await repositorio.get_job(usuario.id, job.id)).name == "runbook"

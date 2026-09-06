@@ -72,7 +72,7 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
         bootstrap = client.post(
             "/bootstrap/admin",
             headers={"Authorization": f"Bearer {'b' * 32}"},
-            json={"username": "root-admin", "domain_function": "plataforma"},
+            json={"username": "root-admin", "domain_function": "platform"},
         )
         assert bootstrap.status_code == 201
         assert bootstrap.headers["cache-control"] == "no-store"
@@ -145,7 +145,7 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
                 json={
                     "username": "tentativa",
                     "role_level": "admin",
-                    "domain_function": "plataforma",
+                    "domain_function": "platform",
                 },
             ).status_code
             == 403
@@ -160,7 +160,17 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
             "language": "en",
             # Lista que autoriza `lucien start -r`; este e o padrao usado
             # quando RUNBOOK_DOMAIN_FUNCTIONS nao e declarada.
-            "domain_functions": ["acessos", "servidores", "redes", "suporte"],
+            #
+            # `platform` esta aqui porque e a area do primeiro administrador:
+            # antes ele nascia em "plataforma", que nao pertencia a lista, e o
+            # Hub aceitava calado.
+            "domain_functions": [
+                "platform",
+                "acessos",
+                "servidores",
+                "redes",
+                "suporte",
+            ],
         }
         assert client.get("/configuration/runbook").status_code == 401
         accepted = client.post(
@@ -249,7 +259,7 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
         second_bootstrap = client.post(
             "/bootstrap/admin",
             headers={"Authorization": f"Bearer {'b' * 32}"},
-            json={"username": "outro-admin", "domain_function": "plataforma"},
+            json={"username": "outro-admin", "domain_function": "platform"},
         )
         assert second_bootstrap.status_code == 409
 
@@ -337,7 +347,7 @@ def test_jump_server_provisiona_pleno_sem_expor_autoridade_admin(
                 """,
                 (
                     (str(uuid4()), "U000002", "senior", "redes"),
-                    (str(uuid4()), "U000003", "admin", "plataforma"),
+                    (str(uuid4()), "U000003", "admin", "platform"),
                 ),
             )
 
@@ -392,10 +402,10 @@ async def _repositorio_com_dois_admins(tmp_path: Path, nome: str):
     )
     await repository.initialize()
     primeiro = await repository.create_user(
-        "admin-a", "a" * 64, RoleLevel.ADMIN, "plataforma"
+        "admin-a", "a" * 64, RoleLevel.ADMIN, "platform"
     )
     segundo = await repository.create_user(
-        "admin-b", "b" * 64, RoleLevel.ADMIN, "plataforma"
+        "admin-b", "b" * 64, RoleLevel.ADMIN, "platform"
     )
     return repository, primeiro, segundo
 
