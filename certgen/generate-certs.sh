@@ -7,7 +7,7 @@ umask 077
 mkdir -p /certs
 
 if [ -e /certs/ca.key ] || [ -e /certs/server.key ]; then
-  echo "Recusado: certificados já existem em /certs. Remova-os conscientemente para rotacionar." >&2
+  echo "Refused: certificates already exist in /certs. Remove them deliberately to rotate." >&2
   exit 1
 fi
 
@@ -63,4 +63,4 @@ chmod 0644 /certs/ca.crt /certs/server.crt
 # O Hub executa com UID 10001 e precisa ler somente sua própria chave.
 chown 10001:10001 /certs/server.key /certs/server.crt
 
-echo "Certificados gerados em /certs. Proteja ca.key fora do host de aplicação."
+echo "Certificates generated in /certs. Keep ca.key protected outside the application host."
