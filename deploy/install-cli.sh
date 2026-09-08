@@ -430,5 +430,16 @@ if confirmar 'Create the first administrator user now'; then
   printf '%s\n' 'Now set USER_CREATION_ENABLED=false in the Hub .env and recreate the hub service only.'
 fi
 
-printf '\nTo use the command in this shell, run:\n  . %q\n' "$env_file"
-printf '%s\n' 'New login shells load the configuration automatically.'
+# Destacado porque e uma acao, nao um aviso -- e vinha se perdendo no fim de
+# uma saida longa. Sem esta linha o `lucien` nao esta no PATH da sessao atual,
+# e quem instalou conclui que a instalacao falhou.
+#
+# Nao da para o proprio script fazer isso: ele roda como filho do shell de
+# quem chamou, e processo filho nao altera o ambiente do pai. O que resta e
+# tornar a instrucao impossivel de nao ver.
+printf '\n%s\n' '--------------------------------------------------------------'
+printf '%s\n\n' '  Installation complete.'
+printf '%s\n\n' '  In THIS shell, load the configuration:'
+printf '      . %q\n\n' "$env_file"
+printf '%s\n' '  New login shells load it automatically.'
+printf '%s\n' '--------------------------------------------------------------'
