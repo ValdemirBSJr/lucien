@@ -261,7 +261,7 @@ To register the remaining users, the administrator runs:
 ```bash
 lucien admin user create operador \
   --role junior \
-  --domain servidores
+  --domain servers
 ```
 
 The provisional credential is shown exactly once, expires in four hours, and must
@@ -467,7 +467,7 @@ file combines that readable name with the full UUID, for example
 `teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`. The provider never
 overwrites divergent content. GitHub, Gitea, and the local page use the same
 hierarchy by trusted domain and year, for example:
-`docs/runbooks/servidores/2026/teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`.
+`docs/runbooks/servers/2026/teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`.
 
 ## 10. Publish
 

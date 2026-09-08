@@ -480,7 +480,7 @@ validate the credential already saved, use `lucien auth status`.
     documentation's language.
 
     ```bash
-    lucien admin user create joao --level senior -r servidores,acessos
+    lucien admin user create joao --level senior -r servers,access
     ```
 
 Once authenticated as an admin:
@@ -488,7 +488,7 @@ Once authenticated as an admin:
 ```bash
 lucien admin user create operador.rede \
   --role junior \
-  --domain redes
+  --domain networks
 ```
 
 The provisional credential appears exactly once, expires in four hours, and allows
@@ -505,7 +505,7 @@ lucien auth status
 Additional administrative operations accept a UUID or a username:
 
 ```bash
-lucien admin user update operador.rede --role pleno --domain redes
+lucien admin user update operador.rede --role pleno --domain networks
 lucien admin user issue-provisional-token operador.rede
 lucien admin user revoke operador.rede --yes
 lucien admin user reinstate operador.rede --yes
@@ -633,10 +633,10 @@ writes the credential to `/etc/lucien/secrets/jump_enrollment_key` (`root:root`,
 On the first LDAP login, the helper queries the Hub by the same POSIX ID. If the
 identity does not exist, it asks exactly once:
 
-1. Access (`acessos`);
-2. Servers (`servidores`);
-3. Network (`redes`);
-4. Support (`suporte`).
+1. Access (`access`);
+2. Servers (`servers`);
+3. Network (`networks`);
+4. Support (`support`).
 
 The numbered labels are what the operator reads; the values in parentheses are
 what travels to the Hub, and they are the same in every installation.
@@ -717,10 +717,10 @@ identifies the subject and is what appears in the wiki index.
 at capture time:
 
 ```bash
-lucien start exemplo -r acessos -d "my publication in another role"
+lucien start exemplo -r access -d "my publication in another role"
 ```
 
-The artifact goes to `<year>/acessos/` instead of the author's domain. Without
+The artifact goes to `<year>/access/` instead of the author's domain. Without
 `-r`, the destination stays your own domain — the usual behavior.
 
 Two rules apply here, and both belong to the Hub, not the CLI:
@@ -730,13 +730,13 @@ is refused and the message lists the available ones. `lucien start` only validat
 the grammar (lowercase, 3 to 64 characters) because it records offline and does
 not know the Hub's configuration.
 
-The domain is a scope of authority, not a preference: a `senior` from `servidores`
-who asks for `-r acessos` gets `403`. Only `admin` publishes outside their own
+The domain is a scope of authority, not a preference: a `senior` from `servers`
+who asks for `-r access` gets `403`. Only `admin` publishes outside their own
 domain. The high-criticality restriction for `junior` still applies on top of
 that, unchanged.
 
 A note on vocabulary, because `-r` uses the word "role" in a specific sense. Here
-**role is the area** — `acessos`, `servidores`, `roteamento` — and it is what
+**role is the area** — `access`, `servers`, `roteamento` — and it is what
 becomes a directory. It is what the code calls `domain_function`.
 
 Do not confuse it with the **permission level** (`junior`, `pleno`, `senior`,
@@ -752,7 +752,7 @@ decision, and it may bear no relation to their title.
 If you serve more than one area, the admin grants both at once:
 
 ```bash
-lucien admin user update U000004 -r servidores,acessos
+lucien admin user update U000004 -r servers,access
 ```
 
 The first one is the primary — the destination without `-r`. Check what you hold:
@@ -762,7 +762,7 @@ lucien auth status
 ```
 
 ```
-Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servidores, acessos.
+Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servers, access.
 ```
 
 ### `lucien stop`

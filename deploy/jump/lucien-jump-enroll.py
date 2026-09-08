@@ -21,11 +21,14 @@ from pathlib import Path
 
 CONFIG_FILE = Path("/etc/lucien/jump.conf")
 TOKEN_FILE = Path("/etc/lucien/secrets/jump_enrollment_key")
+# As areas padrao do Hub, menos `platform`: ela e do administrador, que nao
+# se cadastra por aqui. Quem declara RUNBOOK_DOMAIN_FUNCTIONS proprio precisa
+# ajustar esta lista junto -- o Hub recusa area nao declarada.
 ALLOWED_DOMAINS = {
-    "1": "acessos",
-    "2": "servidores",
-    "3": "redes",
-    "4": "suporte",
+    "1": "access",
+    "2": "servers",
+    "3": "networks",
+    "4": "support",
 }
 
 
@@ -144,7 +147,7 @@ def select_domain() -> str:
             "Select your area in Lucien:\n"
             "  1 - Access\n"
             "  2 - Servers\n"
-            "  3 - Network\n"
+            "  3 - Networks\n"
             "  4 - Support\n"
             "Choice: "
         )

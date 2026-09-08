@@ -255,7 +255,7 @@ Para cadastrar os demais usuários, o administrador executa:
 ```bash
 lucien admin user create operador \
   --role junior \
-  --domain servidores
+  --domain servers
 ```
 
 A credencial provisória é mostrada uma única vez, expira em quatro horas e deve
@@ -453,7 +453,7 @@ arquivo combina esse nome legível com o UUID completo, por exemplo
 `teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`. O provider nunca
 sobrescreve conteúdo divergente. GitHub, Gitea e a página local usam a mesma
 hierarquia por domínio confiável e ano, por exemplo:
-`docs/runbooks/servidores/2026/teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`.
+`docs/runbooks/servers/2026/teste-uso_1--b8b6e6a1-5bd9-47cc-8a50-df1bea1a4055.md`.
 
 ## 10. Publicar
 

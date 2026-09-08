@@ -73,15 +73,23 @@ class SecurityContext:
         return frozenset({self.domain_function, *self.extra_domains})
 
 
-# Lista historica, usada quando RUNBOOK_DOMAIN_FUNCTIONS nao e declarada.
-# Manter o padrao igual ao que estava fixo no codigo evita que uma
-# instalacao existente perca dominios ao atualizar.
+# Lista usada quando RUNBOOK_DOMAIN_FUNCTIONS nao e declarada. O nome da area
+# vira diretorio no destino publicado e aparece no frontmatter, entao segue o
+# idioma do resto do produto -- o portugues aqui era o ultimo residuo dele.
+#
+# RUPTURA para quem dependia do padrao: os usuarios continuam gravados em
+# `servidores`, `acessos`, `redes` ou `suporte`, que deixam de ser areas
+# declaradas, e o Hub passa a recusar a publicacao deles. Quem quiser manter
+# os nomes antigos declara
+# RUNBOOK_DOMAIN_FUNCTIONS=platform,acessos,servidores,redes,suporte -- a
+# variavel sempre venceu o padrao, e nenhuma instalacao que a declara e
+# afetada.
 DEFAULT_DOMAIN_FUNCTIONS: tuple[str, ...] = (
     "platform",
-    "acessos",
-    "servidores",
-    "redes",
-    "suporte",
+    "access",
+    "servers",
+    "networks",
+    "support",
 )
 
 # Area do primeiro administrador. Ele nao pertence a uma area operacional --

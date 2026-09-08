@@ -8,7 +8,7 @@ ALTER TABLE users RENAME COLUMN name TO username;
 ALTER TABLE users RENAME COLUMN api_key_digest TO api_token_hash;
 ALTER TABLE users
     ADD COLUMN role_level VARCHAR(16) NOT NULL DEFAULT 'junior',
-    ADD COLUMN domain_function VARCHAR(64) NOT NULL DEFAULT 'servidores',
+    ADD COLUMN domain_function VARCHAR(64) NOT NULL DEFAULT 'servers',
     ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
 ALTER TABLE users
