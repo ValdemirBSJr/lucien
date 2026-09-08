@@ -121,7 +121,10 @@ async def test_hub_client_obtem_catalogo_publicado_autenticado() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/runbooks/published"
         assert request.headers["Authorization"] == "Bearer luc_token_secreto"
-        return httpx.Response(200, json={"ids": identifiers})
+        # O corpo que o Hub manda hoje, `names` incluso. O portal nao usa o
+        # mapa, mas um teste que omite o campo passa enquanto a listagem real
+        # responde 503.
+        return httpx.Response(200, json={"ids": identifiers, "names": {}})
 
     async with httpx.AsyncClient(
         base_url="https://hub:8443", transport=httpx.MockTransport(handler)

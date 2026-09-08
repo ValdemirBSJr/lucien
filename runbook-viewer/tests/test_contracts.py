@@ -58,6 +58,30 @@ def test_resposta_de_usuario_do_hub_e_aceita() -> None:
     assert list(usuario.extra_domains) == ["acessos", "redes"]
 
 
+def test_catalogo_publicado_do_hub_e_aceito() -> None:
+    """A resposta real de `GET /runbooks/published`, com o mapa de nomes.
+
+    O portal não usa os nomes -- o título dele vem do arquivo em disco --, mas
+    precisa aceitá-los: recusar derruba a listagem inteira.
+    """
+
+    from pydantic import ValidationError
+
+    from app.security import _PublishedCatalogPayload
+
+    payload = json.loads(_carrega("published_catalog.json"))
+    catalogo = _PublishedCatalogPayload.model_validate(payload)
+
+    assert catalogo.ids == [
+        "3e381ebe-0284-4d3b-b304-a13655e3dd4c",
+        "52d1b673-06f4-45ac-96db-73a5a9cf11c0",
+    ]
+
+    # Campo desconhecido continua recusado: é o sinal de que o contrato mudou.
+    with pytest.raises(ValidationError):
+        _PublishedCatalogPayload.model_validate({**payload, "campo_novo": "x"})
+
+
 def test_runbook_publicado_pelo_hub_e_legivel(tmp_path: Path) -> None:
     resumo = _analisa(tmp_path, "frontmatter_publicado.md")
 

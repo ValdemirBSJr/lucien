@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.api.schemas import UserResponse
+from app.api.schemas import PublishedRunbookCatalogResponse, UserResponse
 from app.domain.models import (
     Job,
     JobStatus,
@@ -134,6 +134,27 @@ def test_contrato_resposta_de_usuario() -> None:
     payload = UserResponse.from_domain(_usuario()).model_dump(mode="json")
     _confere(
         "me_response.json",
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+    )
+
+
+def test_contrato_catalogo_publicado() -> None:
+    """O catálogo que o portal lista para decidir o que existe.
+
+    `names` entrou depois, para o editor do app desktop, e o comentário do
+    schema diz que quem só lê `ids` não percebe. Não é verdade quando o outro
+    lado recusa campo desconhecido: a listagem inteira passou a responder 503.
+    """
+
+    payload = PublishedRunbookCatalogResponse(
+        ids=[_ID_PUBLICADO, _ID_RAIZ],
+        names={
+            _ID_PUBLICADO: "consulta-resolucao-dns",
+            _ID_RAIZ: "coleta-de-rota-padrao",
+        },
+    ).model_dump(mode="json")
+    _confere(
+        "published_catalog.json",
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
     )
 
