@@ -82,6 +82,39 @@ def test_catalogo_publicado_do_hub_e_aceito() -> None:
         _PublishedCatalogPayload.model_validate({**payload, "campo_novo": "x"})
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "layout", ["2026/servidores", "servidores/2026", "2026/08"]
+)
+async def test_o_portal_encontra_o_runbook_onde_o_hub_grava(
+    tmp_path: Path, layout: str
+) -> None:
+    """O caminho no disco é contrato, e o Hub já o mudou duas vezes.
+
+    Hoje ele grava `<ano>/<domínio>`; antes gravou `<domínio>/<ano>` e, antes
+    disso, `<ano>/<mês>` -- a lista vive em `legacy_playbook_relative_paths`.
+    Publicação antiga não se move, então o portal precisa dos três.
+
+    Passar pelo parser não prova nada aqui: ele recebe o caminho pronto. Quem
+    decide o que chega até ele é o caminhador, e foi ele que ficou para trás
+    na inversão -- nada publicado no modo local aparecia no portal.
+    """
+
+    from app.repository import RunbookRepository
+
+    identificador = "3e381ebe-0284-4d3b-b304-a13655e3dd4c"
+    destino = tmp_path / layout
+    destino.mkdir(parents=True, exist_ok=True)
+    (destino / f"consulta-resolucao-dns--{identificador}.md").write_text(
+        _carrega("frontmatter_publicado.md"), encoding="utf-8"
+    )
+
+    repositorio = RunbookRepository(tmp_path, 10, 1024 * 1024)
+    encontrados = await repositorio.list_runbooks(frozenset({identificador}))
+
+    assert [resumo.id for resumo in encontrados] == [identificador]
+
+
 def test_runbook_publicado_pelo_hub_e_legivel(tmp_path: Path) -> None:
     resumo = _analisa(tmp_path, "frontmatter_publicado.md")
 

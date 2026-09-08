@@ -431,29 +431,38 @@ def _runbook_id_from_stem(stem: str) -> str | None:
 
 
 def _runbook_file_entries(root: Path) -> Iterator[os.DirEntry[str]]:
-    """Percorre somente domain/ano e o legado ano/mês, sem seguir symlinks."""
+    """Percorre os três layouts que o Hub já gravou, sem seguir symlinks.
+
+    O atual é `<ano>/<domínio>`. Antes dele veio `<domínio>/<ano>`, e antes
+    disso `<ano>/<mês>` -- a lista está em `legacy_playbook_relative_paths`,
+    no Hub. Publicação antiga não se move: o artefato é imutável e a URL dele
+    pode já estar anotada em outro lugar, então o portal precisa dos três.
+
+    O segundo nível decide entre os dois primeiros layouts, porque um ano
+    (`^[0-9]{4}$`) nunca casa com um domínio (`^[a-z]...`) e vice-versa.
+    """
 
     for first in _safe_children(root):
         if not first.is_dir(follow_symlinks=False):
             continue
-        if _DOMAIN_PATTERN.fullmatch(first.name):
-            for year in _safe_children(Path(first.path)):
-                if not year.is_dir(
-                    follow_symlinks=False
-                ) or not _YEAR_PATTERN.fullmatch(year.name):
-                    continue
-                for entry in _safe_children(Path(year.path)):
-                    if entry.is_file(follow_symlinks=False):
-                        yield entry
+        ano_primeiro = bool(_YEAR_PATTERN.fullmatch(first.name))
+        if not ano_primeiro and not _DOMAIN_PATTERN.fullmatch(first.name):
             continue
-        if not _YEAR_PATTERN.fullmatch(first.name):
-            continue
-        for month in _safe_children(Path(first.path)):
-            if not month.is_dir(
-                follow_symlinks=False
-            ) or not _MONTH_PATTERN.fullmatch(month.name):
+        for second in _safe_children(Path(first.path)):
+            if not second.is_dir(follow_symlinks=False):
                 continue
-            for entry in _safe_children(Path(month.path)):
+            if ano_primeiro:
+                # <ano>/<domínio> (atual) ou <ano>/<mês> (o mais antigo).
+                aceito = bool(
+                    _DOMAIN_PATTERN.fullmatch(second.name)
+                    or _MONTH_PATTERN.fullmatch(second.name)
+                )
+            else:
+                # <domínio>/<ano>, a geração anterior à inversão.
+                aceito = bool(_YEAR_PATTERN.fullmatch(second.name))
+            if not aceito:
+                continue
+            for entry in _safe_children(Path(second.path)):
                 if entry.is_file(follow_symlinks=False):
                     yield entry
 
