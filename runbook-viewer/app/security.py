@@ -95,6 +95,11 @@ class _PublishedCatalogPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ids: list[str]
+    # O Hub manda `names` junto desde que o editor do app desktop passou a
+    # precisar do nome do runbook. O portal nao usa -- o titulo dele vem do
+    # arquivo em disco --, mas precisa declarar: com extra="forbid", um campo
+    # aditivo do Hub derruba a listagem inteira em vez de passar despercebido.
+    names: dict[str, str] = Field(default_factory=dict)
 
 
 class HubClient:

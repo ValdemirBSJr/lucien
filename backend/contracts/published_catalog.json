@@ -1,0 +1,10 @@
+{
+  "ids": [
+    "3e381ebe-0284-4d3b-b304-a13655e3dd4c",
+    "52d1b673-06f4-45ac-96db-73a5a9cf11c0"
+  ],
+  "names": {
+    "3e381ebe-0284-4d3b-b304-a13655e3dd4c": "consulta-resolucao-dns",
+    "52d1b673-06f4-45ac-96db-73a5a9cf11c0": "coleta-de-rota-padrao"
+  }
+}
