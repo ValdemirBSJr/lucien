@@ -231,10 +231,10 @@ async def repository(tmp_path: Path):
 
 async def test_owner_id_isola_jobs(repository: SQLAlchemyJobRepository) -> None:
     alice = await repository.create_user(
-        "alice", "a" * 64, RoleLevel.JUNIOR, "servidores"
+        "alice", "a" * 64, RoleLevel.JUNIOR, "servers"
     )
     bob = await repository.create_user(
-        "bob", "b" * 64, RoleLevel.PLENO, "redes"
+        "bob", "b" * 64, RoleLevel.PLENO, "networks"
     )
     job = await repository.create_job(
         alice.id, "provision-01", ("docker ps",), ("docker",)
@@ -248,10 +248,10 @@ async def test_listagem_ativa_isola_usuario_e_inclui_estados_operacionais(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     alice = await repository.create_user(
-        "alice-active", "1" * 64, RoleLevel.JUNIOR, "servidores"
+        "alice-active", "1" * 64, RoleLevel.JUNIOR, "servers"
     )
     bob = await repository.create_user(
-        "bob-active", "2" * 64, RoleLevel.PLENO, "redes"
+        "bob-active", "2" * 64, RoleLevel.PLENO, "networks"
     )
     processing = await repository.enqueue_job(
         alice.id, "processando", "fingerprint-processing", "ciphertext"
@@ -282,7 +282,7 @@ async def test_upload_assincrono_e_idempotente(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     user = await repository.create_user(
-        "assincrono", "0" * 64, RoleLevel.SENIOR, "servidores"
+        "assincrono", "0" * 64, RoleLevel.SENIOR, "servers"
     )
     cipher = AESGCMUploadCipher("test-secret-" * 4)
     scanner = StaticSecretScanner()
@@ -331,7 +331,7 @@ async def test_log_vazio_produz_runbook_visual_sem_chamar_extrator(
             )
 
     user = await repository.create_user(
-        "visual", "9" * 64, RoleLevel.SENIOR, "servidores"
+        "visual", "9" * 64, RoleLevel.SENIOR, "servers"
     )
     job = await ready_job(
         repository,
@@ -354,7 +354,7 @@ async def test_enqueue_com_log_vazio_nao_manda_string_vazia_ao_scanner(
     "scanner indisponível", uma mensagem enganosa para um bug de chamada."""
 
     user = await repository.create_user(
-        "visual-scanner", "6" * 64, RoleLevel.SENIOR, "servidores"
+        "visual-scanner", "6" * 64, RoleLevel.SENIOR, "servers"
     )
     scanner = StaticSecretScanner()
     job = await ready_job(
@@ -383,7 +383,7 @@ async def test_log_nao_vazio_sem_comandos_extraidos_ainda_falha(
             return ()
 
     user = await repository.create_user(
-        "log-sem-comando", "7" * 64, RoleLevel.SENIOR, "servidores"
+        "log-sem-comando", "7" * 64, RoleLevel.SENIOR, "servers"
     )
     job = await ready_job(
         repository,
@@ -413,7 +413,7 @@ async def test_worker_persiste_somente_saidas_limitadas_e_sanitizadas(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     user = await repository.create_user(
-        "outputworker", "8" * 64, RoleLevel.SENIOR, "servidores"
+        "outputworker", "8" * 64, RoleLevel.SENIOR, "servers"
     )
     job = await ready_job(
         repository,
@@ -438,7 +438,7 @@ async def test_job_falha_e_pode_ser_reenfileirado(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     user = await repository.create_user(
-        "retryworker", "1" * 64, RoleLevel.SENIOR, "servidores"
+        "retryworker", "1" * 64, RoleLevel.SENIOR, "servers"
     )
     cipher = AESGCMUploadCipher("test-secret-" * 4)
     scanner = StaticSecretScanner()
@@ -480,7 +480,7 @@ async def test_publicacao_repetida_e_idempotente(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "operador", "c" * 64, RoleLevel.SENIOR, "servidores"
+        "operador", "c" * 64, RoleLevel.SENIOR, "servers"
     )
     extractor = StaticExtractor()
     tag_inferrer = StaticTagInferrer()
@@ -529,7 +529,7 @@ docker ps
     published_files = list((tmp_path / "playbooks").rglob("*.md"))
     assert len(published_files) == 1
     assert published_files[0].relative_to(tmp_path / "playbooks").as_posix() == (
-        f"{job.created_at.year}/servidores/cluster-20260101--{job.id}.md"
+        f"{job.created_at.year}/servers/cluster-20260101--{job.id}.md"
     )
     published_content = published_files[0].read_text(encoding="utf-8")
     assert "segredo-final" not in published_content
@@ -537,7 +537,7 @@ docker ps
     assert f'id: "{job.id}"' in published_content
     assert 'autor: "operador"' in published_content
     assert 'nivel_autor: "senior"' in published_content
-    assert 'funcao: "servidores"' in published_content
+    assert 'funcao: "servers"' in published_content
     assert 'tags_inferidas: ["docker", "kubernetes"]' in published_content
     frontmatter = published_content.splitlines()[:11]
     assert frontmatter[0] == "---"
@@ -627,7 +627,7 @@ async def test_postgresql_entrega_job_a_um_unico_worker() -> None:
     await second_repository.initialize()
     try:
         user = await first_repository.create_user(
-            "worker-queue", "2" * 64, RoleLevel.SENIOR, "servidores"
+            "worker-queue", "2" * 64, RoleLevel.SENIOR, "servers"
         )
         cipher = AESGCMUploadCipher("test-secret-" * 4)
         sealed = cipher.seal(user.id, "queue-race", "docker ps", None)
@@ -668,7 +668,7 @@ async def test_auditoria_registra_mutacoes_sem_segredos(
             SecurityContext.from_user(admin),
             "operador-x",
             RoleLevel.PLENO,
-            "servidores",
+            "servers",
         )
 
     events = [
@@ -714,7 +714,7 @@ async def test_recuperacao_offline_rotaciona_apenas_admin_ativo(
         SecurityContext.from_user(admin),
         "operador-recovery",
         RoleLevel.SENIOR,
-        "servidores",
+        "servers",
     )
     with pytest.raises(ForbiddenError):
         await service.recover_admin_token(operator.username)
@@ -731,7 +731,7 @@ async def test_token_provisorio_expira_e_nao_pode_ser_reutilizado(
         provisional_hash,
         datetime.now(UTC) - timedelta(seconds=1),
         RoleLevel.JUNIOR,
-        "servidores",
+        "servers",
     )
 
     with pytest.raises(AuthenticationError, match="expirado"):
@@ -771,7 +771,7 @@ async def test_falha_de_storage_nao_prende_conteudo_da_reserva(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "resiliente", "h" * 64, RoleLevel.SENIOR, "servidores"
+        "resiliente", "h" * 64, RoleLevel.SENIOR, "servers"
     )
     storage = FlakyStorage(LocalProvider(tmp_path / "playbooks"), failures=1)
     scanner = StaticSecretScanner()
@@ -812,7 +812,7 @@ async def test_mesma_chave_nao_aceita_outro_conteudo_enquanto_pending(
     repository: SQLAlchemyJobRepository,
 ) -> None:
     user = await repository.create_user(
-        "idempotente", "i" * 64, RoleLevel.SENIOR, "servidores"
+        "idempotente", "i" * 64, RoleLevel.SENIOR, "servers"
     )
     job = await repository.create_job(
         user.id, "job-idempotente", ("echo ok",), ("shell",)
@@ -888,7 +888,7 @@ async def test_force_cancela_job_em_processamento_e_remove_fila(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "cancelador", "7" * 64, RoleLevel.SENIOR, "servidores"
+        "cancelador", "7" * 64, RoleLevel.SENIOR, "servers"
     )
     cipher = AESGCMUploadCipher("test-secret-" * 4)
     scanner = StaticSecretScanner()
@@ -919,7 +919,7 @@ async def test_worker_encerra_sem_ressuscitar_job_cancelado(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "cancelamento-race", "8" * 64, RoleLevel.SENIOR, "servidores"
+        "cancelamento-race", "8" * 64, RoleLevel.SENIOR, "servers"
     )
     cipher = AESGCMUploadCipher("test-secret-" * 4)
     scanner = StaticSecretScanner()
@@ -958,7 +958,7 @@ async def test_junior_nao_publica_operacao_de_criticidade_alta(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "junior", "e" * 64, RoleLevel.JUNIOR, "servidores"
+        "junior", "e" * 64, RoleLevel.JUNIOR, "servers"
     )
     scanner = StaticSecretScanner()
     service = JobService(repository, scanner, LocalProvider(tmp_path / "playbooks"))
@@ -976,7 +976,7 @@ async def test_frontmatter_enviado_pelo_cliente_e_rejeitado(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "spoof", "f" * 64, RoleLevel.SENIOR, "redes"
+        "spoof", "f" * 64, RoleLevel.SENIOR, "networks"
     )
     scanner = StaticSecretScanner()
     service = JobService(repository, scanner, LocalProvider(tmp_path / "playbooks"))
@@ -1001,7 +1001,7 @@ async def test_secret_scanner_em_enforce_bloqueia_upload_e_publicacao(
     repository: SQLAlchemyJobRepository, tmp_path: Path
 ) -> None:
     user = await repository.create_user(
-        "seguranca", "g" * 64, RoleLevel.SENIOR, "servidores"
+        "seguranca", "g" * 64, RoleLevel.SENIOR, "servers"
     )
     scanner = StaticSecretScanner({"MARCADOR_BLOQUEADO"})
     service = JobService(repository, scanner, LocalProvider(tmp_path / "playbooks"))
@@ -1188,10 +1188,10 @@ def test_caminho_git_fica_na_arvore_do_mkdocs() -> None:
     job_id = "12345678-1234-1234-1234-123456789abc"
 
     relative = git_playbook_relative_path(
-        "docs/runbooks", job_id, created_at, domain_function="servidores"
+        "docs/runbooks", job_id, created_at, domain_function="servers"
     )
 
-    assert relative.as_posix() == f"docs/runbooks/2026/servidores/{job_id}.md"
+    assert relative.as_posix() == f"docs/runbooks/2026/servers/{job_id}.md"
 
 
 def test_caminho_git_expoe_nome_limpo_sem_perder_identidade() -> None:
@@ -1203,11 +1203,11 @@ def test_caminho_git_expoe_nome_limpo_sem_perder_identidade() -> None:
         job_id,
         created_at,
         "teste-uso_1-20260813-001602-7093b5c3e42d",
-        "servidores",
+        "servers",
     )
 
     assert relative.as_posix() == (
-        f"docs/runbooks/2026/servidores/teste-uso_1--{job_id}.md"
+        f"docs/runbooks/2026/servers/teste-uso_1--{job_id}.md"
     )
 
 
@@ -1435,15 +1435,15 @@ def test_leitura_encontra_publicacao_no_layout_antigo() -> None:
     job_id = "12345678-1234-1234-1234-123456789abc"
 
     atual = playbook_relative_path(
-        job_id, created_at, domain_function="servidores"
+        job_id, created_at, domain_function="servers"
     )
     legados = legacy_playbook_relative_paths(
-        job_id, created_at, domain_function="servidores"
+        job_id, created_at, domain_function="servers"
     )
     legado = legados[0]
 
-    assert atual.as_posix() == f"2026/servidores/{job_id}.md"
-    assert legado.as_posix() == f"servidores/2026/{job_id}.md"
+    assert atual.as_posix() == f"2026/servers/{job_id}.md"
+    assert legado.as_posix() == f"servers/2026/{job_id}.md"
     # Mesmo arquivo, diretórios trocados: o nome não pode divergir.
     assert legado.name == atual.name
 
@@ -1453,12 +1453,12 @@ async def test_local_le_publicacao_gravada_no_layout_antigo(tmp_path: Path) -> N
     created_at = datetime(2026, 7, 16, tzinfo=UTC)
     job_id = "12345678-1234-1234-1234-123456789abc"
 
-    antigo = tmp_path / "playbooks" / "servidores" / "2026"
+    antigo = tmp_path / "playbooks" / "servers" / "2026"
     antigo.mkdir(parents=True)
     (antigo / f"{job_id}.md").write_text("### Passo 1\n", encoding="utf-8")
 
     conteudo = await provider.read_published(
-        job_id, created_at, domain_function="servidores"
+        job_id, created_at, domain_function="servers"
     )
 
     assert conteudo == "### Passo 1\n"
@@ -1482,36 +1482,36 @@ def _intake(repository, domains: tuple[str, ...]):
 async def test_start_r_recusa_dominio_que_nao_existe_no_env(
     repository: SQLAlchemyJobRepository,
 ) -> None:
-    intake = _intake(repository, ("acessos", "servidores", "roteamento"))
-    autor = await _usuario(repository, "op-servidores", RoleLevel.SENIOR, "servidores")
+    intake = _intake(repository, ("access", "servers", "roteamento"))
+    autor = await _usuario(repository, "op-servers", RoleLevel.SENIOR, "servers")
 
     with pytest.raises(ValidationError) as erro:
         await intake.enqueue(
             context_for(autor),
             "dominio-inexistente",
             "docker ps",
-            domain_function="redes",
+            domain_function="networks",
         )
 
     # A mensagem precisa dizer o que existe; "inválido" sozinho não ajuda.
     assert "check the role" in str(erro.value)
-    assert "acessos, servidores, roteamento" in str(erro.value)
+    assert "access, servers, roteamento" in str(erro.value)
 
 
 async def test_start_r_nao_deixa_senior_publicar_fora_do_proprio_dominio(
     repository: SQLAlchemyJobRepository,
 ) -> None:
-    intake = _intake(repository, ("acessos", "servidores"))
-    senior = await _usuario(repository, "senior-redes", RoleLevel.SENIOR, "servidores")
+    intake = _intake(repository, ("access", "servers"))
+    senior = await _usuario(repository, "senior-networks", RoleLevel.SENIOR, "servers")
 
-    # "acessos" existe, mas não é o escopo dele: o domínio é autoridade,
+    # "access" existe, mas não é o escopo dele: o domínio é autoridade,
     # não preferência.
     with pytest.raises(ForbiddenError):
         await intake.enqueue(
             context_for(senior),
             "fora-do-escopo",
             "docker ps",
-            domain_function="acessos",
+            domain_function="access",
         )
 
 
@@ -1519,13 +1519,13 @@ async def test_start_r_admin_cruza_dominios_e_o_artefato_segue_o_pedido(
     repository: SQLAlchemyJobRepository,
     tmp_path: Path,
 ) -> None:
-    intake = _intake(repository, ("acessos", "servidores"))
+    intake = _intake(repository, ("access", "servers"))
     admin = await _usuario(repository, "admin-global", RoleLevel.ADMIN, "platform")
 
     job = await intake.enqueue(
-        context_for(admin), "cruza-dominio", "docker ps", domain_function="acessos"
+        context_for(admin), "cruza-dominio", "docker ps", domain_function="access"
     )
-    assert job.domain_function == "acessos"
+    assert job.domain_function == "access"
 
     processor = UploadProcessor(
         repository,
@@ -1552,20 +1552,20 @@ async def test_start_r_admin_cruza_dominios_e_o_artefato_segue_o_pedido(
     # O diretorio segue o `-r`, nao o dominio do autor (plataforma).
     assert published.storage_url is not None
     assert published.storage_url.startswith(
-        f"local://{published.created_at.year}/acessos/"
+        f"local://{published.created_at.year}/access/"
     )
     arquivos = list((tmp_path / "playbooks").rglob("*.md"))
     assert len(arquivos) == 1
-    assert arquivos[0].parent.name == "acessos"
+    assert arquivos[0].parent.name == "access"
     # E o frontmatter confiavel registra o mesmo dominio.
-    assert 'funcao: "acessos"' in arquivos[0].read_text(encoding="utf-8")
+    assert 'funcao: "access"' in arquivos[0].read_text(encoding="utf-8")
 
 
 async def test_sem_r_o_dominio_continua_sendo_o_do_autor(
     repository: SQLAlchemyJobRepository,
 ) -> None:
-    intake = _intake(repository, ("acessos", "servidores"))
-    autor = await _usuario(repository, "op-padrao", RoleLevel.SENIOR, "servidores")
+    intake = _intake(repository, ("access", "servers"))
+    autor = await _usuario(repository, "op-padrao", RoleLevel.SENIOR, "servers")
 
     job = await intake.enqueue(context_for(autor), "sem-flag", "docker ps")
 
@@ -1586,28 +1586,28 @@ async def test_senior_publica_em_area_adicional_concedida(
 ) -> None:
     """O caso que motivou a mudança: um operador atende mais de uma área."""
 
-    intake = _intake(repository, ("acessos", "servidores"))
+    intake = _intake(repository, ("access", "servers"))
     operador = await _com_areas(
-        repository, "op-duas-areas", RoleLevel.SENIOR, "servidores", ("acessos",)
+        repository, "op-duas-areas", RoleLevel.SENIOR, "servers", ("access",)
     )
 
     job = await intake.enqueue(
-        context_for(operador), "na-area-extra", "docker ps", domain_function="acessos"
+        context_for(operador), "na-area-extra", "docker ps", domain_function="access"
     )
-    assert job.domain_function == "acessos"
+    assert job.domain_function == "access"
 
     # A primária continua sendo o padrão sem `-r`.
     padrao = await intake.enqueue(context_for(operador), "sem-flag", "docker ps")
     assert padrao.domain_function is None
-    assert operador.domain_function == "servidores"
+    assert operador.domain_function == "servers"
 
 
 async def test_area_nao_concedida_continua_recusada(
     repository: SQLAlchemyJobRepository,
 ) -> None:
-    intake = _intake(repository, ("acessos", "servidores", "roteamento"))
+    intake = _intake(repository, ("access", "servers", "roteamento"))
     operador = await _com_areas(
-        repository, "op-sem-roteamento", RoleLevel.SENIOR, "servidores", ("acessos",)
+        repository, "op-sem-roteamento", RoleLevel.SENIOR, "servers", ("access",)
     )
 
     with pytest.raises(ForbiddenError) as erro:
@@ -1618,7 +1618,7 @@ async def test_area_nao_concedida_continua_recusada(
             domain_function="roteamento",
         )
     # A mensagem lista o que ele tem, não só o que faltou.
-    assert "acessos, servidores" in str(erro.value)
+    assert "access, servers" in str(erro.value)
 
 
 async def test_area_adicional_precisa_existir_no_env(
@@ -1627,10 +1627,10 @@ async def test_area_adicional_precisa_existir_no_env(
     """Conceder área fora da lista criaria um diretório nunca declarado."""
 
     identity = IdentityService(
-        repository, "pepper-de-teste" * 4, ("acessos", "servidores")
+        repository, "pepper-de-teste" * 4, ("access", "servers")
     )
     admin = await _com_areas(repository, "admin-areas", RoleLevel.ADMIN, "platform")
-    alvo = await _com_areas(repository, "alvo-areas", RoleLevel.SENIOR, "servidores")
+    alvo = await _com_areas(repository, "alvo-areas", RoleLevel.SENIOR, "servers")
 
     with pytest.raises(ValidationError):
         await identity.update_scopes(
@@ -1644,21 +1644,21 @@ async def test_lista_de_areas_substitui_o_conjunto(
     """`-r` reescreve o conjunto: revogar uma área é omiti-la."""
 
     identity = IdentityService(
-        repository, "pepper-de-teste" * 4, ("acessos", "servidores", "roteamento")
+        repository, "pepper-de-teste" * 4, ("access", "servers", "roteamento")
     )
     admin = await _com_areas(repository, "admin-troca", RoleLevel.ADMIN, "platform")
     alvo = await _com_areas(
-        repository, "alvo-troca", RoleLevel.SENIOR, "servidores", ("acessos",)
+        repository, "alvo-troca", RoleLevel.SENIOR, "servers", ("access",)
     )
 
     atualizado = await identity.update_scopes(
-        context_for(admin), alvo.id, None, "servidores", ("roteamento",)
+        context_for(admin), alvo.id, None, "servers", ("roteamento",)
     )
 
     assert atualizado.extra_domains == ("roteamento",)
-    assert atualizado.authorized_domains == {"servidores", "roteamento"}
-    # `acessos` saiu porque não foi repetida na lista.
-    assert "acessos" not in atualizado.authorized_domains
+    assert atualizado.authorized_domains == {"servers", "roteamento"}
+    # `access` saiu porque não foi repetida na lista.
+    assert "access" not in atualizado.authorized_domains
 
 
 def test_subtitulo_livre_e_aceito_fora_dos_passos() -> None:
@@ -1812,7 +1812,7 @@ def test_autor_combina_username_e_nome_completo() -> None:
     identidade = PublicationIdentity(
         username="U000004",
         role_level=RoleLevel.SENIOR,
-        domain_function="servidores",
+        domain_function="servers",
         display_name="Operador Exemplo de Demonstracao Júnior",
     )
 
@@ -1825,7 +1825,7 @@ def test_autor_cai_para_o_username_sem_nome_completo() -> None:
     identidade = PublicationIdentity(
         username="U000004",
         role_level=RoleLevel.SENIOR,
-        domain_function="servidores",
+        domain_function="servers",
     )
 
     assert identidade.author_label == "U000004"
@@ -1855,7 +1855,7 @@ def test_frontmatter_com_nome_completo_continua_yaml_valido() -> None:
     identidade = PublicationIdentity(
         username="U000004",
         role_level=RoleLevel.SENIOR,
-        domain_function="servidores",
+        domain_function="servers",
         display_name='Operador "Junior" de Demonstracao: o operador',
     )
     job = Job(
@@ -1897,7 +1897,7 @@ async def test_nome_do_ldap_chega_ao_frontmatter_publicado(
     # Primeiro login: cria a identidade ja com o nome vindo do GECOS.
     usuario, _, _, _ = await identity.enroll_jump_user(
         "U000004",
-        "servidores",
+        "servers",
         "idem-primeiro-login",
         "Operador Exemplo de Demonstracao Júnior",
     )
@@ -1928,7 +1928,7 @@ async def test_troca_de_nome_no_ldap_propaga_no_proximo_login(
 
     identity = IdentityService(repository, "pepper-de-teste" * 4)
     await identity.enroll_jump_user(
-        "U000004", "servidores", "idem-login-1", "Operador B de Demonstracao"
+        "U000004", "servers", "idem-login-1", "Operador B de Demonstracao"
     )
 
     atualizado, _, _, _ = await identity.enroll_jump_user(
@@ -1945,7 +1945,7 @@ async def test_enrollment_sem_nome_preserva_o_que_ja_havia(
 
     identity = IdentityService(repository, "pepper-de-teste" * 4)
     await identity.enroll_jump_user(
-        "U000004", "servidores", "idem-com-nome", "Operador Exemplo"
+        "U000004", "servers", "idem-com-nome", "Operador Exemplo"
     )
 
     depois, _, _, _ = await identity.enroll_jump_user(
@@ -1962,12 +1962,12 @@ async def test_nome_sobrevive_ao_redirecionamento_por_area(
 
     identity = IdentityService(repository, "pepper-de-teste" * 4)
     usuario, _, _, _ = await identity.enroll_jump_user(
-        "U000004", "servidores", "idem-redirect", "Operador Exemplo de Demonstracao"
+        "U000004", "servers", "idem-redirect", "Operador Exemplo de Demonstracao"
     )
     admin = await repository.create_user(
         "admin-redirect", "d" * 64, RoleLevel.ADMIN, "platform"
     )
-    await repository.update_user_scopes(usuario.id, RoleLevel.SENIOR, None, ("acessos",))
+    await repository.update_user_scopes(usuario.id, RoleLevel.SENIOR, None, ("access",))
     usuario = await repository.get_user(usuario.id)
 
     scanner = StaticSecretScanner()
@@ -1976,10 +1976,10 @@ async def test_nome_sobrevive_ao_redirecionamento_por_area(
         scanner,
         AESGCMUploadCipher("test-secret-" * 4),
         max_log_bytes=1024 * 1024,
-        domain_functions=("acessos", "servidores"),
+        domain_functions=("access", "servers"),
     )
     job = await intake.enqueue(
-        context_for(usuario), "com-r", "$ ip addr\n", domain_function="acessos"
+        context_for(usuario), "com-r", "$ ip addr\n", domain_function="access"
     )
     processor = UploadProcessor(
         repository,
@@ -2004,7 +2004,7 @@ async def test_nome_sobrevive_ao_redirecionamento_por_area(
     arquivo = next((tmp_path / "playbooks").rglob("*.md"))
     conteudo = arquivo.read_text(encoding="utf-8")
     assert 'autor: "U000004 - Operador Exemplo de Demonstracao"' in conteudo
-    assert 'funcao: "acessos"' in conteudo
+    assert 'funcao: "access"' in conteudo
     assert admin.id  # o admin existe apenas para documentar a concessao
 
 
@@ -2014,14 +2014,14 @@ def test_leitura_cobre_as_tres_geracoes_de_layout() -> None:
     created_at = datetime(2026, 7, 16, tzinfo=UTC)
     job_id = "12345678-1234-1234-1234-123456789abc"
 
-    atual = playbook_relative_path(job_id, created_at, domain_function="servidores")
+    atual = playbook_relative_path(job_id, created_at, domain_function="servers")
     legados = legacy_playbook_relative_paths(
-        job_id, created_at, domain_function="servidores"
+        job_id, created_at, domain_function="servers"
     )
 
-    assert atual.as_posix() == f"2026/servidores/{job_id}.md"
+    assert atual.as_posix() == f"2026/servers/{job_id}.md"
     assert [caminho.as_posix() for caminho in legados] == [
-        f"servidores/2026/{job_id}.md",
+        f"servers/2026/{job_id}.md",
         f"2026/07/{job_id}.md",
     ]
     # Mesmo arquivo em todas: só o diretório muda.
@@ -2040,7 +2040,7 @@ async def test_local_le_publicacao_do_layout_por_mes(tmp_path: Path) -> None:
     (antigo / f"{job_id}.md").write_text("### Passo 1\n", encoding="utf-8")
 
     conteudo = await provider.read_published(
-        job_id, created_at, domain_function="servidores"
+        job_id, created_at, domain_function="servers"
     )
 
     assert conteudo == "### Passo 1\n"
@@ -2055,7 +2055,7 @@ async def test_leitura_ausente_em_todos_os_layouts_responde_404(
         await provider.read_published(
             "12345678-1234-1234-1234-123456789abc",
             datetime(2026, 7, 16, tzinfo=UTC),
-            domain_function="servidores",
+            domain_function="servers",
         )
 
 
@@ -2072,7 +2072,7 @@ def test_identidade_incompleta_na_reserva_falha_alto() -> None:
     completo = {
         "username": "U000004",
         "role_level": "senior",
-        "domain_function": "servidores",
+        "domain_function": "servers",
         "display_name": "Operador Exemplo de Demonstracao",
     }
     identidade = _identity_from_payload(completo)

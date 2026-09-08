@@ -41,8 +41,8 @@ Não execute esse comando dentro de uma sessão gravada.
 Um administrador autenticado gerencia as identidades seguintes pelo CLI:
 
 ```bash
-lucien admin user create operador --role junior --domain servidores
-lucien admin user update operador --role pleno --domain servidores
+lucien admin user create operador --role junior --domain servers
+lucien admin user update operador --role pleno --domain servers
 lucien admin user issue-provisional-token operador
 lucien admin user revoke operador --yes
 lucien admin user reinstate operador --yes
@@ -100,8 +100,8 @@ credencial no Hub, que determina a identidade e os metadados do runbook.
 No modo automatizado do jump server, uma credencial M2M separada possui somente
 o escopo `jump_enrollment`. Ela não acessa Jobs nem rotas administrativas. O Hub
 correlaciona o ID POSIX (`U000001`, por exemplo) ao username Lucien, cria novos
-usuários sempre como `pleno` e aceita apenas `acessos`, `servidores`, `redes` ou
-`suporte`. Papel e domínio de uma identidade existente nunca são alterados pelo
+usuários sempre como `pleno` e aceita apenas `access`, `servers`, `networks` ou
+`support`. Papel e domínio de uma identidade existente nunca são alterados pelo
 helper: `junior`, `pleno` e `senior` preservam seus escopos. Contas `admin` usam
 exclusivamente o login administrativo e nunca são ativadas pelo M2M. O token
 provisório passa ao CLI por `stdin`; não aparece em argumentos,
@@ -196,9 +196,15 @@ autorização baixando o Markdown por outro caminho.
 ## Funções de domínio configuráveis
 
 `RUNBOOK_DOMAIN_FUNCTIONS` define quais funções existem na instalação. O padrão,
-quando a variável não é declarada, é `acessos,servidores,redes,suporte` — a mesma
-lista que antes estava fixa no código, para que uma instalação existente não perca
-domínios ao atualizar.
+quando a variável não é declarada, é `platform,access,servers,networks,support`.
+`platform` é a área do administrador, que não pertence a nenhuma área operacional.
+
+Esses nomes eram `acessos`, `servidores`, `redes` e `suporte`. **Quem dependia do
+padrão precisa declarar a lista antiga na variável para continuar funcionando**:
+os usuários seguem gravados nos nomes em português, que deixam de ser áreas
+declaradas, e o Hub recusa publicação em área não declarada. O nome também vira
+diretório no destino, então os runbooks já publicados continuam onde estão.
+Instalação que já declara a variável não é afetada — ela sempre venceu o padrão.
 
 A lista governa três caminhos, e é importante que seja a mesma nos três: o `-r` do
 `lucien start`, a criação de usuários pelo admin e o enrollment de jump server. Se
@@ -257,7 +263,7 @@ roda sem `-r`, e é ela que aparece no frontmatter por padrão. O `-r` aceita
 qualquer área que o usuário tenha.
 
 ```bash
-lucien admin user update U000004 -r servidores,acessos
+lucien admin user update U000004 -r servers,access
 ```
 
 A primeira da lista vira a primária; as demais, adicionais. A lista **substitui**
@@ -270,8 +276,8 @@ O princípio não mudou: área continua sendo escopo de autoridade, não prefer�
 O que mudou é que a autorização pode cobrir mais de uma área. Quem não foi
 autorizado segue recebendo `403` na publicação e `404` na revisão.
 
-Revisão acompanha publicação. Quem publica em `acessos` também revisa runbooks de
-`acessos`: as duas operações gravam no mesmo diretório e passam pelas mesmas
+Revisão acompanha publicação. Quem publica em `access` também revisa runbooks de
+`access`: as duas operações gravam no mesmo diretório e passam pelas mesmas
 camadas do Hub. Restringir só a revisão criaria a assimetria de alguém criar um
 runbook e depois não poder corrigi-lo.
 

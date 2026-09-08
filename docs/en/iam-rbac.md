@@ -41,8 +41,8 @@ run that command inside a recorded session.
 An authenticated administrator manages the following identities through the CLI:
 
 ```bash
-lucien admin user create operador --role junior --domain servidores
-lucien admin user update operador --role pleno --domain servidores
+lucien admin user create operador --role junior --domain servers
+lucien admin user update operador --role pleno --domain servers
 lucien admin user issue-provisional-token operador
 lucien admin user revoke operador --yes
 lucien admin user reinstate operador --yes
@@ -103,8 +103,8 @@ credential with the Hub, which determines the identity and the runbook metadata.
 In the jump server automated mode, a separate M2M credential holds only the
 `jump_enrollment` scope. It reaches neither jobs nor administrative routes. The
 Hub correlates the POSIX ID (`U000001`, for example) with the Lucien username,
-always creates new users as `pleno`, and accepts only `acessos`, `servidores`,
-`redes`, or `suporte`. The helper never changes the role or domain of an existing
+always creates new users as `pleno`, and accepts only `access`, `servers`,
+`networks`, or `support`. The helper never changes the role or domain of an existing
 identity: `junior`, `pleno`, and `senior` keep their scopes. `admin` accounts use
 the administrative login exclusively and are never activated over M2M. The
 provisional token reaches the CLI through `stdin`; it appears in no argument,
@@ -206,9 +206,17 @@ authorization by downloading the Markdown through another path.
 ## Configurable domain functions
 
 `RUNBOOK_DOMAIN_FUNCTIONS` defines which functions exist in the installation. The
-default, when the variable is not declared, is `acessos,servidores,redes,suporte`
-— the same list that used to be hard-coded, so an existing installation does not
-lose domains when it updates.
+default, when the variable is not declared, is
+`platform,access,servers,networks,support`. `platform` is the administrator's
+area; it belongs to no operational area.
+
+These names used to be `acessos`, `servidores`, `redes` and `suporte`. **An
+installation that relied on the default must declare the old list in the variable
+to keep working**: its users are still stored under the Portuguese names, which
+are no longer declared areas, and the Hub refuses to publish into an undeclared
+area. The name also becomes a directory at the destination, so runbooks already
+published stay where they are. An installation that already declares the variable
+is unaffected — it always won over the default.
 
 The list governs three paths, and it matters that it is the same in all three:
 the `-r` of `lucien start`, user creation by an admin, and jump server
@@ -269,7 +277,7 @@ areas** granted by the admin. The primary one is the destination when
 frontmatter by default. `-r` accepts any area the user holds.
 
 ```bash
-lucien admin user update U000004 -r servidores,acessos
+lucien admin user update U000004 -r servers,access
 ```
 
 The first in the list becomes the primary; the rest become additional. The list
@@ -282,8 +290,8 @@ The principle has not changed: an area is still a scope of authority, not a
 preference. What changed is that the authorization can cover more than one area.
 Whoever was not authorized still gets `403` on publication and `404` on revision.
 
-Revision follows publication. Whoever publishes in `acessos` also reviews
-`acessos` runbooks: both operations write to the same directory and go through
+Revision follows publication. Whoever publishes in `access` also reviews
+`access` runbooks: both operations write to the same directory and go through
 the same Hub layers. Restricting only the revision would create the asymmetry of
 someone creating a runbook and then being unable to correct it.
 

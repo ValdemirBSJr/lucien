@@ -84,7 +84,7 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
             json={
                 "username": "operador-jr",
                 "role_level": "junior",
-                "domain_function": "servidores",
+                "domain_function": "servers",
             },
         )
         assert created.status_code == 201
@@ -166,10 +166,10 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
             # Hub aceitava calado.
             "domain_functions": [
                 "platform",
-                "acessos",
-                "servidores",
-                "redes",
-                "suporte",
+                "access",
+                "servers",
+                "networks",
+                "support",
             ],
         }
         assert client.get("/configuration/runbook").status_code == 401
@@ -208,11 +208,11 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
         updated = client.patch(
             f"/admin/users/{junior['username']}",
             headers=admin_headers,
-            json={"role_level": "pleno", "domain_function": "redes"},
+            json={"role_level": "pleno", "domain_function": "networks"},
         )
         assert updated.status_code == 200
         assert updated.json()["role_level"] == "pleno"
-        assert updated.json()["domain_function"] == "redes"
+        assert updated.json()["domain_function"] == "networks"
 
         provisioned_again = client.post(
             f"/admin/users/{junior['username']}/provisional-token",
@@ -319,13 +319,13 @@ def test_jump_server_provisiona_pleno_sem_expor_autoridade_admin(
             headers=headers,
             json={
                 "username": "U000001",
-                "domain_function": "servidores",
+                "domain_function": "servers",
             },
         )
         assert created.status_code == 200
         assert created.headers["cache-control"] == "no-store"
         assert created.json()["role_level"] == "pleno"
-        assert created.json()["domain_function"] == "servidores"
+        assert created.json()["domain_function"] == "servers"
         provisional = created.json()["provisional_token"]
 
         retry = client.post(
@@ -346,7 +346,7 @@ def test_jump_server_provisiona_pleno_sem_expor_autoridade_admin(
                 VALUES (?, ?, NULL, NULL, NULL, NULL, ?, ?, 1)
                 """,
                 (
-                    (str(uuid4()), "U000002", "senior", "redes"),
+                    (str(uuid4()), "U000002", "senior", "networks"),
                     (str(uuid4()), "U000003", "admin", "platform"),
                 ),
             )
@@ -361,7 +361,7 @@ def test_jump_server_provisiona_pleno_sem_expor_autoridade_admin(
         )
         assert existing_senior.status_code == 200
         assert existing_senior.json()["role_level"] == "senior"
-        assert existing_senior.json()["domain_function"] == "redes"
+        assert existing_senior.json()["domain_function"] == "networks"
 
         existing_admin = client.post(
             "/auth/jump/enroll",
@@ -388,7 +388,7 @@ def test_jump_server_provisiona_pleno_sem_expor_autoridade_admin(
                 "Authorization": f"Bearer {service_token}",
                 "Idempotency-Key": "jump-enroll-003",  # gitleaks:allow
             },
-            json={"username": "usuario-invalido", "domain_function": "acessos"},
+            json={"username": "usuario-invalido", "domain_function": "access"},
         ).status_code == 422
 
 
@@ -492,8 +492,8 @@ async def test_ultimo_admin_nao_pode_ser_rebaixado(tmp_path: Path) -> None:
         assert await repository.count_active_admins() == 1
 
         # Alterações que não mexem no nível seguem permitidas.
-        movido = await repository.update_user_scopes(primeiro.id, None, "redes")
-        assert movido.domain_function == "redes"
+        movido = await repository.update_user_scopes(primeiro.id, None, "networks")
+        assert movido.domain_function == "networks"
         assert movido.role_level is RoleLevel.ADMIN
     finally:
         await repository.close()

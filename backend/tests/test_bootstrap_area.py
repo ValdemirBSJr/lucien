@@ -65,9 +65,9 @@ async def test_bootstrap_recusa_area_nao_declarada(tmp_path: Path) -> None:
 async def test_bootstrap_aceita_area_declarada_explicitamente(tmp_path: Path) -> None:
     servico = await _servico(tmp_path, "area-explicita.db")
 
-    admin, _ = await servico.bootstrap_admin("administrator", "redes")
+    admin, _ = await servico.bootstrap_admin("administrator", "networks")
 
-    assert admin.domain_function == "redes"
+    assert admin.domain_function == "networks"
 
 
 @pytest.mark.asyncio
@@ -81,14 +81,14 @@ async def test_lista_propria_sem_a_area_do_admin_recusa_e_explica(
     quando ele publicasse.
     """
 
-    servico = await _servico(tmp_path, "lista-propria.db", ("redes", "acessos"))
+    servico = await _servico(tmp_path, "lista-propria.db", ("networks", "access"))
 
     with pytest.raises(ValidationError) as excecao:
         await servico.bootstrap_admin("administrator")
 
     mensagem = str(excecao.value)
     assert "RUNBOOK_DOMAIN_FUNCTIONS" in mensagem
-    assert "redes, acessos" in mensagem
+    assert "networks, access" in mensagem
 
 
 @pytest.mark.asyncio

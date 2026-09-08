@@ -473,7 +473,7 @@ a credencial já salva, use `lucien auth status`.
     `RUNBOOK_DOMAIN_FUNCTIONS`.
 
     ```bash
-    lucien admin user create joao --level senior -r servidores,acessos
+    lucien admin user create joao --level senior -r servers,access
     ```
 
 
@@ -482,7 +482,7 @@ Depois de autenticado como admin:
 ```bash
 lucien admin user create operador.rede \
   --role junior \
-  --domain redes
+  --domain networks
 ```
 
 A credencial provisória aparece uma única vez, expira em quatro horas e permite
@@ -498,7 +498,7 @@ lucien auth status
 Operações administrativas adicionais aceitam UUID ou username:
 
 ```bash
-lucien admin user update operador.rede --role pleno --domain redes
+lucien admin user update operador.rede --role pleno --domain networks
 lucien admin user issue-provisional-token operador.rede
 lucien admin user revoke operador.rede --yes
 lucien admin user reinstate operador.rede --yes
@@ -624,10 +624,10 @@ restrito por sudoers, o banner, o hook em `/etc/profile.d` e valida TLS e SSH.
 No primeiro login LDAP, o helper consulta o Hub pelo mesmo ID POSIX. Se a
 identidade não existir, pergunta uma única vez:
 
-1. Acessos (`acessos`);
-2. Servidores (`servidores`);
-3. Network (`redes`);
-4. Suporte (`suporte`).
+1. Acessos (`access`);
+2. Servidores (`servers`);
+3. Network (`networks`);
+4. Suporte (`support`).
 
 O papel inicial de um usuário novo é sempre `pleno`, abaixo de `senior`.
 Identidades existentes `junior`, `pleno` ou `senior` preservam integralmente
@@ -704,10 +704,10 @@ assunto e é o que aparece no índice da wiki.
 ainda na captura:
 
 ```bash
-lucien start exemplo -r acessos -d "minha publicacao em outra role"
+lucien start exemplo -r access -d "minha publicacao em outra role"
 ```
 
-O artefato vai para `<ano>/acessos/` em vez do domínio do autor. Sem `-r`, o
+O artefato vai para `<ano>/access/` em vez do domínio do autor. Sem `-r`, o
 destino continua sendo o seu próprio domínio — o comportamento de sempre.
 
 Duas regras valem aqui, e as duas são do Hub, não do CLI:
@@ -717,13 +717,13 @@ A função precisa existir em `RUNBOOK_DOMAIN_FUNCTIONS`. Se não existir, o upl
 gramática (minúsculas, 3 a 64 caracteres) porque grava offline e não conhece a
 configuração do Hub.
 
-O domínio é escopo de autoridade, não preferência: um `senior` de `servidores`
-que pedir `-r acessos` recebe `403`. Somente `admin` publica fora do próprio
+O domínio é escopo de autoridade, não preferência: um `senior` de `servers`
+que pedir `-r access` recebe `403`. Somente `admin` publica fora do próprio
 domínio. A restrição de criticidade alta para `junior` continua valendo por
 cima disso, sem alteração.
 
 Uma nota de vocabulário, porque `-r` usa a palavra "role" num sentido específico.
-Aqui **role é a área** — `acessos`, `servidores`, `roteamento` — e é ela que vira
+Aqui **role é a área** — `access`, `servers`, `roteamento` — e é ela que vira
 diretório. É o que o código chama de `domain_function`.
 
 Não confunda com o **nível de permissão** (`junior`, `pleno`, `senior`, `admin`),
@@ -739,7 +739,7 @@ ter relação nenhuma com o título dele.
 Se você atende mais de uma área, o admin concede as duas de uma vez:
 
 ```bash
-lucien admin user update U000004 -r servidores,acessos
+lucien admin user update U000004 -r servers,access
 ```
 
 A primeira é a primária — o destino sem `-r`. Confira o que você tem:
@@ -749,7 +749,7 @@ lucien auth status
 ```
 
 ```
-Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servidores, acessos.
+Authenticated as U000004 (11111111-1111-4111-8111-111111111111); level=senior areas=servers, access.
 ```
 
 ### `lucien stop`
