@@ -414,9 +414,20 @@
 <div class="editor">
   <div class="header">
     <h1>{pending ? pending.name : detail ? detail.name : $t('editor_title')}</h1>
-    <button class="close" aria-label={$t('home_new_cancel')} on:click={close}>
-      <Icon path={ICON_CLOSE} size={18} />
-    </button>
+    <!--
+      O X sai na tela de sucesso: ali já existe um botão "Fechar" rotulado, e
+      os dois fazem exatamente a mesma coisa -- publicado, `close` não tem o
+      que confirmar e cai direto no `closeEditor`. Dois controles idênticos na
+      mesma tela fazem o operador procurar a diferença que não existe.
+
+      Nas demais fases ele fica: é a única saída da view, e lá `close` ainda
+      decide entre gravar o rascunho, perguntar ou sair direto.
+    -->
+    {#if phase !== 'published' && phase !== 'enqueued'}
+      <button class="close" aria-label={$t('home_new_cancel')} on:click={close}>
+        <Icon path={ICON_CLOSE} size={18} />
+      </button>
+    {/if}
   </div>
 
   {#if phase === 'loading'}
