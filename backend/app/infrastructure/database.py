@@ -21,6 +21,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -389,6 +390,18 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
         # combinacao "revoga um admin enquanto rebaixa o outro".
         self._admin_lock = asyncio.Lock()
         self._is_sqlite = self._engine.dialect.name == "sqlite"
+        if self._is_sqlite:
+            # O SQLite so impoe chave estrangeira com este PRAGMA, e ele vale
+            # por conexao. Sem ele o banco dos testes aceita filho sem pai --
+            # foi assim que uma insercao fora de ordem em `published_assets`
+            # passou por toda a suite e so falhou no PostgreSQL, na cara de
+            # quem publicou. O teste precisa recusar o que producao recusa.
+            @event.listens_for(self._engine.sync_engine, "connect")
+            def _exigir_chave_estrangeira(conexao, _registro) -> None:  # type: ignore[no-untyped-def]
+                cursor = conexao.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
 
     async def initialize(self) -> None:
         if not self._is_sqlite:
@@ -1248,7 +1261,17 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
                 )
                 for linha in anteriores.all():
                     await session.delete(linha)
-                await session.flush()
+            # Fora do if/else, e nao so no ramo de atualizacao: `published_assets`
+            # referencia `published_documents.job_id`, entao a linha do documento
+            # precisa existir no banco antes das imagens. Na primeira publicacao
+            # de um runbook com imagem, sem este flush, o INSERT das duas tabelas
+            # ia junto no commit e o PostgreSQL recusava com ForeignKeyViolation
+            # -- 500 na cara de quem publicou, com o artefato ja gravado no
+            # destino e o job sem marcar PUBLISHED.
+            #
+            # Passou despercebido porque os testes usam SQLite, que so impoe
+            # chave estrangeira com `PRAGMA foreign_keys=ON`.
+            await session.flush()
             for asset in document.assets:
                 session.add(
                     PublishedAssetRow(
