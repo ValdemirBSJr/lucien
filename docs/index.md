@@ -8,6 +8,8 @@ SLM e obrigatoriamente revisados por uma pessoa antes da publicação.
 - [Manual de instalação](manual-instalacao.md): instale Hub e CLI, execute o
   bootstrap e consulte todos os comandos do cliente.
 - [Tutorial de uso](tutorial.md): execute o primeiro fluxo de ponta a ponta.
+- [Referência de comandos](referencia-cli.md): todo comando, argumento e flag do
+  CLI, em tabela.
 - [Implantação isolada e TLS](implantacao-isolada.md): execute somente o CLI ou
   somente a API e gere os certificados necessários.
 - [Documentação técnica](documentacao-tecnica.md): arquitetura, API, configuração
