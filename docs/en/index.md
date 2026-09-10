@@ -8,6 +8,8 @@ and necessarily reviewed by a person before publication.
 - [Installation manual](manual-instalacao.md): install the Hub and the CLI, run
   the bootstrap, and look up every client command.
 - [Usage tutorial](tutorial.md): run the first end-to-end flow.
+- [Command reference](referencia-cli.md): every command, argument, and flag in
+  the CLI, in a table.
 - [Isolated deployment and TLS](implantacao-isolada.md): run the CLI alone or the
   API alone, and generate the certificates you need.
 - [Technical documentation](documentacao-tecnica.md): architecture, API,

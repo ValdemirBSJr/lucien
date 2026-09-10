@@ -19,6 +19,7 @@ from __future__ import annotations
 # `runbooks` ja sao iguais nos dois idiomas e nao entram aqui.
 TRADUCAO = {
     "documentacao-tecnica": "technical-documentation",
+    "referencia-cli": "command-reference",
     "implantacao-isolada": "isolated-deployment",
     "manual-instalacao": "installation-manual",
     "operacao": "operations",
