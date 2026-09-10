@@ -32,6 +32,11 @@ PAGINAS = {
         "Operação e segurança",
         "Operation and security",
     ),
+    "referencia-cli": (
+        "command-reference",
+        "Referência de comandos",
+        "Command reference",
+    ),
     "publicacao": (
         "publication",
         "Publicação da wiki",
