@@ -23,6 +23,13 @@ var (
 	ansiOSC = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
 	// Apagar ate o fim da linha: ESC[K e ESC[0K.
 	ansiEraseLine = regexp.MustCompile(`\x1b\[0?K`)
+	// Edicao no meio da linha: mover o cursor (C, D), inserir (@) e apagar (P)
+	// caracteres. E como o readline edita um comando trazido do historico --
+	// Home seguido de `sudo ` sai como `\b` ate o inicio e um ESC[1@ por letra.
+	// Descartadas junto com o resto do CSI, deixavam o cursor no lugar errado
+	// e o texto novo sobrescrevia o antigo: `sudo du -sh /var/log` virava
+	// `suo sh /var/log`.
+	ansiEdicaoLinha = regexp.MustCompile(`\x1b\[([0-9]*)([CD@P])`)
 	// Sequencias de dois bytes que nao sao CSI nem OSC: designacao de conjunto
 	// de caracteres (ESC(B), modo de teclado (ESC=, ESC>) e salvar/restaurar
 	// cursor (ESC7, ESC8). Sem esta regra o strip de controles C0 removia so o
@@ -41,6 +48,40 @@ var (
 // marcadorTelaCheia substitui o desenho de tela de editores e paginadores.
 // Nao contem `#`, `$` nem `>`, entao nao e confundido com prompt pelo Hub.
 const marcadorTelaCheia = "[sessão de tela cheia: conteúdo interativo não registrado]"
+
+// Marcadores internos das operacoes de edicao, no plano de uso privado do
+// Unicode: nao aparecem em texto de terminal e renderLine consome todos.
+const (
+	cursorParaFrente = '\U000F0001'
+	cursorParaTras   = '\U000F0002'
+	inserirEspaco    = '\U000F0003'
+	apagarCaractere  = '\U000F0004'
+)
+
+// Uma contagem maior que isso nao e edicao de linha, e sem teto um ESC[99999C
+// na saida de um programa inflaria o log.
+const limiteEdicaoLinha = 512
+
+var marcadorEdicao = map[byte]rune{
+	'C': cursorParaFrente,
+	'D': cursorParaTras,
+	'@': inserirEspaco,
+	'P': apagarCaractere,
+}
+
+// marcarEdicaoLinha troca cada sequencia de edicao por um marcador por coluna,
+// para que o strip de CSI nao a apague antes de renderLine aplica-la.
+func marcarEdicaoLinha(value string) string {
+	return ansiEdicaoLinha.ReplaceAllStringFunc(value, func(sequencia string) string {
+		partes := ansiEdicaoLinha.FindStringSubmatch(sequencia)
+		// Sem numero, ou zero, o terminal entende um.
+		quantidade := 1
+		if n, err := strconv.Atoi(partes[1]); err == nil && n > 0 {
+			quantidade = min(n, limiteEdicaoLinha)
+		}
+		return strings.Repeat(string(marcadorEdicao[partes[2][0]]), quantidade)
+	})
+}
 
 // colapsarTelaAlternativa troca o redesenho de tela por uma linha que diz o que
 // houve ali.
@@ -375,6 +416,7 @@ func StripANSI(value string) string {
 	// que o strip de CSI logo abaixo apagaria.
 	clean := colapsarTelaAlternativa(value)
 	clean = ansiEraseLine.ReplaceAllString(clean, string(eraseToEndOfLine))
+	clean = marcarEdicaoLinha(clean)
 	clean = ansiOSC.ReplaceAllString(clean, "")
 	clean = ansiCSI.ReplaceAllString(clean, "")
 	clean = ansiEsc2.ReplaceAllString(clean, "")
@@ -406,24 +448,49 @@ func StripANSI(value string) string {
 //
 // Com o cursor de verdade a colagem continua resolvida: os \b voltam ao
 // início e a reexibição sobrescreve a cópia anterior em vez de concatená-la.
+//
+// Mover (ESC[C, ESC[D), inserir (ESC[@) e apagar (ESC[P) chegam aqui como
+// marcadores e seguem a mesma semântica de terminal.
 func renderLine(line string) string {
-	if !strings.ContainsRune(line, '\b') &&
-		!strings.ContainsRune(line, eraseToEndOfLine) {
+	if !strings.ContainsFunc(line, func(symbol rune) bool {
+		switch symbol {
+		case '\b', eraseToEndOfLine, cursorParaFrente, cursorParaTras,
+			inserirEspaco, apagarCaractere:
+			return true
+		}
+		return false
+	}) {
 		return line
 	}
 	buffer := make([]rune, 0, len(line))
 	cursor := 0
 	for _, symbol := range line {
 		switch symbol {
-		case '\b':
+		case '\b', cursorParaTras:
 			if cursor > 0 {
 				cursor--
+			}
+		case cursorParaFrente:
+			cursor++
+		case inserirEspaco:
+			if cursor < len(buffer) {
+				buffer = append(buffer[:cursor+1], buffer[cursor:]...)
+				buffer[cursor] = ' '
+			}
+		case apagarCaractere:
+			if cursor < len(buffer) {
+				buffer = append(buffer[:cursor], buffer[cursor+1:]...)
 			}
 		case eraseToEndOfLine:
 			if cursor < len(buffer) {
 				buffer = buffer[:cursor]
 			}
 		default:
+			// O cursor pode ter andado além do texto: as colunas puladas
+			// aparecem em branco no terminal.
+			for len(buffer) < cursor {
+				buffer = append(buffer, ' ')
+			}
 			if cursor < len(buffer) {
 				buffer[cursor] = symbol
 			} else {
