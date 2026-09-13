@@ -824,3 +824,5 @@ async def test_conflito_de_revisao_aponta_a_versao_mais_recente(
     # A ponta da linhagem, e não o sucessor imediato da raiz.
     assert terceira.id in mensagem, mensagem
     assert segunda.id not in mensagem, mensagem
+    # O CLI imprime a recusa como veio; a interface do CLI e em ingles.
+    assert mensagem.startswith("this version has already been revised"), mensagem
