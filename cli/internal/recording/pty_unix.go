@@ -86,12 +86,17 @@ func Start(provision, description, domainFunction string) (Session, error) {
 	}
 	child := exec.Command(shell)
 	child.Env = recordingEnvironment(os.Environ())
-	terminal, err := pty.StartWithSize(child, initialWindowSize())
+	tamanho := initialWindowSize()
+	terminal, err := pty.StartWithSize(child, tamanho)
 	if err != nil {
 		return Session{}, fmt.Errorf("start PTY: %w", err)
 	}
 	defer terminal.Close()
-	if restoreTerminal, err := prepareInteractiveTerminal(terminal); err != nil {
+	// A largura vai ao log antes do primeiro byte do shell: o PTY retém a
+	// saída até o io.Copy abaixo começar a ler.
+	recorder := &cappedWriter{file: logFile, remaining: maxLogBytes()}
+	recorder.registrarLargura(tamanho.Cols)
+	if restoreTerminal, err := prepareInteractiveTerminal(terminal, recorder.registrarLargura); err != nil {
 		_ = child.Process.Kill()
 		_, _ = child.Process.Wait()
 		return Session{}, err
@@ -112,12 +117,11 @@ func Start(provision, description, domainFunction string) (Session, error) {
 	}
 
 	go func() { _, _ = io.Copy(terminal, os.Stdin) }()
-	recorder := &cappedWriter{file: logFile, remaining: maxLogBytes()}
 	_, copyErr := io.Copy(io.MultiWriter(os.Stdout, recorder), terminal)
 	waitErr := child.Wait()
 	session.PID = 0
 	session.Status = "STOPPED"
-	session.LogTruncated = recorder.truncated
+	session.LogTruncated = recorder.truncado()
 	if err := saveSession(session); err != nil {
 		return Session{}, err
 	}
@@ -147,7 +151,9 @@ func initialWindowSize() *pty.Winsize {
 	return &pty.Winsize{Rows: 24, Cols: 80}
 }
 
-func prepareInteractiveTerminal(terminal *os.File) (func(), error) {
+// registrarLargura recebe cada largura aplicada ao PTY, para que o log saiba
+// onde começa cada linha física.
+func prepareInteractiveTerminal(terminal *os.File, registrarLargura func(uint16)) (func(), error) {
 	stdinFD := int(os.Stdin.Fd())
 	if !term.IsTerminal(stdinFD) {
 		return func() {}, nil
@@ -157,7 +163,7 @@ func prepareInteractiveTerminal(terminal *os.File) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("prepare interactive terminal: %w", err)
 	}
-	inheritValidSize(terminal)
+	inheritValidSize(terminal, registrarLargura)
 
 	resizeSignal := make(chan os.Signal, 1)
 	stopResize := make(chan struct{})
@@ -166,7 +172,7 @@ func prepareInteractiveTerminal(terminal *os.File) (func(), error) {
 		for {
 			select {
 			case <-resizeSignal:
-				inheritValidSize(terminal)
+				inheritValidSize(terminal, registrarLargura)
 			case <-stopResize:
 				return
 			}
@@ -183,12 +189,13 @@ func prepareInteractiveTerminal(terminal *os.File) (func(), error) {
 // inheritValidSize ignora dimensões degeneradas do terminal de origem. Alguns
 // emuladores reportam 0x0 antes do primeiro SIGWINCH; propagar isso ao PTY
 // desfaria o tamanho inicial e voltaria a quebrar o ssh para equipamentos.
-func inheritValidSize(terminal *os.File) {
+func inheritValidSize(terminal *os.File, registrarLargura func(uint16)) {
 	size, err := pty.GetsizeFull(os.Stdin)
 	if err != nil || size.Rows == 0 || size.Cols == 0 {
 		return
 	}
 	_ = pty.Setsize(terminal, size)
+	registrarLargura(size.Cols)
 }
 
 func isExpectedPTYCloseError(err error) bool {

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lucien-runbook/lucien/internal/config"
@@ -30,6 +31,16 @@ var (
 	// e o texto novo sobrescrevia o antigo: `sudo du -sh /var/log` virava
 	// `suo sh /var/log`.
 	ansiEdicaoLinha = regexp.MustCompile(`\x1b\[([0-9]*)([CD@P])`)
+	// Largura do terminal gravado, que o gravador escreve so no log (ver
+	// marcadorLargura).
+	ansiLargura = regexp.MustCompile(`\x1b\]7717;cols=([0-9]{1,5})\x07`)
+	// \r seguido de movimento ou edicao de cursor: o readline voltando ao
+	// inicio da linha fisica para editar, e nao um fim de linha.
+	retornoParaEditar = regexp.MustCompile("\r([\b\U000F0001-\U000F0004])")
+	// Espaco seguido de \r que nao fecha a linha: o readline, ao chegar a
+	// margem direita, imprime um espaco para forcar a quebra e volta com \r ao
+	// inicio da linha fisica nova. renderLine confirma pela coluna.
+	retornoAposEspaco = regexp.MustCompile(" \r([^\n])")
 	// Sequencias de dois bytes que nao sao CSI nem OSC: designacao de conjunto
 	// de caracteres (ESC(B), modo de teclado (ESC=, ESC>) e salvar/restaurar
 	// cursor (ESC7, ESC8). Sem esta regra o strip de controles C0 removia so o
@@ -61,6 +72,53 @@ const (
 // Uma contagem maior que isso nao e edicao de linha, e sem teto um ESC[99999C
 // na saida de um programa inflaria o log.
 const limiteEdicaoLinha = 512
+
+// retornoNaLinha e o \r que volta ao inicio da linha fisica sem fecha-la.
+const retornoNaLinha = '\U000F0005'
+
+// retornoDeQuebra e o \r depois do espaco com que o readline forca a quebra
+// na margem. So e retorno se o espaco caiu na primeira coluna de uma linha
+// fisica; fora disso e fim de linha, como sempre foi.
+const retornoDeQuebra = '\U000F0006'
+
+// A largura vira uma runa no plano B de uso privado: base mais as colunas.
+const (
+	baseLargura   = 0x100000
+	larguraMaxima = 4096
+)
+
+// marcadorLargura e o que o gravador escreve no log, e so nele, quando uma
+// largura de terminal passa a valer.
+//
+// Com o prompt mais largo que a janela, a linha quebra, e o readline edita
+// voltando ao inicio da linha FISICA: \r seguido de ESC[C ate o comando. Sem
+// saber a largura nao ha como achar esse inicio, e o `sudo` inserido pela
+// seta para cima caia dentro do prompt e sumia do runbook.
+//
+// OSC de numero proprio: nenhum terminal o interpreta, e ele nunca vai ao
+// stdout.
+func marcadorLargura(colunas int) []byte {
+	return []byte(fmt.Sprintf("\x1b]7717;cols=%d\x07", colunas))
+}
+
+// marcarLargura troca o marcador do log pela runa que renderLine consome.
+// Largura fora de 1..4096 e descartada: nao e terminal de verdade.
+func marcarLargura(value string) string {
+	return ansiLargura.ReplaceAllStringFunc(value, func(sequencia string) string {
+		colunas, err := strconv.Atoi(ansiLargura.FindStringSubmatch(sequencia)[1])
+		if err != nil || colunas < 1 || colunas > larguraMaxima {
+			return ""
+		}
+		return string(rune(baseLargura + colunas))
+	})
+}
+
+func larguraDe(symbol rune) (int, bool) {
+	if symbol > baseLargura && symbol <= baseLargura+larguraMaxima {
+		return int(symbol - baseLargura), true
+	}
+	return 0, false
+}
 
 var marcadorEdicao = map[byte]rune{
 	'C': cursorParaFrente,
@@ -104,7 +162,13 @@ func colapsarTelaAlternativa(value string) string {
 		if pareceComando.MatchString(texto) {
 			return regiao
 		}
-		return "\n" + marcadorTelaCheia + "\n"
+		// A janela pode ter sido redimensionada com o editor aberto: a
+		// largura nova continua valendo depois dele.
+		largura := ""
+		if larguras := ansiLargura.FindAllString(regiao, -1); len(larguras) > 0 {
+			largura = larguras[len(larguras)-1]
+		}
+		return "\n" + marcadorTelaCheia + "\n" + largura
 	})
 }
 
@@ -415,21 +479,47 @@ func StripANSI(value string) string {
 	// Antes de qualquer remocao: o colapso precisa dos marcadores ESC[?1049h/l,
 	// que o strip de CSI logo abaixo apagaria.
 	clean := colapsarTelaAlternativa(value)
+	// Antes do strip de OSC, que apagaria o marcador junto com o resto.
+	clean = marcarLargura(clean)
 	clean = ansiEraseLine.ReplaceAllString(clean, string(eraseToEndOfLine))
 	clean = marcarEdicaoLinha(clean)
+	// So com a largura gravada: sem ela nao ha como achar o inicio da linha
+	// fisica, e o \r segue fechando a linha como antes -- que e o caso de um
+	// log de CLI anterior ou ja limpo pelo `session edit`.
+	if strings.ContainsFunc(clean, func(symbol rune) bool {
+		_, ehLargura := larguraDe(symbol)
+		return ehLargura
+	}) {
+		clean = retornoParaEditar.ReplaceAllString(clean, string(retornoNaLinha)+"$1")
+		// Sem isto, todo comando mais longo que a janela era cortado na
+		// margem: o resto virava uma "linha de saida" e o Hub publicava so
+		// o comeco.
+		clean = retornoAposEspaco.ReplaceAllString(clean, " "+string(retornoDeQuebra)+"$1")
+	}
 	clean = ansiOSC.ReplaceAllString(clean, "")
 	clean = ansiCSI.ReplaceAllString(clean, "")
 	clean = ansiEsc2.ReplaceAllString(clean, "")
 	clean = strings.ReplaceAll(clean, "\r\n", "\n")
-	// `\r` continua virando quebra de linha. Equipamento de rede usa `\r`
+	// O `\r` que sobrou vira quebra de linha. Equipamento de rede usa `\r`
 	// puro como fim de linha, e trata-lo como retorno de cursor colapsaria a
 	// saida inteira numa linha so -- perda de dado pior que o problema que
-	// resolveria. O redesenho do readline e tratado pelo cursor de `\b`.
+	// resolveria. Retorno de verdade e so o seguido de movimento de cursor,
+	// ja convertido acima.
 	clean = strings.ReplaceAll(clean, "\r", "\n")
 
 	lines := strings.Split(clean, "\n")
+	// A largura vale da linha em que foi registrada em diante.
+	largura := 0
 	for index, line := range lines {
-		lines[index] = stripControls(renderLine(line))
+		var renderizada string
+		renderizada, largura = renderLine(line, largura)
+		// Um retorno que nao era quebra de margem fecha a linha: renderLine
+		// devolve as partes separadas por \n.
+		partes := strings.Split(renderizada, "\n")
+		for posicao, parte := range partes {
+			partes[posicao] = stripControls(parte)
+		}
+		lines[index] = strings.Join(partes, "\n")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -450,22 +540,45 @@ func StripANSI(value string) string {
 // início e a reexibição sobrescreve a cópia anterior em vez de concatená-la.
 //
 // Mover (ESC[C, ESC[D), inserir (ESC[@) e apagar (ESC[P) chegam aqui como
-// marcadores e seguem a mesma semântica de terminal.
-func renderLine(line string) string {
+// marcadores e seguem a mesma semântica de terminal. O retorno dentro da linha
+// vai ao início da linha física, que depende da largura em vigor -- recebida
+// e devolvida, porque ela pode mudar no meio da linha.
+func renderLine(line string, largura int) (string, int) {
 	if !strings.ContainsFunc(line, func(symbol rune) bool {
 		switch symbol {
 		case '\b', eraseToEndOfLine, cursorParaFrente, cursorParaTras,
-			inserirEspaco, apagarCaractere:
+			inserirEspaco, apagarCaractere, retornoNaLinha, retornoDeQuebra:
 			return true
 		}
-		return false
+		_, ehLargura := larguraDe(symbol)
+		return ehLargura
 	}) {
-		return line
+		return line, largura
 	}
+	var fechadas []string
 	buffer := make([]rune, 0, len(line))
 	cursor := 0
 	for _, symbol := range line {
+		if colunas, ehLargura := larguraDe(symbol); ehLargura {
+			largura = colunas
+			continue
+		}
 		switch symbol {
+		case retornoDeQuebra:
+			// O espaco acabou de ser escrito: ele esta em cursor-1.
+			if largura > 0 && cursor > 1 && (cursor-1)%largura == 0 {
+				cursor--
+			} else {
+				fechadas = append(fechadas, string(buffer))
+				buffer = buffer[:0]
+				cursor = 0
+			}
+		case retornoNaLinha:
+			if largura > 0 {
+				cursor = cursor / largura * largura
+			} else {
+				cursor = 0
+			}
 		case '\b', cursorParaTras:
 			if cursor > 0 {
 				cursor--
@@ -499,7 +612,7 @@ func renderLine(line string) string {
 			cursor++
 		}
 	}
-	return string(buffer)
+	return strings.Join(append(fechadas, string(buffer)), "\n"), largura
 }
 
 // stripControls descarta os demais controles C0 e o DEL, que o PTY emite como
@@ -518,12 +631,28 @@ func stripControls(line string) string {
 }
 
 type cappedWriter struct {
+	// O shell e o aviso de redimensionamento escrevem de goroutines
+	// diferentes: sem a trava, um marcador de largura cortaria um bloco.
+	mu        sync.Mutex
 	file      *os.File
 	remaining int64
 	truncated bool
 }
 
+// registrarLargura grava no log, e so nele, a largura que passa a valer.
+func (writer *cappedWriter) registrarLargura(colunas uint16) {
+	_, _ = writer.Write(marcadorLargura(int(colunas)))
+}
+
+func (writer *cappedWriter) truncado() bool {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.truncated
+}
+
 func (writer *cappedWriter) Write(data []byte) (int, error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
 	originalLength := len(data)
 	if writer.remaining <= 0 {
 		if originalLength > 0 {
