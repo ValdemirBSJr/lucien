@@ -13,6 +13,8 @@ from app.api.schemas import (
     JumpEnrollRequest,
     ProvisionalTokenRequest,
     PublishedRunbookCatalogResponse,
+    PublishedRunbookEntryResponse,
+    PublishedRunbookMineResponse,
     ProvisionedUserResponse,
     PublishRequest,
     PublishResponse,
@@ -218,18 +220,32 @@ async def list_published_runbooks(
     return PublishedRunbookCatalogResponse(ids=list(identifiers))
 
 
-@router.get(
-    "/runbooks/published/mine", response_model=PublishedRunbookCatalogResponse
-)
+@router.get("/runbooks/published/mine", response_model=PublishedRunbookMineResponse)
 async def list_published_runbooks_mine(
     request: Request, response: Response, context: UserContext
-) -> PublishedRunbookCatalogResponse:
-    """So os IDs que `context` pode de fato revisar -- filtrado por area."""
+) -> PublishedRunbookMineResponse:
+    """Publicados que `context` alcanca pela area.
 
-    pares = await _service(request).list_published_runbooks_for(context)
+    `ids` e `names` continuam como sempre foram, para o app desktop. `runbooks`
+    traz area, data de publicacao e se a versao e a ponta da linhagem -- o que
+    o `lucien runbook list` mostra.
+    """
+
+    entradas = await _service(request).list_published_runbooks_for(context)
     _disable_secret_caching(response)
-    return PublishedRunbookCatalogResponse(
-        ids=[id_ for id_, _ in pares], names={id_: nome for id_, nome in pares}
+    return PublishedRunbookMineResponse(
+        ids=[entrada.id for entrada in entradas],
+        names={entrada.id: entrada.name for entrada in entradas},
+        runbooks=[
+            PublishedRunbookEntryResponse(
+                id=entrada.id,
+                name=entrada.name,
+                domain_function=entrada.domain_function,
+                published_at=entrada.published_at,
+                latest=entrada.latest,
+            )
+            for entrada in entradas
+        ],
     )
 
 

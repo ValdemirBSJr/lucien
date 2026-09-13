@@ -16,6 +16,23 @@ from app.domain.models import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class PublishedRunbookEntry:
+    """Um runbook publicado, como quem vai revisa-lo precisa ve-lo.
+
+    `latest` separa a ponta da linhagem das versoes que ela substituiu. O
+    `revise` recusa uma versao superada com conflito, entao quem lista para
+    revisar precisa saber qual e a atual. As superadas nao somem daqui porque
+    o app desktop as abre em modo leitura.
+    """
+
+    id: str
+    name: str
+    domain_function: str | None
+    published_at: datetime
+    latest: bool
+
+
 class DomainError(Exception):
     """Erro esperado, seguro para conversão em resposta HTTP."""
 
@@ -277,8 +294,8 @@ class JobRepository(ABC):
     @abstractmethod
     async def list_published_runbooks_for_domains(
         self, allowed_domains: tuple[str, ...] | None, max_ids: int
-    ) -> tuple[tuple[str, str], ...]:
-        """Pares (id, nome) publicados que o autor pode revisar de verdade.
+    ) -> tuple[PublishedRunbookEntry, ...]:
+        """Publicados que o autor alcanca pela area, com area, data e ponta.
 
         `allowed_domains=None` significa sem filtro (admin); senão, restringe
         pelo dominio congelado em `publication_identity` no momento da

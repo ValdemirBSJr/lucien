@@ -205,6 +205,15 @@ def test_admin_gerencia_escopos_e_revogacao_e_imediata(
         assert catalog.headers["pragma"] == "no-cache"
         assert client.get("/runbooks/published").status_code == 401
 
+        # A rota filtrada por area ganhou `runbooks`, mas por subclasse: o
+        # catalogo acima, que o portal le com extra="forbid", fica sem ele.
+        mine = client.get("/runbooks/published/mine", headers=admin_headers)
+        assert mine.status_code == 200
+        assert mine.json() == {"ids": [], "names": {}, "runbooks": []}
+        assert mine.headers["cache-control"] == "no-store"
+        assert "runbooks" not in catalog.json()
+        assert client.get("/runbooks/published/mine").status_code == 401
+
         updated = client.patch(
             f"/admin/users/{junior['username']}",
             headers=admin_headers,
