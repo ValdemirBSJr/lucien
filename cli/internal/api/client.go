@@ -614,22 +614,38 @@ func (c *Client) PublishedCatalog(ctx context.Context) ([]string, error) {
 	return response.IDs, err
 }
 
-// PublishedRunbooksMine lista so os IDs publicados que a identidade atual
-// pode de fato revisar (mesma area, ou qualquer uma se for admin). E o que
-// o app grafico usa para a aba de publicados -- PublishedCatalog devolve o
-// catalogo inteiro, sem filtro de area.
 // PublishedRunbookSummary é um runbook publicado que a identidade autenticada
-// está autorizada a revisar de verdade -- id mais nome, para exibição sem
-// obrigar quem lê a decorar UUIDs.
+// alcança pela área -- id mais nome, para exibição sem obrigar quem lê a
+// decorar UUIDs.
+//
+// Area, PublishedAt e Latest só vêm de um Hub que devolve `runbooks`. Num Hub
+// anterior ficam vazios, e Latest fica true: faltar informação não pode fazer
+// um runbook sumir da lista.
 type PublishedRunbookSummary struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	Area        string
+	PublishedAt time.Time
+	// Falso na versão que já tem sucessor publicado -- o Hub recusa revisá-la.
+	Latest bool
 }
 
+// PublishedRunbooksMine lista os publicados que a identidade atual alcança
+// pela área (qualquer uma, se for admin), versões superadas inclusive: o app
+// desktop as abre em modo leitura. Quem lista para revisar filtra Latest.
+// PublishedCatalog devolve o catálogo inteiro, sem filtro de área.
 func (c *Client) PublishedRunbooksMine(ctx context.Context) ([]PublishedRunbookSummary, error) {
 	var response struct {
 		IDs   []string          `json:"ids"`
 		Names map[string]string `json:"names"`
+		// Ponteiro para distinguir "Hub sem o campo" de "lista vazia".
+		Runbooks *[]struct {
+			ID             string    `json:"id"`
+			Name           string    `json:"name"`
+			DomainFunction *string   `json:"domain_function"`
+			PublishedAt    time.Time `json:"published_at"`
+			Latest         bool      `json:"latest"`
+		} `json:"runbooks"`
 	}
 	err := c.doJSON(
 		ctx,
@@ -642,9 +658,29 @@ func (c *Client) PublishedRunbooksMine(ctx context.Context) ([]PublishedRunbookS
 	if err != nil {
 		return nil, err
 	}
-	summaries := make([]PublishedRunbookSummary, len(response.IDs))
-	for index, id := range response.IDs {
-		summaries[index] = PublishedRunbookSummary{ID: id, Name: response.Names[id]}
+	if response.Runbooks == nil {
+		summaries := make([]PublishedRunbookSummary, len(response.IDs))
+		for index, id := range response.IDs {
+			summaries[index] = PublishedRunbookSummary{
+				ID: id, Name: response.Names[id], Latest: true,
+			}
+		}
+		return summaries, nil
+	}
+	entries := *response.Runbooks
+	summaries := make([]PublishedRunbookSummary, len(entries))
+	for index, entry := range entries {
+		area := ""
+		if entry.DomainFunction != nil {
+			area = *entry.DomainFunction
+		}
+		summaries[index] = PublishedRunbookSummary{
+			ID:          entry.ID,
+			Name:        entry.Name,
+			Area:        area,
+			PublishedAt: entry.PublishedAt,
+			Latest:      entry.Latest,
+		}
 	}
 	return summaries, nil
 }

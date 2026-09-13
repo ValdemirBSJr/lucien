@@ -8,7 +8,45 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
+
+func TestPublishedRunbooksMineLeAreaDataEPonta(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"ids":   []string{"id-antigo", "id-atual"},
+			"names": map[string]string{"id-antigo": "rota", "id-atual": "rota"},
+			"runbooks": []map[string]any{
+				{"id": "id-antigo", "name": "rota", "domain_function": "servers", "published_at": "2026-09-01T10:00:00Z", "latest": false},
+				{"id": "id-atual", "name": "rota", "domain_function": "servers", "published_at": "2026-09-02T11:30:00Z", "latest": true},
+			},
+		})
+	}))
+	defer server.Close()
+
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("interpretar URL: %v", err)
+	}
+	client := &Client{baseURL: base, token: "token", http: server.Client()}
+	summaries, err := client.PublishedRunbooksMine(context.Background())
+	if err != nil {
+		t.Fatalf("catalogo retornou erro: %v", err)
+	}
+	if len(summaries) != 2 {
+		t.Fatalf("esperava as duas versoes, veio %+v", summaries)
+	}
+	if summaries[0].Latest || !summaries[1].Latest {
+		t.Fatalf("ponta da linhagem trocada: %+v", summaries)
+	}
+	if summaries[1].Area != "servers" {
+		t.Fatalf("area inesperada: %q", summaries[1].Area)
+	}
+	if !summaries[1].PublishedAt.Equal(time.Date(2026, 9, 2, 11, 30, 0, 0, time.UTC)) {
+		t.Fatalf("data de publicacao inesperada: %v", summaries[1].PublishedAt)
+	}
+}
 
 func TestRetryJobUsaEndpointAssincrono(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -242,7 +280,10 @@ func TestPublishedRunbooksMineUsaEndpointFiltradoPorArea(t *testing.T) {
 	if err != nil {
 		t.Fatalf("catalogo retornou erro: %v", err)
 	}
-	if len(summaries) != 1 || summaries[0].ID != "id-autorizado" || summaries[0].Name != "runbook-autorizado" {
+	// Hub anterior ao campo `runbooks`: sem area nem data, e Latest verdadeiro
+	// para que faltar informacao nao faca o runbook sumir da lista.
+	if len(summaries) != 1 || summaries[0].ID != "id-autorizado" || summaries[0].Name != "runbook-autorizado" ||
+		!summaries[0].Latest || summaries[0].Area != "" {
 		t.Fatalf("resumo inesperado: %+v", summaries)
 	}
 }

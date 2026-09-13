@@ -924,6 +924,36 @@ stuck in `PROCESSING`, use `lucien job del <id_or_name_or_index> --force`; remov
 from the queue is transactional. `--yes` skips only the interactive confirmation.
 No combination of flags deletes a `PUBLISHED` job.
 
+### `lucien runbook list`
+
+Lists the published runbooks you reach through your areas — all of them, the
+primary and the extra ones; an `admin` sees every area. It is how you find, from
+the terminal, the UUID that `runbook cat` and `runbook revise` ask for.
+
+```text
+NAME                 ID                                    AREA     PUBLISHED AT
+check-default-route  3e381ebe-0284-4d3b-b304-a13655e3dd4c  servers  2026-09-08 10:35
+```
+
+Only the **current version** of each runbook is shown. A revision creates a new
+version with its own UUID, and `revise` refuses the older one with a conflict —
+listing it would only lead the operator to that error. Earlier versions remain
+reachable in the desktop app, which opens them read-only.
+
+Being on the list does not waive the level: the list goes by area, and `revise`
+still requires `senior` or `admin` (or junior and pleno with
+`RBAC_ENTRY_ROLES_ENABLED=true`).
+
+The table goes to `stdout` and the usage hint to `stderr`, so it can be filtered:
+
+```bash
+lucien runbook list | grep servers
+```
+
+Against a Hub older than this command, AREA and PUBLISHED AT show `—`: it does
+not send that data, and the list shows everything rather than hide what it
+cannot classify.
+
 ### `lucien runbook cat <published_runbook_uuid>`
 
 Prints a published runbook without opening the editor. Pure reading: it changes
@@ -968,9 +998,9 @@ another UUID, preserves the previous one, and records the lineage
 It requires the exact publication UUID. Unlike the job commands, `revise` does
 **not** accept an index from `lucien reviews`, nor a name: a one-digit error in
 the index would publish the correction over the wrong runbook, and the queue
-changes between one command and the next. Take the UUID from the portal, from the
-published artifact's URL, or from the output of the `lucien job sent` that created
-it.
+changes between one command and the next. Take the UUID from `lucien runbook
+list`, from the portal, from the published artifact's URL, or from the output of
+the `lucien job sent` that created it.
 
 ```sh
 lucien runbook revise 3e381ebe-0284-4d3b-b304-a13655e3dd4c

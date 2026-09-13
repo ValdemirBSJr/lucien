@@ -905,6 +905,36 @@ preso em `PROCESSING`, use `lucien job del <id_ou_nome_ou_indice> --force`; a re
 fila é transacional. `--yes` pula somente a confirmação interativa. Nenhuma
 combinação de flags apaga um Job `PUBLISHED`.
 
+### `lucien runbook list`
+
+Lista os runbooks publicados que você alcança pela área — todas as que você
+tem, a primária e as adicionais; o `admin` vê todas. É o caminho para descobrir,
+pelo terminal, o UUID que o `runbook cat` e o `runbook revise` pedem.
+
+```text
+NAME                 ID                                    AREA     PUBLISHED AT
+check-default-route  3e381ebe-0284-4d3b-b304-a13655e3dd4c  servers  2026-09-08 10:35
+```
+
+Mostra só a **versão atual** de cada runbook. Uma revisão cria versão nova, com
+outro UUID, e o `revise` recusa a anterior com conflito — listá-la só levaria o
+operador até esse erro. As versões anteriores continuam acessíveis no app
+desktop, que as abre em modo leitura.
+
+Estar na lista não dispensa o nível: a lista é pela área, e o `revise` continua
+exigindo `senior` ou `admin` (ou junior e pleno com
+`RBAC_ENTRY_ROLES_ENABLED=true`).
+
+A tabela vai para `stdout` e a dica de uso para `stderr`, então dá para filtrar:
+
+```bash
+lucien runbook list | grep servers
+```
+
+Contra um Hub anterior a este comando, AREA e PUBLISHED AT aparecem como `—`:
+ele não envia esses dados, e a lista mostra tudo em vez de esconder o que não
+sabe classificar.
+
 ### `lucien runbook cat <uuid_do_runbook_publicado>`
 
 Imprime um runbook publicado, sem abrir o editor. Leitura pura: não altera nada.
@@ -947,8 +977,8 @@ três provedores — `local`, `github` e `gitea` — com as mesmas regras.
 Exige o UUID exato da publicação. Diferente dos comandos de Job, `revise` **não**
 aceita índice de `lucien reviews` nem nome: um erro de um dígito no índice
 publicaria a correção sobre o runbook errado, e a fila muda entre um comando e o
-outro. Pegue o UUID no portal, na URL do artefato publicado ou na saída do
-`lucien job sent` que o originou.
+outro. Pegue o UUID em `lucien runbook list`, no portal, na URL do artefato
+publicado ou na saída do `lucien job sent` que o originou.
 
 ```sh
 lucien runbook revise 3e381ebe-0284-4d3b-b304-a13655e3dd4c

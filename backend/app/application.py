@@ -36,6 +36,7 @@ from app.domain.ports import (
     JobRepository,
     NotFoundError,
     ProcessedAsset,
+    PublishedRunbookEntry,
     RawAssetInput,
     RunbookEnricher,
     SecretDetectedError,
@@ -899,13 +900,16 @@ class JobService:
 
     async def list_published_runbooks_for(
         self, context: SecurityContext
-    ) -> tuple[tuple[str, str], ...]:
-        """Pares (id, nome) que `context` esta autorizado a revisar de verdade.
+    ) -> tuple[PublishedRunbookEntry, ...]:
+        """Publicados que `context` alcanca pela area, com area, data e ponta.
 
         Admin nao tem filtro (ja cruza qualquer area, igual `authorizes`);
         os demais so veem publicacoes cujo dominio congelado bate com
         `authorized_domains` -- a mesma checagem que `revise` aplicaria depois,
         so que antes, pra nao listar algo que o clique seguinte recusaria.
+
+        Versoes superadas vem com `latest=False` em vez de omitidas: o `revise`
+        as recusa, mas o app desktop as abre em modo leitura.
         """
 
         allowed_domains = (

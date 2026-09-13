@@ -224,6 +224,28 @@ class PublishedRunbookCatalogResponse(BaseModel):
     names: dict[str, str] = Field(default_factory=dict)
 
 
+class PublishedRunbookEntryResponse(BaseModel):
+    id: str
+    name: str
+    domain_function: str | None
+    published_at: datetime
+    # Falso na versao que ja tem sucessor publicado. O `revise` recusa essa
+    # versao com conflito; quem lista para revisar filtra por aqui.
+    latest: bool
+
+
+class PublishedRunbookMineResponse(PublishedRunbookCatalogResponse):
+    """O catalogo de `/runbooks/published/mine`, com os dados de cada item.
+
+    Subclasse, e nao campo novo no modelo base: `/runbooks/published` usa o
+    base, e o portal le essa resposta com extra="forbid" -- um campo aditivo
+    ali ja derrubou a listagem uma vez. Esta rota so e lida pelo CLI e pelo
+    app desktop, e os dois ignoram o que nao conhecem.
+    """
+
+    runbooks: list[PublishedRunbookEntryResponse] = Field(default_factory=list)
+
+
 class RunbookConfigurationResponse(BaseModel):
     language: Literal["pt-br", "en"]
     # Valores aceitos em `lucien start -r`, para o CLI mostrar o que existe.

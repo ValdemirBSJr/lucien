@@ -56,6 +56,7 @@ from app.domain.ports import (
     NotFoundError,
     PreconditionFailedError,
     PublishedMirror,
+    PublishedRunbookEntry,
 )
 
 
@@ -1394,29 +1395,70 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
 
     async def list_published_runbooks_for_domains(
         self, allowed_domains: tuple[str, ...] | None, max_ids: int
-    ) -> tuple[tuple[str, str], ...]:
+    ) -> tuple[PublishedRunbookEntry, ...]:
         # O dominio confiavel e o congelado em publication_identity na hora da
         # publicacao -- a coluna solta JobRow.domain_function nao e
         # sincronizada nesse momento e frequentemente fica None.
+        dominio = JobRow.publication_identity["domain_function"].as_string()
         conditions = [JobRow.status == JobStatus.PUBLISHED.value]
         if allowed_domains is not None:
-            conditions.append(
-                JobRow.publication_identity["domain_function"].as_string().in_(
-                    allowed_domains
-                )
-            )
+            conditions.append(dominio.in_(allowed_domains))
         async with self._sessions() as session:
             linhas = (
                 await session.execute(
-                    select(JobRow.id, JobRow.name)
+                    # A data de publicacao mora no espelho. `created_at` do job
+                    # e a hora do upload, que num runbook original pode estar
+                    # dias antes do envio -- ele so entra quando o espelho nao
+                    # tem a linha (instalacao anterior a ele, sem backfill).
+                    select(
+                        JobRow.id,
+                        JobRow.name,
+                        dominio.label("dominio"),
+                        JobRow.created_at,
+                        PublishedDocumentRow.published_at,
+                    )
+                    .outerjoin(
+                        PublishedDocumentRow,
+                        PublishedDocumentRow.job_id == JobRow.id,
+                    )
                     .where(*conditions)
                     .order_by(JobRow.id.asc())
                     .limit(max_ids + 1)
                 )
             ).all()
-        if len(linhas) > max_ids:
-            raise ConflictError("catálogo de revisáveis excede o limite de 10000 IDs")
-        return tuple((linha.id, linha.name) for linha in linhas)
+            if len(linhas) > max_ids:
+                raise ConflictError(
+                    "catálogo de revisáveis excede o limite de 10000 IDs"
+                )
+            # Superada e a versao que ja tem sucessor PUBLICADO -- a mesma regra
+            # com que o revise a recusa. Um sucessor so reservado nao conta: o
+            # revise da fonte continua aceito enquanto ele nao publica. Sem
+            # filtro por id de proposito: um IN com milhares de ids estouraria
+            # o limite de parametros do SQLite.
+            superados = set(
+                await session.scalars(
+                    select(JobRow.supersedes_job_id).where(
+                        JobRow.status == JobStatus.PUBLISHED.value,
+                        JobRow.supersedes_job_id.is_not(None),
+                    )
+                )
+            )
+        entradas: list[PublishedRunbookEntry] = []
+        for linha in linhas:
+            momento = linha.published_at or linha.created_at
+            if momento.tzinfo is None:
+                # SQLite devolve DateTime timezone=True sem tzinfo nos testes.
+                momento = momento.replace(tzinfo=timezone.utc)
+            entradas.append(
+                PublishedRunbookEntry(
+                    id=linha.id,
+                    name=linha.name,
+                    domain_function=linha.dominio,
+                    published_at=momento,
+                    latest=linha.id not in superados,
+                )
+            )
+        return tuple(entradas)
 
     async def reserve_publication(
         self,

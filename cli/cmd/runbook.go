@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +31,97 @@ func newRunbookCommand() *cobra.Command {
 	}
 	runbookCommand.AddCommand(newRunbookReviseCommand())
 	runbookCommand.AddCommand(newRunbookCatCommand())
+	runbookCommand.AddCommand(newRunbookListCommand())
 	return runbookCommand
+}
+
+func newRunbookListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "Lists the published runbooks in your areas that revise accepts",
+		Long: "Lists the published runbooks the current identity reaches through " +
+			"its areas -- all of them, the primary and the extra ones; an admin " +
+			"sees every area.\n\n" +
+			"Only the current version of each runbook is shown. A revision " +
+			"creates a new version with its own UUID, and `revise` refuses the " +
+			"older one with a conflict, so listing it would only lead there.\n\n" +
+			"Read-only: it changes nothing. The ID column is what " +
+			"`lucien runbook cat` and `lucien runbook revise` take.",
+		Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			client, _, err := activeClient()
+			if err != nil {
+				return err
+			}
+			summaries, err := client.PublishedRunbooksMine(command.Context())
+			if err != nil {
+				return err
+			}
+			return writeRunbookList(
+				command.OutOrStdout(), command.ErrOrStderr(), currentRunbooks(summaries),
+			)
+		},
+	}
+}
+
+// currentRunbooks deixa so a ponta de cada linhagem -- a versao que o revise
+// aceita -- na ordem em que o operador procura: area, depois nome.
+func currentRunbooks(all []api.PublishedRunbookSummary) []api.PublishedRunbookSummary {
+	current := make([]api.PublishedRunbookSummary, 0, len(all))
+	for _, summary := range all {
+		if summary.Latest {
+			current = append(current, summary)
+		}
+	}
+	sort.SliceStable(current, func(i, j int) bool {
+		if current[i].Area != current[j].Area {
+			return current[i].Area < current[j].Area
+		}
+		if current[i].Name != current[j].Name {
+			return current[i].Name < current[j].Name
+		}
+		return current[i].ID < current[j].ID
+	})
+	return current
+}
+
+// writeRunbookList escreve a tabela no stdout e a dica no stderr, para que o
+// stdout seja so a tabela para quem a passa adiante.
+func writeRunbookList(out, hint io.Writer, runbooks []api.PublishedRunbookSummary) error {
+	if len(runbooks) == 0 {
+		_, err := fmt.Fprintln(out, "No published runbook in your areas.")
+		return err
+	}
+	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(writer, "NAME\tID\tAREA\tPUBLISHED AT")
+	for _, runbook := range runbooks {
+		fmt.Fprintf(
+			writer, "%s\t%s\t%s\t%s\n",
+			dashIfEmpty(runbook.Name), runbook.ID, dashIfEmpty(runbook.Area),
+			formatPublishedAt(runbook.PublishedAt),
+		)
+	}
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(hint, "\nTo change one: lucien runbook revise <ID>")
+	return err
+}
+
+// Um Hub anterior ao campo `runbooks` nao manda area nem data: o traco deixa
+// claro que falta o dado, em vez de uma coluna vazia que parece erro.
+func dashIfEmpty(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "—"
+	}
+	return value
+}
+
+func formatPublishedAt(moment time.Time) string {
+	if moment.IsZero() {
+		return "—"
+	}
+	return moment.Local().Format("2006-01-02 15:04")
 }
 
 func newRunbookCatCommand() *cobra.Command {
