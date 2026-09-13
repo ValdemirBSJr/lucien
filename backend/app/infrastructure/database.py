@@ -1587,12 +1587,12 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
         )
         if atual is not None and atual != source.id:
             return ConflictError(
-                "esta versão já foi revisada; revise sempre a mais recente da "
-                f"linhagem: {atual}"
+                "this version has already been revised; always revise the "
+                f"latest in the lineage: {atual}"
             )
         return ConflictError(
-            "esta versão já foi revisada; recarregue o runbook e revise a "
-            "versão mais recente"
+            "this version has already been revised; reload the runbook and "
+            "revise the latest version"
         )
 
     async def _reserve_revision_transaction(
@@ -1619,7 +1619,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
                 raise NotFoundError("published runbook not found")
             if source.content_hash != expected_content_hash:
                 raise PreconditionFailedError(
-                    "versão base divergente; recarregue o runbook"
+                    "the base version has changed; reload the runbook"
                 )
 
             successor = await session.scalar(
