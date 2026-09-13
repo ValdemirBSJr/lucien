@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, aliased, mapped_column
 
 from app.domain.models import (
     Job,
@@ -1398,8 +1398,14 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
     ) -> tuple[PublishedRunbookEntry, ...]:
         # O dominio confiavel e o congelado em publication_identity na hora da
         # publicacao -- a coluna solta JobRow.domain_function nao e
-        # sincronizada nesse momento e frequentemente fica None.
-        dominio = JobRow.publication_identity["domain_function"].as_string()
+        # sincronizada nesse momento e frequentemente fica None. Numa revisao,
+        # a linha guarda a identidade de quem revisou; a area e a da raiz, a
+        # mesma pasta em que a revisao e gravada.
+        raiz = aliased(JobRow)
+        dominio = func.coalesce(
+            raiz.publication_identity["domain_function"].as_string(),
+            JobRow.publication_identity["domain_function"].as_string(),
+        )
         conditions = [JobRow.status == JobStatus.PUBLISHED.value]
         if allowed_domains is not None:
             conditions.append(dominio.in_(allowed_domains))
@@ -1417,6 +1423,7 @@ class SQLAlchemyJobRepository(JobRepository, IdentityRepository, PublishedMirror
                         JobRow.created_at,
                         PublishedDocumentRow.published_at,
                     )
+                    .outerjoin(raiz, raiz.id == JobRow.root_job_id)
                     .outerjoin(
                         PublishedDocumentRow,
                         PublishedDocumentRow.job_id == JobRow.id,

@@ -150,6 +150,38 @@ async def test_revisao_marca_a_versao_anterior_como_superada(
     assert entradas[revisao.id].domain_function == "servidores"
 
 
+async def test_revisao_por_admin_de_outra_area_fica_na_area_da_raiz(
+    tmp_path: Path, repository: SQLAlchemyJobRepository
+) -> None:
+    """A linha da revisao guarda a identidade de quem revisou; a area e da raiz.
+
+    O arquivo e gravado na pasta da raiz. Ler a area do revisor tirava a nova
+    versao da lista de quem e da area e a mostrava com a area do admin.
+    """
+
+    service = _service(repository, LocalProvider(tmp_path / "playbooks"))
+    autor = await _user(repository, "autor-raiz", RoleLevel.SENIOR, "servidores")
+    admin = await _user(repository, "admin-revisor", RoleLevel.ADMIN, "platform")
+    original = await _publish(repository, service, autor, "job-revisado-por-admin")
+
+    revisao, _ = await service.revise(
+        _context(admin),
+        original.id,
+        original.content_hash,
+        "### Step 1: Run\n```bash\necho revisado pelo admin\n```\n",
+        "revise-job-revisado-por-admin",
+    )
+
+    entradas = {
+        entrada.id: entrada
+        for entrada in await service.list_published_runbooks_for(_context(autor))
+    }
+    assert revisao.id in entradas
+    assert entradas[revisao.id].domain_function == "servidores"
+    assert entradas[revisao.id].latest is True
+    assert entradas[original.id].latest is False
+
+
 async def test_data_de_publicacao_vem_do_espelho_e_nao_do_upload(
     tmp_path: Path, repository: SQLAlchemyJobRepository
 ) -> None:
