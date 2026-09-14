@@ -491,7 +491,8 @@ development easier, but it is not a production vault.
 | `VIEWER_BIND_ADDRESS` | Compose | interface where the portal publishes TCP/9091. Default `127.0.0.1` |
 | `WIKI_BIND_ADDRESS` | Compose | interface where the compact wiki publishes TCP/9092. Default `127.0.0.1` |
 | `VIEWER_HUB_URL` | portal | internal Hub URL used by the portal. Default `https://hub:8443` |
-| `VIEWER_SESSION_TTL_SECONDS` | portal | portal session lifetime. Default `900` |
+| `VIEWER_SESSION_TTL_SECONDS` | portal | inactivity that ends the portal session: every page renews it, and it expires after this long without use. Default `600` |
+| `VIEWER_SESSION_MAX_SECONDS` | portal | ceiling of the session since login, even with continuous use. Default `28800` (8 h) |
 | `VIEWER_MAX_DOCUMENTS` | portal | ceiling of documents the portal indexes; above it the portal answers with an error instead of degrading. Default `10000` |
 | `VIEWER_MAX_FILE_BYTES` | portal | maximum size of a runbook read by the portal. Default `1048576` |
 | `VIEWER_SESSION_SECRET_FILE` | portal | file holding the secret that signs the portal session |

@@ -176,13 +176,16 @@ async def test_hub_client_rejeita_catalogo_malformado(
 
 def test_cookie_cifra_e_autentica_credencial() -> None:
     secret = "s" * 48
-    cipher = SessionCipher(secret, 900)
+    cipher = SessionCipher(secret, 900, 28_800)
     credential = SessionCredential("operador", "luc_token_muito_secreto")
 
     sealed = cipher.seal(credential)
 
     assert "luc_token_muito_secreto" not in sealed
-    assert cipher.open(sealed) == credential
+    aberta = cipher.open(sealed)
+    assert (aberta.username, aberta.token) == (credential.username, credential.token)
+    # O login vira a hora carimbada ao selar, e viaja no cookie daí em diante.
+    assert isinstance(aberta.issued_at, int)
     with pytest.raises(InvalidCredentialsError):
         cipher.open(sealed[:-1] + ("A" if sealed[-1] != "A" else "B"))
 

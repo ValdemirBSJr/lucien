@@ -19,21 +19,43 @@
         <a href="/?category={{ document.summary.root_domain_function }}">{{ document.summary.root_domain_function|replace('_', ' ') }}</a><span>/</span>
         <span>{{ document.summary.id[:8] }}</span>
       </nav>
+      {% if not document.is_latest %}
+        <div class="version-banner" role="note">
+          You are viewing version {{ document.summary.revision }} of {{ document.versions|length }}. It is kept for reference and is read-only.
+          <a href="/runbooks/{{ document.summary.root_id }}">Go to the current version</a>
+        </div>
+      {% endif %}
       <header class="document-header">
         <div class="document-title-row">
           <h1>{{ document.summary.title }}</h1>
           {% if can_edit %}<a class="button" href="/runbooks/{{ document.summary.root_id }}/edit">Edit</a>{% endif %}
         </div>
-        <dl class="document-metadata">
-          <div><dt>Author</dt><dd>{{ document.summary.author }}</dd></div>
-          <div><dt>Level</dt><dd>{{ document.summary.author_level }}</dd></div>
-          <div><dt>Area</dt><dd>{{ document.summary.domain_function|replace('_', ' ') }}</dd></div>
-          <div><dt>Created</dt><dd>{{ document.summary.created_at.strftime('%Y-%m-%d %H:%M') }}</dd></div>
-          <div><dt>Revision</dt><dd>{{ document.summary.revision }}</dd></div>
-        </dl>
-        <div class="tag-list" aria-label="Tags">
-          {% for tag in document.summary.tags %}<span class="tag">{{ tag }}</span>{% endfor %}
+        {# A mesma tabela que o GitHub e o Gitea desenham a partir do
+           frontmatter: todas as chaves, na ordem do arquivo. #}
+        <div class="frontmatter-table">
+          <table>
+            <thead>
+              <tr>{% for key, _ in document.metadata %}<th scope="col">{{ key }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+              <tr>{% for _, value in document.metadata %}<td>{{ value }}</td>{% endfor %}</tr>
+            </tbody>
+          </table>
         </div>
+        {% if document.versions|length > 1 %}
+          <nav class="version-history" aria-label="Versions">
+            <span class="version-history-label">Versions</span>
+            {% for version in document.versions %}
+              {% if version.id == document.summary.id %}
+                <span class="version-link active" aria-current="page">v{{ version.revision }}{% if loop.last %} · current{% endif %}</span>
+              {% elif loop.last %}
+                <a class="version-link" href="/runbooks/{{ document.summary.root_id }}">v{{ version.revision }} · current</a>
+              {% else %}
+                <a class="version-link" href="/runbooks/{{ document.summary.root_id }}/versions/{{ version.revision }}">v{{ version.revision }}</a>
+              {% endif %}
+            {% endfor %}
+          </nav>
+        {% endif %}
       </header>
       <article class="markdown-body">{{ document.html|safe }}</article>
     </main>

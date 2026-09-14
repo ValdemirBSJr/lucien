@@ -196,7 +196,8 @@ services:
       VIEWER_HUB_CA_FILE: /certs/ca.crt
       VIEWER_SESSION_SECRET_FILE: /run/secrets/viewer_session_secret
       VIEWER_RUNBOOKS_ROOT: /runbooks
-      VIEWER_SESSION_TTL_SECONDS: ${VIEWER_SESSION_TTL_SECONDS:-900}
+      VIEWER_SESSION_TTL_SECONDS: ${VIEWER_SESSION_TTL_SECONDS:-600}
+      VIEWER_SESSION_MAX_SECONDS: ${VIEWER_SESSION_MAX_SECONDS:-28800}
       VIEWER_MAX_DOCUMENTS: ${VIEWER_MAX_DOCUMENTS:-10000}
       # Mesmo valor do Hub, usado só para exibir o botão de edição no portal.
       RBAC_ENTRY_ROLES_ENABLED: ${RBAC_ENTRY_ROLES_ENABLED:-false}

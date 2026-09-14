@@ -186,24 +186,38 @@ class RunbookRepository:
         )
 
     async def get_runbook(
-        self, runbook_id: str, published_ids: frozenset[str]
+        self,
+        runbook_id: str,
+        published_ids: frozenset[str],
+        revision: int | None = None,
     ) -> RunbookDocument | None:
+        """Uma versao do runbook, sempre pela raiz: a atual, ou a `revision`.
+
+        O id de uma versao sozinho nao abre nada. A raiz e tambem a versao 1,
+        e o mesmo id nao pode querer dizer "a atual" e "a primeira".
+        """
+
         canonical_id = _canonical_uuid(runbook_id)
         if canonical_id is None:
             return None
-        entries = _latest_revisions(
+        chain = _chains(
             [
                 entry
                 for entry in await self._snapshot(published_ids)
                 if entry.summary.id in published_ids
             ]
-        )
-        entry = entries.get(canonical_id)
-        if entry is None:
+        ).get(canonical_id)
+        if not chain:
+            return None
+        if revision is None:
+            entry = chain[-1]
+        elif 1 <= revision <= len(chain):
+            entry = chain[revision - 1]
+        else:
             return None
         try:
             text = await asyncio.to_thread(self._read_safe, entry.path)
-            summary, body = self._parse_document(entry.path, text)
+            summary, body, metadata = self._parse_document(entry.path, text)
             if (
                 summary.root_id != canonical_id
                 or summary.id != entry.summary.id
@@ -231,6 +245,8 @@ class RunbookRepository:
             html=sanitized,
             markdown=body,
             body_hash=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+            metadata=metadata,
+            versions=tuple(item.summary for item in chain),
         )
 
     def invalidate(self) -> None:
@@ -285,7 +301,7 @@ class RunbookRepository:
                     )
                 try:
                     text = self._read_safe(path)
-                    summary, _ = self._parse_document(path, text)
+                    summary, _, _ = self._parse_document(path, text)
                 except (OSError, UnicodeError, ValueError, yaml.YAMLError):
                     logger.warning("runbook inválido ignorado: %s", path.name)
                     continue
@@ -312,7 +328,9 @@ class RunbookRepository:
             os.close(descriptor)
 
     @staticmethod
-    def _parse_document(path: Path, text: str) -> tuple[RunbookSummary, str]:
+    def _parse_document(
+        path: Path, text: str
+    ) -> tuple[RunbookSummary, str, tuple[tuple[str, str], ...]]:
         if not text.startswith("---\n"):
             raise ValueError("frontmatter ausente")
         closing = text.find("\n---\n", 4)
@@ -407,7 +425,25 @@ class RunbookRepository:
                 tags=tuple(tags_raw),
             ),
             body,
+            _metadata_pairs(metadata),
         )
+
+
+def _metadata_pairs(metadata: dict[object, object]) -> tuple[tuple[str, str], ...]:
+    """O frontmatter na ordem do arquivo, como o GitHub e o Gitea o desenham.
+
+    Os valores ja passaram pela validacao do schema; aqui so viram texto. A
+    lista de tags sai separada por virgula.
+    """
+
+    pares: list[tuple[str, str]] = []
+    for chave, valor in metadata.items():
+        if isinstance(valor, list):
+            texto = ", ".join(str(item) for item in valor)
+        else:
+            texto = str(valor)
+        pares.append((str(chave), texto))
+    return tuple(pares)
 
 
 def _safe_children(path: Path) -> tuple[os.DirEntry[str], ...]:
@@ -477,13 +513,23 @@ def _extract_title(body: str, runbook_id: str) -> str:
 
 
 def _latest_revisions(discovered: list[_Entry]) -> dict[str, _Entry]:
-    """Seleciona apenas a cadeia contígua mais nova de cada runbook raiz."""
+    """Seleciona apenas a ponta da cadeia contígua de cada runbook raiz."""
+
+    return {root_id: chain[-1] for root_id, chain in _chains(discovered).items()}
+
+
+def _chains(discovered: list[_Entry]) -> dict[str, tuple[_Entry, ...]]:
+    """A cadeia contígua de cada runbook raiz, da versão 1 à mais nova.
+
+    As versões antigas continuam publicadas e o portal as mostra, só para
+    leitura; por isso a cadeia inteira, e não só a ponta.
+    """
 
     grouped: dict[str, list[_Entry]] = {}
     for entry in discovered:
         grouped.setdefault(entry.summary.root_id, []).append(entry)
 
-    latest: dict[str, _Entry] = {}
+    chains: dict[str, tuple[_Entry, ...]] = {}
     for root_id, candidates in grouped.items():
         by_revision: dict[int, list[_Entry]] = {}
         for candidate in candidates:
@@ -497,6 +543,7 @@ def _latest_revisions(discovered: list[_Entry]) -> dict[str, _Entry]:
             logger.warning("cadeia de revisões inválida ignorada: %s", root_id)
             continue
         current = roots[0]
+        cadeia = [current]
         next_revision = 2
         while next_revision in by_revision:
             revisions = by_revision[next_revision]
@@ -507,12 +554,12 @@ def _latest_revisions(discovered: list[_Entry]) -> dict[str, _Entry]:
                 logger.warning("cadeia de revisões ambígua interrompida: %s", root_id)
                 break
             current = revisions[0]
+            cadeia.append(current)
             next_revision += 1
-        latest[root_id] = _Entry(
-            current.path,
-            replace(
-                current.summary,
-                root_domain_function=roots[0].summary.domain_function,
-            ),
+        # A área de toda versão é a da raiz: é nela que a revisão é gravada.
+        dominio = roots[0].summary.domain_function
+        chains[root_id] = tuple(
+            _Entry(item.path, replace(item.summary, root_domain_function=dominio))
+            for item in cadeia
         )
-    return latest
+    return chains

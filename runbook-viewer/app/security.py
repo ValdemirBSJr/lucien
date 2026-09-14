@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import json
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -226,32 +228,59 @@ HubIdentityVerifier = HubClient
 class SessionCredential:
     username: str
     token: str
+    # Hora do login, em segundos desde a época. Vazio no login: o cipher
+    # carimba ao selar, e daí em diante ela viaja inalterada no cookie.
+    issued_at: int | None = None
 
 
 class SessionCipher:
-    """Mantém a credencial cifrada e autenticada no cookie do navegador."""
+    """Mantém a credencial cifrada e autenticada no cookie do navegador.
 
-    def __init__(self, secret: str, ttl_seconds: int) -> None:
+    Duas janelas. A de inatividade é a do Fernet, medida desde a última vez
+    que o cookie foi selado -- e cada página autenticada sela de novo. O teto
+    é medido desde o login, que viaja dentro do cookie: renovar para sempre
+    manteria viva uma sessão esquecida aberta.
+    """
+
+    def __init__(
+        self,
+        secret: str,
+        ttl_seconds: int,
+        max_seconds: int,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
         self._fernet = Fernet(key)
         self._ttl_seconds = ttl_seconds
+        self._max_seconds = max_seconds
+        self._clock = clock
 
     def seal(self, credential: SessionCredential) -> str:
+        agora = int(self._clock())
+        issued_at = credential.issued_at if credential.issued_at is not None else agora
         payload = json.dumps(
-            {"username": credential.username, "token": credential.token},
+            {
+                "username": credential.username,
+                "token": credential.token,
+                "iat": issued_at,
+            },
             ensure_ascii=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        return self._fernet.encrypt(payload).decode("ascii")
+        return self._fernet.encrypt_at_time(payload, agora).decode("ascii")
 
     def open(self, value: str) -> SessionCredential:
+        agora = int(self._clock())
         try:
-            raw = self._fernet.decrypt(
-                value.encode("ascii"), ttl=self._ttl_seconds
+            raw = self._fernet.decrypt_at_time(
+                value.encode("ascii"), ttl=self._ttl_seconds, current_time=agora
             )
             payload = json.loads(raw.decode("utf-8"))
             username = payload["username"]
             token = payload["token"]
+            # Cookie de antes do teto não tem a hora do login: recusado, e o
+            # usuário entra de novo uma vez.
+            issued_at = payload["iat"]
         except (InvalidToken, UnicodeError, ValueError, KeyError, TypeError):
             raise InvalidCredentialsError from None
         if (
@@ -259,9 +288,13 @@ class SessionCipher:
             or _USERNAME_PATTERN.fullmatch(username) is None
             or not isinstance(token, str)
             or not 16 <= len(token) <= 512
+            or isinstance(issued_at, bool)
+            or not isinstance(issued_at, int)
+            or issued_at > agora + 60
+            or agora - issued_at > self._max_seconds
         ):
             raise InvalidCredentialsError
-        return SessionCredential(username=username, token=token)
+        return SessionCredential(username=username, token=token, issued_at=issued_at)
 
 
 @dataclass(frozen=True, slots=True)

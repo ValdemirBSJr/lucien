@@ -154,7 +154,7 @@ def _analisa(raiz: Path, nome: str):
         "consulta-resolucao-dns--3e381ebe-0284-4d3b-b304-a13655e3dd4c.md"
     )
     caminho.write_text(documento, encoding="utf-8")
-    resumo, _corpo = RunbookRepository._parse_document(caminho, documento)
+    resumo, _corpo, _metadados = RunbookRepository._parse_document(caminho, documento)
     return resumo
 
 

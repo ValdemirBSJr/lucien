@@ -74,8 +74,14 @@ def create_app(
     cipher = SessionCipher(
         settings.viewer_session_secret.get_secret_value(),
         settings.viewer_session_ttl_seconds,
+        settings.viewer_session_max_seconds,
     )
-    edit_cipher = EditFormCipher(settings.viewer_session_secret.get_secret_value())
+    # O formulário de edição vive tanto quanto a sessão: com o keepalive do
+    # editor, quem escreve por mais de dez minutos não perde o texto ao enviar.
+    edit_cipher = EditFormCipher(
+        settings.viewer_session_secret.get_secret_value(),
+        settings.viewer_session_max_seconds,
+    )
     templates = Jinja2Templates(directory=_BASE_DIR / "templates")
 
     @asynccontextmanager
@@ -128,6 +134,20 @@ def create_app(
                             {"detail": "payload exceeds the limit"}, status_code=413
                         )
         response = early_response or await call_next(request)  # type: ignore[operator]
+        renovada = getattr(request.state, "sessao_renovada", None)
+        if renovada is not None and not any(
+            valor.startswith(f"{SESSION_COOKIE}=")
+            for valor in response.headers.getlist("set-cookie")
+        ):
+            # Cada página autenticada renova a sessão: quem está usando o
+            # portal não é deslogado, e quem parou por
+            # VIEWER_SESSION_TTL_SECONDS é.
+            _set_cookie(
+                response,
+                SESSION_COOKIE,
+                renovada,
+                max_age=settings.viewer_session_ttl_seconds,
+            )
         if request.url.path.startswith("/static/"):
             # Assets não contêm dados de usuário; cache evita baixar novamente o logo.
             response.headers["Cache-Control"] = "public, max-age=3600"
@@ -143,9 +163,11 @@ def create_app(
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
+        # connect-src 'self': o editor renova a sessão enquanto se digita
+        # (keepalive.js), sempre na mesma origem.
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'none'; form-action 'self'; "
-            "frame-ancestors 'none'; object-src 'none'; connect-src 'none'; "
+            "frame-ancestors 'none'; object-src 'none'; connect-src 'self'; "
             "img-src 'self' data:; font-src 'self'; style-src 'self'; "
             "script-src 'self'"
         )
@@ -160,6 +182,8 @@ def create_app(
         user = await hub_client.verify(
             credential.username, credential.token
         )
+        # Só depois do Hub confirmar: token revogado não ganha sobrevida.
+        request.state.sessao_renovada = cipher.seal(credential)
         return _AuthenticatedSession(user=user, credential=credential)
 
     async def published_ids(session: _AuthenticatedSession) -> frozenset[str]:
@@ -297,13 +321,19 @@ def create_app(
             },
         )
 
-    @app.get("/runbooks/{runbook_id}", response_class=HTMLResponse)
-    async def runbook_detail(request: Request, runbook_id: str) -> HTMLResponse:
+    async def render_runbook(
+        request: Request, root_id: str, revision: int | None
+    ) -> Response:
         session = await authenticated_session(request)
         allowed_ids = await published_ids(session)
-        document = await catalog.get_runbook(runbook_id, allowed_ids)
+        document = await catalog.get_runbook(root_id, allowed_ids, revision)
         if document is None:
             raise HTTPException(status_code=404, detail="runbook not found")
+        if revision is not None and document.is_latest:
+            # A versão atual tem um endereço só: o da raiz.
+            return RedirectResponse(
+                url=f"/runbooks/{document.summary.root_id}", status_code=303
+            )
         summaries = await catalog.list_runbooks(allowed_ids)
         return templates.TemplateResponse(
             request=request,
@@ -312,13 +342,33 @@ def create_app(
                 "user": session.user,
                 "document": document,
                 "categories": _group_categories(summaries),
-                "can_edit": _can_edit(
+                # Versão antiga é só leitura: o Hub recusa revisá-la, e o
+                # botão só levaria a essa recusa.
+                "can_edit": document.is_latest
+                and _can_edit(
                     session.user,
                     document.summary.root_domain_function,
                     settings.rbac_entry_roles_enabled,
                 ),
             },
         )
+
+    @app.get("/runbooks/{runbook_id}", response_class=HTMLResponse)
+    async def runbook_detail(request: Request, runbook_id: str) -> Response:
+        return await render_runbook(request, runbook_id, None)
+
+    @app.get("/runbooks/{root_id}/versions/{revision}", response_class=HTMLResponse)
+    async def runbook_version(
+        request: Request, root_id: str, revision: int
+    ) -> Response:
+        return await render_runbook(request, root_id, revision)
+
+    @app.get("/session/keepalive")
+    async def keepalive(request: Request) -> Response:
+        # Só existe para o editor renovar a sessão enquanto se digita. A
+        # renovação é a mesma de qualquer página, feita no middleware.
+        await authenticated_session(request)
+        return Response(status_code=204)
 
     @app.get("/runbooks/{root_id}/edit", response_class=HTMLResponse)
     async def edit_runbook(request: Request, root_id: str) -> HTMLResponse:
@@ -351,7 +401,12 @@ def create_app(
             edit_cipher.seal(state),
             document.markdown,
         )
-        _set_cookie(response, EDIT_CSRF_COOKIE, csrf_token, max_age=600)
+        _set_cookie(
+            response,
+            EDIT_CSRF_COOKIE,
+            csrf_token,
+            max_age=settings.viewer_session_max_seconds,
+        )
         return response
 
     @app.post("/runbooks/{root_id}/edit", response_class=HTMLResponse)
