@@ -479,7 +479,8 @@ desenvolvimento, mas não é cofre de produção.
 | `VIEWER_BIND_ADDRESS` | Compose | interface onde o portal publica a TCP/9091. Padrão `127.0.0.1` |
 | `WIKI_BIND_ADDRESS` | Compose | interface onde a wiki compacta publica a TCP/9092. Padrão `127.0.0.1` |
 | `VIEWER_HUB_URL` | portal | URL interna do Hub usada pelo portal. Padrão `https://hub:8443` |
-| `VIEWER_SESSION_TTL_SECONDS` | portal | validade da sessão do portal. Padrão `900` |
+| `VIEWER_SESSION_TTL_SECONDS` | portal | inatividade que encerra a sessão do portal: cada página a renova, e ela cai depois deste tempo sem uso. Padrão `600` |
+| `VIEWER_SESSION_MAX_SECONDS` | portal | teto da sessão desde o login, mesmo com uso contínuo. Padrão `28800` (8 h) |
 | `VIEWER_MAX_DOCUMENTS` | portal | teto de documentos que o portal indexa; acima dele responde erro em vez de degradar. Padrão `10000` |
 | `VIEWER_MAX_FILE_BYTES` | portal | tamanho máximo de um runbook lido pelo portal. Padrão `1048576` |
 | `VIEWER_SESSION_SECRET_FILE` | portal | arquivo com o segredo que assina a sessão do portal |

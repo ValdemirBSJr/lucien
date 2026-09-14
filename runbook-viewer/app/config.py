@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     viewer_session_secret: SecretStr = SecretStr("")
     viewer_session_secret_file: Path | None = None
     viewer_runbooks_root: Path = Path("/runbooks")
-    viewer_session_ttl_seconds: int = 900
+    # Inatividade: cada página autenticada renova a sessão, que cai depois
+    # deste tempo sem uso.
+    viewer_session_ttl_seconds: int = 600
+    # Teto desde o login, mesmo com uso contínuo.
+    viewer_session_max_seconds: int = 28_800
     viewer_max_documents: int = 10_000
     viewer_max_file_bytes: int = 1024 * 1024
     # Espelha RBAC_ENTRY_ROLES_ENABLED do Hub apenas para exibir o botão de edição. O
@@ -69,6 +73,24 @@ class Settings(BaseSettings):
                 "VIEWER_SESSION_TTL_SECONDS deve ficar entre 60 e 3600"
             )
         return value
+
+    @field_validator("viewer_session_max_seconds")
+    @classmethod
+    def validate_session_max(cls, value: int) -> int:
+        if not 600 <= value <= 86_400:
+            raise ValueError(
+                "VIEWER_SESSION_MAX_SECONDS deve ficar entre 600 e 86400"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_session_window(self) -> "Settings":
+        if self.viewer_session_max_seconds < self.viewer_session_ttl_seconds:
+            raise ValueError(
+                "VIEWER_SESSION_MAX_SECONDS não pode ser menor que "
+                "VIEWER_SESSION_TTL_SECONDS"
+            )
+        return self
 
     @field_validator("viewer_max_documents")
     @classmethod

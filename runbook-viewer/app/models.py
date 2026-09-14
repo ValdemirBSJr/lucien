@@ -41,3 +41,12 @@ class RunbookDocument:
     html: str
     markdown: str
     body_hash: str
+    # O frontmatter inteiro, na ordem do arquivo: a tabela que o GitHub e o
+    # Gitea desenham no topo do runbook.
+    metadata: tuple[tuple[str, str], ...] = ()
+    # A cadeia inteira, da versao 1 a atual.
+    versions: tuple[RunbookSummary, ...] = ()
+
+    @property
+    def is_latest(self) -> bool:
+        return not self.versions or self.versions[-1].id == self.summary.id
