@@ -49,9 +49,15 @@ class TesseractImageScanner(ImageSecurityScanner):
         clean_bytes = await asyncio.to_thread(self._decode_and_reencode, raw_bytes)
         ocr_text = await asyncio.to_thread(self._extract_text, clean_bytes)
 
-        result = await self._secret_scanner.detect(ocr_text)
-        if result.detected:
-            raise SecretDetectedError(secret_detection_message(result))
+        # Imagem sem texto legivel -- foto de equipamento, diagrama -- rende
+        # OCR vazio. Sem texto nao ha o que vazar, e o scanner exige conteudo
+        # nao vazio: chama-lo assim voltava 422, que o Hub reportava como
+        # "secret scanner unavailable" e recusava a publicacao inteira. O
+        # upload trata o log vazio do mesmo jeito.
+        if ocr_text.strip():
+            result = await self._secret_scanner.detect(ocr_text)
+            if result.detected:
+                raise SecretDetectedError(secret_detection_message(result))
 
         return ProcessedAsset(content=clean_bytes, media_type="image/png")
 

@@ -18,6 +18,9 @@ class _Scanner(SecretScanner):
         self.scanned: list[str] = []
 
     async def detect(self, content: str) -> SecretScanResult:
+        # O scanner real recusa conteudo vazio (422). O falso aceitava, e foi
+        # assim que imagem sem texto passou nos testes e falhou em producao.
+        assert content, "o scanner real recusa conteudo vazio"
         self.scanned.append(content)
         return SecretScanResult(
             detected=self.detected,
@@ -85,6 +88,17 @@ def test_happy_path_returns_png_and_scans_ocr_text() -> None:
     # A imagem retornada e valida PNG.
     Image.open(io.BytesIO(result.content)).verify()
     assert len(fake.scanned) == 1
+
+
+def test_imagem_sem_texto_passa_sem_chamar_o_scanner() -> None:
+    # Foto de equipamento, sem texto legivel: o OCR volta vazio. Antes o Hub
+    # mandava "" ao scanner, recebia 422 e recusava a publicacao inteira como
+    # "secret scanner unavailable".
+    scanner, fake = _scanner()
+    result = _run(scanner.process(_png_bytes(width=300, height=200), "image/png"))
+
+    Image.open(io.BytesIO(result.content)).verify()
+    assert fake.scanned == []
 
 
 def test_strips_metadata() -> None:

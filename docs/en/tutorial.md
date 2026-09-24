@@ -643,9 +643,11 @@ through a secrets manager, never in a committed file.
 | `412` when reviewing in the portal | another revision changed the base; reload before editing |
 | `409` when reviewing in the portal | the base already has a successor, or the key does not match the attempt; repeat the original form or reload |
 | `422` with the secrets policy | remove the real credential; use a placeholder such as `SUA_SENHA_AQUI` |
-| `502` with the secret scanner unavailable | restore the service; the Hub blocks for safety |
+| `502` with the secret scanner unavailable | restore the service; the Hub blocks for safety. If the service is healthy and the error only shows up when publishing with an image, the image has no readable text (equipment photo, diagram): OCR came back empty and the scanner refused the empty content. The version with `MAX_PUBLICATION_BYTES` already skips the scan when there is no text; before it, work around it by including some visible text in the screenshot |
 | no command detected | provide `-d`, reduce terminal noise, and confirm the SLM's health |
 | truncated-log warning at `stop`/`upload` | the session exceeded `MAX_LOG_BYTES`; commands from the end may be missing — record shorter sessions or raise the limit |
+| `413` when publishing or revising with images: `request body is … MiB, above the … MiB limit for publishing a runbook with its images; review MAX_PUBLICATION_BYTES on the Hub` | the text and the images, in base64, went past the publication ceiling (default 16 MiB). Save the screenshots as JPG or at a lower resolution, or raise `MAX_PUBLICATION_BYTES` in the Hub `.env` (up to 64 MiB) and recreate only the `hub` service. Before the version with this variable, publication followed the log limit (about 2.1 MiB) and the refusal only said `payload excede o limite` |
+| `413` on another route: `… review MAX_LOG_BYTES on the Hub` | the body went past the general limit, `MAX_LOG_BYTES` + 128 KiB (at least 1 MiB + 128 KiB); on upload, record shorter sessions or raise `MAX_LOG_BYTES` |
 | the editor does not open | set `EDITOR=vi`, `vim`, or another available executable |
 | publication returns a conflict | the job is already `PUBLISHED`, the same key was reused with different content, or the destination already holds a divergent artifact |
 

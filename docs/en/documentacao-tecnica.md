@@ -455,6 +455,7 @@ development easier, but it is not a production vault.
 | `UPLOAD_WORKER_RETRY_BASE_SECONDS` | upload-worker | base of the exponential backoff, capped at 300 s |
 | `UPLOAD_WORKER_MAX_ATTEMPTS` | upload-worker | attempts before marking `FAILED` |
 | `MAX_LOG_BYTES` | Hub and CLI | log limit, between 1 KiB and 10 MiB; on reaching it, the CLI truncates the recording and warns at `stop` and at `upload` |
+| `MAX_PUBLICATION_BYTES` | Hub | ceiling of the publication and revision body, which carries the runbook images in base64 (a third larger than the file); between 2 MiB and 64 MiB. Default `16777216` (16 MiB). The other routes follow the limit derived from `MAX_LOG_BYTES` |
 | `SECRET_SCANNER_URL` | Hub | internal URL of the isolated Gitleaks scanner |
 | `SECRET_SCANNER_TIMEOUT_SECONDS` | Hub | timeout from 0.1 to 30 s; a failure blocks the content |
 | `STORAGE_PROVIDER` | Hub | `local`, `github`, or `gitea` |

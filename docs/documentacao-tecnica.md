@@ -443,6 +443,7 @@ desenvolvimento, mas não é cofre de produção.
 | `UPLOAD_WORKER_RETRY_BASE_SECONDS` | upload-worker | base do backoff exponencial, limitado a 300 s |
 | `UPLOAD_WORKER_MAX_ATTEMPTS` | upload-worker | tentativas antes de marcar `FAILED` |
 | `MAX_LOG_BYTES` | Hub e CLI | limite do log, entre 1 KiB e 10 MiB; ao atingi-lo, o CLI trunca a gravação e avisa no `stop` e no `upload` |
+| `MAX_PUBLICATION_BYTES` | Hub | teto do corpo da publicação e da revisão, que levam as imagens do runbook em base64 (um terço maior que o arquivo); entre 2 MiB e 64 MiB. Padrão `16777216` (16 MiB). As demais rotas seguem o limite derivado de `MAX_LOG_BYTES` |
 | `SECRET_SCANNER_URL` | Hub | URL interna do scanner Gitleaks isolado |
 | `SECRET_SCANNER_TIMEOUT_SECONDS` | Hub | timeout de 0,1 a 30 s; falha bloqueia o conteúdo |
 | `STORAGE_PROVIDER` | Hub | `local`, `github` ou `gitea` |
