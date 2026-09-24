@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     max_asset_bytes: int = 5 * 1024 * 1024
     max_asset_dimension_px: int = 8192
     max_assets_per_publication: int = 20
+    # Teto do corpo da publicacao e da revisao, que levam as imagens em base64
+    # (um terco maior que o arquivo). As demais rotas seguem o limite do log:
+    # sem este teto proprio, publicar com algumas capturas de tela ja passava
+    # dos 2 MiB e o Hub recusava antes de olhar as imagens.
+    max_publication_bytes: int = 16 * 1024 * 1024
     ocr_languages: str = "por+eng"
 
     storage_provider: Literal["local", "github", "gitea"] = "local"
@@ -284,6 +289,15 @@ class Settings(BaseSettings):
     def validate_max_asset_bytes(cls, value: int) -> int:
         if value < 1024 or value > 20 * 1024 * 1024:
             raise ValueError("MAX_ASSET_BYTES deve ficar entre 1 KiB e 20 MiB")
+        return value
+
+    @field_validator("max_publication_bytes")
+    @classmethod
+    def validate_max_publication_bytes(cls, value: int) -> int:
+        # O piso cabe o Markdown maximo (1 MiB) com o escape do JSON; o teto
+        # existe porque o corpo inteiro e carregado na memoria do Hub.
+        if value < 2 * 1024 * 1024 or value > 64 * 1024 * 1024:
+            raise ValueError("MAX_PUBLICATION_BYTES deve ficar entre 2 MiB e 64 MiB")
         return value
 
     @field_validator("max_asset_dimension_px")

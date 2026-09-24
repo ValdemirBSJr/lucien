@@ -1,4 +1,5 @@
 import hmac
+import re
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -146,12 +147,26 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-class RequestSizeMiddleware(BaseHTTPMiddleware):
-    """Rejeita corpos sem tamanho conhecido e evita buffering arbitrário."""
+_MIB = 1024 * 1024
+# As duas rotas que levam imagens em base64. O resto do Hub nunca precisou de
+# mais que o log, e continua limitado por ele.
+_ROTA_DE_PUBLICACAO = re.compile(r"^/jobs/[^/]+/publish$|^/runbooks/[^/]+/revisions$")
 
-    def __init__(self, app: object, max_body_bytes: int) -> None:
+
+class RequestSizeMiddleware(BaseHTTPMiddleware):
+    """Rejeita corpos sem tamanho conhecido e evita buffering arbitrário.
+
+    A recusa diz o tamanho, o limite e a variável que o governa: quem a lê é o
+    operador do desktop ou do CLI, e "payload excede o limite" sozinho não
+    dizia nem quanto passou nem onde ajustar.
+    """
+
+    def __init__(
+        self, app: object, max_body_bytes: int, max_publication_bytes: int
+    ) -> None:
         super().__init__(app)  # type: ignore[arg-type]
         self._max_body_bytes = max_body_bytes
+        self._max_publication_bytes = max_publication_bytes
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -166,6 +181,29 @@ class RequestSizeMiddleware(BaseHTTPMiddleware):
             size = int(value)
         except ValueError:
             return JSONResponse({"detail": "Content-Length inválido"}, status_code=400)
-        if size < 0 or size > self._max_body_bytes:
-            return JSONResponse({"detail": "payload excede o limite"}, status_code=413)
+        if size < 0:
+            return JSONResponse({"detail": "Content-Length inválido"}, status_code=400)
+        if _ROTA_DE_PUBLICACAO.match(request.url.path):
+            limite, variavel, o_que = (
+                self._max_publication_bytes,
+                "MAX_PUBLICATION_BYTES",
+                "publishing a runbook with its images",
+            )
+        else:
+            limite, variavel, o_que = (
+                self._max_body_bytes,
+                "MAX_LOG_BYTES",
+                "this request",
+            )
+        if size > limite:
+            return JSONResponse(
+                {
+                    "detail": (
+                        f"request body is {size / _MIB:.1f} MiB, above the "
+                        f"{limite / _MIB:.1f} MiB limit for {o_que}; "
+                        f"review {variavel} on the Hub"
+                    )
+                },
+                status_code=413,
+            )
         return await call_next(request)

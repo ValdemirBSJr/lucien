@@ -104,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         RequestSizeMiddleware,
         max_body_bytes=max(settings.max_log_bytes, 1024 * 1024) + 128 * 1024,
+        max_publication_bytes=settings.max_publication_bytes,
     )
     # Por último na montagem é por fora na execução: o identificador precisa
     # existir antes de qualquer middleware que possa recusar a requisição.

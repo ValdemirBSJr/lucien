@@ -628,9 +628,11 @@ gerenciador de secrets, nunca em arquivo versionado.
 | `412` ao revisar no portal | outra revisão mudou a base; recarregue antes de editar |
 | `409` ao revisar no portal | a base já possui sucessor ou a chave não corresponde à tentativa; repita o formulário original ou recarregue |
 | `422` com política de segredos | remova a credencial real; use um placeholder como `SUA_SENHA_AQUI` |
-| `502` com secret scanner indisponível | restaure o serviço; o Hub bloqueia por segurança |
+| `502` com secret scanner indisponível | restaure o serviço; o Hub bloqueia por segurança. Se o serviço está saudável e o erro aparece só ao publicar com imagem, é a imagem sem texto legível (foto de equipamento, diagrama): o OCR voltava vazio e o scanner recusava o conteúdo vazio. A versão com `MAX_PUBLICATION_BYTES` já pula a varredura quando não há texto; antes dela, contorne incluindo na captura algum texto visível |
 | nenhum comando detectado | forneça `-d`, reduza ruído do terminal e confirme a saúde da SLM |
 | aviso de log truncado no `stop`/`upload` | a sessão excedeu `MAX_LOG_BYTES`; comandos do fim podem faltar — grave sessões mais curtas ou eleve o limite |
+| `413` ao publicar ou revisar com imagens: `request body is … MiB, above the … MiB limit for publishing a runbook with its images; review MAX_PUBLICATION_BYTES on the Hub` | o texto e as imagens, em base64, passaram do teto da publicação (padrão 16 MiB). Salve as capturas em JPG ou em resolução menor, ou eleve `MAX_PUBLICATION_BYTES` no `.env` do Hub (até 64 MiB) e recrie só o serviço `hub`. Até a versão com essa variável, a publicação obedecia ao limite do log (cerca de 2,1 MiB) e a recusa dizia apenas `payload excede o limite` |
+| `413` em outra rota: `… review MAX_LOG_BYTES on the Hub` | o corpo passou do limite geral, `MAX_LOG_BYTES` + 128 KiB (mínimo 1 MiB + 128 KiB); no upload, grave sessões mais curtas ou eleve `MAX_LOG_BYTES` |
 | editor não abre | configure `EDITOR=vi`, `vim` ou outro executável disponível |
 | publicação retorna conflito | o Job já está `PUBLISHED`, a mesma chave foi reutilizada com outro conteúdo ou o destino já contém um artefato divergente |
 
