@@ -7,7 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/spf13/cobra v1.9.1
-	github.com/wailsapp/wails/v2 v2.15.0
+	github.com/wailsapp/wails/v2 v2.16.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/term v0.44.0
 )
